@@ -168,7 +168,7 @@ class ScanEngine:
         # 先扫描发现服务器
         scan_results = self.scan_with_portscan(targets)
         offline_servers = [(r["ip"], r["port"]) for r in scan_results
-                           if r.get("auth") == "cracked" or r.get("state") == "up"]
+                           if r.get("auth") == "cracked"]
 
         print(f"\n[*] 发现 {len(offline_servers)} 个可警告服务器，开始发送警告...")
 
