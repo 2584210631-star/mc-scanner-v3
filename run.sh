@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "========================================"
-echo "  MC Scanner v3Pro - Web 控制面板"
+echo "  MC Scanner v3 - Web 控制面板"
 echo "========================================"
 echo ""
 
@@ -10,13 +10,11 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# 检查依赖
-if ! python3 -c "import flask" &> /dev/null; then
-    echo "[*] 安装依赖..."
-    pip3 install -r requirements.txt
-fi
-
 echo "[*] 启动 Web 面板..."
 echo "[*] 浏览器打开 http://127.0.0.1:8080"
 echo ""
-python3 cli.py web --port 8080
+
+# 延迟后打开浏览器
+(sleep 2 && xdg-open http://127.0.0.1:8080 2>/dev/null || open http://127.0.0.1:8080 2>/dev/null) &
+
+python3 run.py 8080
