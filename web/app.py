@@ -26,6 +26,8 @@ from core.bot import join_and_warn, DEFAULT_WARNING_MESSAGES, MCBot
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
+scan_stop_event = threading.Event()
+
 scan_state = {
     "running": False,
     "progress": 0,
@@ -52,6 +54,7 @@ def _scan_worker(targets_list, config):
     global task_counter
     try:
         task_counter += 1
+        scan_stop_event.clear()
         with scan_lock:
             scan_state["task_id"] = task_counter
             scan_state["running"] = True
@@ -86,7 +89,7 @@ def _scan_worker(targets_list, config):
                     sub_targets = list(parse_targets([subnet]))
                     if not sub_targets:
                         continue
-                    engine = ScanEngine(
+                    engine = ScanEngine(stop_event=scan_stop_event, 
                         db_path=config.get("db_path", "mcscanner.db"),
                         workers=config.get("workers", 32),
                         timeout=config.get("timeout", 4.0),
@@ -152,7 +155,7 @@ def _scan_worker(targets_list, config):
                                     "ping_ms": None, "proto": None}
                                    for ip, port, _ in raw]
                     else:
-                        engine = ScanEngine(
+                        engine = ScanEngine(stop_event=scan_stop_event, 
                             db_path=config.get("db_path", "mcscanner.db"),
                             workers=config.get("workers", 32),
                             timeout=config.get("timeout", 4.0),
@@ -181,7 +184,7 @@ def _scan_worker(targets_list, config):
                            for ip, port in open_ports]
                 _log(f"端口扫描完成，开放: {len(results)} 个")
             else:
-                engine = ScanEngine(
+                engine = ScanEngine(stop_event=scan_stop_event, 
                     db_path=config.get("db_path", "mcscanner.db"),
                     workers=config.get("workers", 32),
                     timeout=config.get("timeout", 4.0),
@@ -215,6 +218,7 @@ def _scan_worker(targets_list, config):
     except Exception as e:
         _log(f"扫描出错: {e}")
     finally:
+        scan_stop_event.clear()
         with scan_lock:
             scan_state["running"] = False
 
@@ -283,6 +287,7 @@ def random_scan_api():
                 scan_state["logs"] = []
                 scan_state["progress"] = 0
                 scan_state["start_time"] = time.time()
+            scan_stop_event.clear()
             _log(f"随机暴力扫描开始: {count} 个目标, 端口 {ports}")
             port_ranges = parse_port_ranges(ports)
             def progress(done, total, found):
@@ -295,7 +300,7 @@ def random_scan_api():
             _log(f"随机扫描完成: 发现 {len(open_ports)} 个开放端口")
             if do_probe and open_ports:
                 _log(f"开始 SLP 探测 {len(open_ports)} 个目标...")
-                engine = ScanEngine(workers=min(32, workers), timeout=3.0)
+                engine = ScanEngine(stop_event=scan_stop_event, workers=min(32, workers), timeout=3.0)
                 results = engine.probe_list(open_ports)
                 with scan_lock:
                     scan_state["results"] = results
@@ -323,6 +328,8 @@ def random_scan_api():
 
 @app.route('/api/scan/stop', methods=['POST'])
 def stop_scan():
+    scan_stop_event.set()
+    _log("收到停止请求，正在终止扫描...")
     return jsonify({"status": "stop_requested"})
 
 
@@ -510,7 +517,7 @@ def import_masscan_results():
     _log(f"导入 masscan 结果: {f.filename}")
     try:
         if do_auth:
-            engine = ScanEngine(db_path="mcscanner.db", workers=32, timeout=4.0, auth_check=True)
+            engine = ScanEngine(stop_event=scan_stop_event, db_path="mcscanner.db", workers=32, timeout=4.0, auth_check=True)
             results = engine.import_masscan(tmp_path, then_auth=True)
         else:
             raw = parse_masscan_json(tmp_path)
