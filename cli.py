@@ -8,6 +8,7 @@ MC Scanner v3Pro - 综合 Minecraft 服务器扫描器
   portscan  只扫描端口
   scan      扫描 + SLP 探测 + 认证检测
   warn      扫描 + 离线检测 + 自动发警告
+  warn-db   从数据库已扫描结果直接发警告（不重新扫描）
   masscan   masscan 全网端口发现
   import    导入 masscan 结果
   query     查询 SQLite 数据库
@@ -194,6 +195,63 @@ def cmd_warn(args, cfg):
         save_results(results, args.output, cfg['output_format'])
 
 
+def cmd_warn_db(args, cfg):
+    """从数据库读取已扫描结果，直接发警告，不重新扫描"""
+    db_path = args.db or cfg.get('db_path', 'mcscanner.db')
+    if not os.path.exists(db_path):
+        print(f"[!] 数据库不存在: {db_path}")
+        print("[!] 请先运行 scan 命令扫描并保存结果到数据库")
+        return
+    auth = args.auth or "cracked"
+    print(f"[*] 从数据库读取认证模式为 '{auth}' 的服务器...")
+    rows = db.query(db_path, auth=auth, modded=args.modded,
+                     search=args.search, limit=args.limit or 100000, offset=0)
+    if not rows:
+        print("[!] 数据库中没有符合条件的服务器")
+        return
+    print(f"[*] 找到 {len(rows)} 个服务器，开始发送警告（不重新扫描）...")
+    messages = None
+    if args.message:
+        messages = args.message if isinstance(args.message, list) else [args.message]
+    elif args.message_file:
+        with open(args.message_file, 'r', encoding='utf-8') as f:
+            messages = [l.strip() for l in f if l.strip()]
+    messages = messages or cfg.get('messages') or DEFAULT_WARNING_MESSAGES
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    workers = args.workers or cfg.get('bot_threads', 5)
+    results = []
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {}
+        for row in rows:
+            ip = row.get('ip')
+            port = row.get('port', 25565)
+            if not ip:
+                continue
+            fut = ex.submit(join_and_warn, ip, port,
+                            args.username or cfg.get('username', 'SecurityBot'),
+                            messages, 15.0, cfg.get('message_delay', 0.8),
+                            args.authme or cfg.get('authme_password') or None, None)
+            futures[fut] = (ip, port)
+        for i, fut in enumerate(as_completed(futures), 1):
+            ip, port = futures[fut]
+            try:
+                r = fut.result()
+                results.append(r)
+                status = "OK" if r.success else "FAIL"
+                print(f"  [{i}/{len(rows)}] {status} {ip}:{port} - 发{r.messages_sent}条 {r.error or ''}")
+            except Exception as e:
+                results.append(None)
+                print(f"  [{i}/{len(rows)}] FAIL {ip}:{port} - {e}")
+    success = sum(1 for r in results if r and r.success)
+    msg_sent = sum(r.messages_sent for r in results if r)
+    print(f"\n{'='*50}")
+    print(f"  警告完成（从数据库，未重新扫描）")
+    print(f"  总目标: {len(results)}")
+    print(f"  成功登录: {success}")
+    print(f"  发送消息总数: {msg_sent}")
+    print(f"{'='*50}")
+
+
 def cmd_masscan(args, cfg):
     if not has_masscan():
         print("[!] masscan 未安装，请先安装: sudo apt install masscan")
@@ -314,6 +372,20 @@ def main():
     w.add_argument("--authme", help="AuthMe密码")
     w.add_argument("-o", "--output")
     w.set_defaults(func=cmd_warn)
+
+    # warn-db
+    wd = sub.add_parser("warn-db", help="从数据库已扫描结果直接发警告（不重新扫描）")
+    wd.add_argument("--auth", default="cracked", help="认证模式过滤（默认 cracked）")
+    wd.add_argument("--modded", type=int, help="模组服过滤（1=模组，0=原版）")
+    wd.add_argument("--search", help="关键词搜索（IP/MOTD/版本）")
+    wd.add_argument("--limit", type=int, default=0, help="限制数量（0=全部）")
+    wd.add_argument("--workers", type=int, default=5, help="并发数")
+    wd.add_argument("-u", "--username", help="机器人用户名")
+    wd.add_argument("-m", "--message", action="append", help="警告消息（可多次）")
+    wd.add_argument("-f", "--message-file", help="从文件读取消息")
+    wd.add_argument("--authme", help="AuthMe密码")
+    wd.add_argument("--db", help="数据库路径")
+    wd.set_defaults(func=cmd_warn_db)
 
     # masscan
     m = sub.add_parser("masscan", help="masscan 全网端口发现")
