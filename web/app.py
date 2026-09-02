@@ -60,6 +60,69 @@ def _scan_worker(targets_list, config):
             scan_state["start_time"] = time.time()
         _log(f"任务 #{task_counter} 开始，目标数: {len(targets_list)}")
 
+        # 连续扫描模式：大网段拆成 /24 逐个扫描
+        if config.get("continuous"):
+            import ipaddress
+            subnets = []
+            for t in targets_list:
+                t = str(t).strip()
+                if not t:
+                    continue
+                try:
+                    net = ipaddress.ip_network(t, strict=False)
+                    if net.prefixlen < 24:
+                        for subnet in net.subnets(new_prefix=24):
+                            subnets.append(str(subnet))
+                    else:
+                        subnets.append(t)
+                except:
+                    subnets.append(t)
+            _log(f"连续扫描模式: 拆分为 {len(subnets)} 个 /24 网段")
+            all_results = []
+            for i, subnet in enumerate(subnets):
+                _log(f"连续扫描 [{i+1}/{len(subnets)}]: {subnet}")
+                try:
+                    sub_targets = list(parse_targets([subnet]))
+                    if not sub_targets:
+                        continue
+                    engine = ScanEngine(
+                        db_path=config.get("db_path", "mcscanner.db"),
+                        workers=config.get("workers", 32),
+                        timeout=config.get("timeout", 4.0),
+                        auth_check=config.get("auth_check", True),
+                        rate_limit=config.get("rate", 0),
+                    )
+                    sub_results = engine.scan_with_portscan(
+                        iter(sub_targets),
+                        scan_threads=config.get("scan_threads", 200),
+                        scan_timeout=config.get("scan_timeout", 2.5),
+                    )
+                    all_results.extend(sub_results)
+                    with scan_lock:
+                        scan_state["results"] = all_results
+                        scan_state["progress"] = len(all_results)
+                    _log(f"  网段 {subnet} 完成，累计 {len(all_results)} 个服务器")
+                except Exception as e:
+                    _log(f"  网段 {subnet} 出错: {e}")
+            with scan_lock:
+                scan_state["results"] = all_results
+                scan_state["progress"] = len(all_results)
+                scan_state["total"] = len(all_results)
+            _log(f"连续扫描完成，共 {len(all_results)} 个服务器")
+            history_entry = {
+                "id": task_counter,
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "targets": len(targets_list),
+                "found": len(all_results),
+                "mode": "continuous",
+                "config": {k: v for k, v in config.items() if k != "db_path"},
+            }
+            with scan_lock:
+                scan_state["history"].insert(0, history_entry)
+                if len(scan_state["history"]) > 20:
+                    scan_state["history"] = scan_state["history"][:20]
+            return
+
         use_masscan = config.get("use_masscan", False)
         portscan_only = config.get("portscan_only", False)
         results = []
@@ -169,6 +232,7 @@ def start_scan():
     if scan_state["running"]:
         return jsonify({"error": "已有扫描任务在运行"}), 400
     targets_list = list(targets_str.split(','))
+    continuous = data.get("continuous", False)
     excluder = Excluder(data.get("exclude_file", "exclude.conf"))
     parsed = list(excluder.filter_targets(parse_targets(targets_list)))
     if not parsed:
@@ -189,6 +253,7 @@ def start_scan():
         "masscan_rate": data.get("masscan_rate", 5000),
         "ports": ports,
         "exclude_file": data.get("exclude_file", "exclude.conf"),
+        "continuous": continuous,
     }
     t = threading.Thread(target=_scan_worker, args=(parsed, config), daemon=True)
     t.start()
@@ -270,6 +335,46 @@ def export_results():
             writer.writerows(results)
         return Response(output.getvalue(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=results.csv"})
+    elif fmt == "html":
+        offline = sum(1 for r in results if r.get("auth") == "offline")
+        online = sum(1 for r in results if r.get("auth") == "online")
+        whitelist = sum(1 for r in results if r.get("auth") == "whitelist")
+        has_players = sum(1 for r in results if r.get("players_online", 0) > 0)
+        total_players = sum(r.get("players_online", 0) for r in results)
+        versions = {}
+        for r in results:
+            v = r.get("version") or "未知"
+            versions[v] = versions.get(v, 0) + 1
+        version_rows = "".join("<tr><td>" + v + "</td><td>" + str(c) + "</td></tr>" for v, c in sorted(versions.items(), key=lambda x: -x[1]))
+        server_rows = ""
+        for r in results:
+            players = ", ".join(r.get("player_list", [])) or "-"
+            server_rows += "<tr><td>" + str(r.get('ip')) + ":" + str(r.get('port')) + "</td><td>" + str(r.get('version','?')) + "</td><td>" + str(r.get('players_online',0)) + "/" + str(r.get('players_max',0)) + "</td><td>" + players + "</td><td>" + str(r.get('auth','?')) + "</td><td>" + str((r.get('motd','') or '')[:60]) + "</td></tr>"
+        html_content = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>MC Scanner 扫描报告</title>"
+        html_content += "<style>body{font-family:sans-serif;max-width:1200px;margin:0 auto;padding:20px;background:#f8fafc;color:#1e293b}"
+        html_content += "h1{color:#0f172a;border-bottom:3px solid #3b82f6;padding-bottom:10px}"
+        html_content += ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin:20px 0}"
+        html_content += ".stat{background:#fff;border-radius:10px;padding:15px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center}"
+        html_content += ".stat .num{font-size:28px;font-weight:bold;color:#3b82f6}"
+        html_content += ".stat .label{font-size:12px;color:#64748b;margin-top:5px}"
+        html_content += "table{width:100%;border-collapse:collapse;margin:15px 0;background:#fff;border-radius:8px;overflow:hidden}"
+        html_content += "th{background:#3b82f6;color:#fff;padding:10px;text-align:left;font-size:13px}"
+        html_content += "td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}"
+        html_content += "tr:hover{background:#f1f5f9}h2{color:#334155;margin-top:30px}"
+        html_content += ".footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:30px}</style></head><body>"
+        html_content += "<h1>MC Scanner v3 扫描报告</h1><p>生成时间: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + "</p>"
+        html_content += "<div class='stats'>"
+        html_content += "<div class='stat'><div class='num'>" + str(len(results)) + "</div><div class='label'>总服务器</div></div>"
+        html_content += "<div class='stat'><div class='num'>" + str(offline) + "</div><div class='label'>离线模式</div></div>"
+        html_content += "<div class='stat'><div class='num'>" + str(online) + "</div><div class='label'>正版模式</div></div>"
+        html_content += "<div class='stat'><div class='num'>" + str(whitelist) + "</div><div class='label'>白名单</div></div>"
+        html_content += "<div class='stat'><div class='num'>" + str(has_players) + "</div><div class='label'>有人在线</div></div>"
+        html_content += "<div class='stat'><div class='num'>" + str(total_players) + "</div><div class='label'>总玩家数</div></div>"
+        html_content += "</div><h2>版本分布</h2><table><tr><th>版本</th><th>数量</th></tr>" + version_rows + "</table>"
+        html_content += "<h2>服务器列表</h2><table><tr><th>地址</th><th>版本</th><th>人数</th><th>在线玩家</th><th>认证</th><th>MOTD</th></tr>" + server_rows + "</table>"
+        html_content += "<div class='footer'>MC Scanner v3 | 扫描报告自动生成</div></body></html>"
+        return Response(html_content, mimetype="text/html",
+                        headers={"Content-Disposition": "attachment; filename=mcscanner_report.html"})
     else:
         return Response(json.dumps(results, ensure_ascii=False, indent=2),
                         mimetype="application/json",

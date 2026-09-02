@@ -98,6 +98,9 @@ tr:hover { background: #f8f9fa; }
       <h2>扫描配置</h2>
       <div class="form-row">
         <div class="form-group" style="flex:2;">
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <input type="checkbox" id="continuousMode"> 连续扫描 (大网段自动拆/24逐个扫)
+          </label>
           <label>目标（IP / CIDR / 域名，逗号分隔）</label>
           <input type="text" id="scanTargets" placeholder="例如: 1.2.3.0/24,5.6.7.8,mc.example.com">
         </div>
@@ -208,6 +211,7 @@ tr:hover { background: #f8f9fa; }
         <button class="btn btn-primary" onclick="loadResults(1)">搜索</button>
         <button class="btn btn-success" onclick="exportResults('json')">导出JSON</button>
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
+        <button class="btn btn-success" onclick="exportResults('html')" style="background:#8b5cf6">HTML报告</button>
         <button class="btn btn-danger" onclick="batchWarn()">批量警告离线服</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
@@ -216,7 +220,7 @@ tr:hover { background: #f8f9fa; }
         <table>
           <thead>
             <tr>
-              <th>IP:端口</th><th>版本</th><th>协议</th><th>MOTD</th><th>玩家</th><th>认证</th><th>延迟</th><th>操作</th>
+              <th>IP:端口</th><th>版本</th><th>协议</th><th>MOTD</th><th>玩家</th><th>在线玩家</th><th>认证</th><th>延迟</th><th>操作</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
@@ -419,6 +423,7 @@ async function startScan() {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       targets,
+      continuous: document.getElementById("continuousMode").checked,
       scan_threads: parseInt(document.getElementById('scanThreads').value),
       workers: parseInt(document.getElementById('probeWorkers').value),
       scan_timeout: parseFloat(document.getElementById('scanTimeout').value),
@@ -484,6 +489,7 @@ async function loadResults(page) {
       <td>${r.proto || '-'}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.motd||''}">${r.motd || '-'}</td>
       <td>${r.players_online || 0}/${r.players_max || 0}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.player_list||[]).join(', ')}">${(r.player_list||[]).slice(0,3).join(', ') + ((r.player_list||[]).length>3?' +'+(r.player_list.length-3):'')}</td>
       <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
       <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
       <td><div class="actions">
@@ -664,6 +670,7 @@ async function loadDbResults(page) {
       <td>${r.version || '-'}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.motd || '-'}</td>
       <td>${r.players_online || 0}/${r.players_max || 0}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.player_list||[]).join(', ')}">${(r.player_list||[]).slice(0,3).join(', ') + ((r.player_list||[]).length>3?' +'+(r.player_list.length-3):'')}</td>
       <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
       <td>${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
     </tr>
