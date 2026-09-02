@@ -42,9 +42,14 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                     continue
 
                 # 解析 JSON 长度（VarInt）
+                if len(payload) < 3:
+                    last_error = "SLP payload 过短"
+                    continue
                 length = 0
                 offset = 0
                 for i in range(5):
+                    if offset + i >= len(payload):
+                        break
                     b = payload[offset + i]
                     length |= (b & 0x7F) << (7 * i)
                     offset += 1
@@ -91,7 +96,7 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                     "ping_ms": ping_ms,
                     "_raw": info,
                 }
-        except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError) as e:
+        except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError, IndexError) as e:
             last_error = str(e)
             continue
     return {"state": STATE_OFFLINE if _is_offline_err(last_error) else STATE_ERROR,
