@@ -8,6 +8,7 @@ import io
 import struct
 import time
 import threading
+import socket
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -199,6 +200,7 @@ class MCBot:
                     self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
                     sent_known = True
 
+        self.conn.sock.settimeout(self.timeout)
     def _send_client_information(self):
         """发送 Client Information 包（configuration 阶段）"""
         cfg = self.config_packets
@@ -351,7 +353,6 @@ class MCBot:
         self.conn.send_packet(chat_id, write_string(message[:256]))
 
 
-import socket  # noqa: E402
 
 
 def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",

@@ -86,7 +86,7 @@ def _scan_worker(targets_list, config):
             for i, subnet in enumerate(subnets):
                 _log(f"连续扫描 [{i+1}/{len(subnets)}]: {subnet}")
                 try:
-                    sub_targets = list(parse_targets([subnet]))
+                    sub_targets = list(parse_targets([subnet], config.get("ports", [25565])))
                     if not sub_targets:
                         continue
                     engine = ScanEngine(stop_event=scan_stop_event, 
@@ -384,6 +384,14 @@ def scan_results():
     })
 
 
+def _html_escape(s):
+    """HTML转义，防止XSS"""
+    if s is None:
+        return ""
+    s = str(s)
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
+
+
 @app.route('/api/scan/export')
 def export_results():
     fmt = request.args.get("format", "json")
@@ -417,7 +425,7 @@ def export_results():
         server_rows = ""
         for r in results:
             players = ", ".join(r.get("player_list", [])) or "-"
-            server_rows += "<tr><td>" + str(r.get('ip')) + ":" + str(r.get('port')) + "</td><td>" + str(r.get('version','?')) + "</td><td>" + str(r.get('players_online',0)) + "/" + str(r.get('players_max',0)) + "</td><td>" + players + "</td><td>" + str(r.get('auth','?')) + "</td><td>" + str((r.get('motd','') or '')[:60]) + "</td></tr>"
+            server_rows += "<tr><td>" + _html_escape(r.get('ip')) + ":" + _html_escape(r.get('port')) + "</td><td>" + _html_escape(r.get('version','?')) + "</td><td>" + _html_escape(r.get('players_online',0)) + "/" + _html_escape(r.get('players_max',0)) + "</td><td>" + _html_escape(players) + "</td><td>" + _html_escape(r.get('auth','?')) + "</td><td>" + _html_escape((r.get('motd','') or '')[:60]) + "</td></tr>"
         html_content = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>MC Scanner 扫描报告</title>"
         html_content += "<style>body{font-family:sans-serif;max-width:1200px;margin:0 auto;padding:20px;background:#f8fafc;color:#1e293b}"
         html_content += "h1{color:#0f172a;border-bottom:3px solid #3b82f6;padding-bottom:10px}"
@@ -640,7 +648,7 @@ def masscan_status():
     return jsonify({
         "available": has_masscan(),
         "version": get_masscan_version() or "unknown",
-        "path": __import__('scanner.masscan', fromlist=['get_masscan_path']).get_masscan_path() if hasattr(__import__('scanner.masscan', fromlist=['get_masscan_path']), 'get_masscan_path') else None,
+        "path": __import__('scanner.masscan', fromlist=['has_masscan']).has_masscan() if hasattr(__import__('scanner.masscan', fromlist=['has_masscan']), 'has_masscan') else False,
     })
 
 
