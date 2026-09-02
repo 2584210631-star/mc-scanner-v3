@@ -105,7 +105,7 @@ tr:hover { background: #f8f9fa; }
           <input type="text" id="scanTargets" placeholder="例如: 1.2.3.0/24,5.6.7.8,mc.example.com">
         </div>
         <div class="form-group">
-          <label>扫描端口（逗号分隔）</label>
+          <label>扫描端口（支持 25565 或 25565-25575 或 25565,25570-25575）</label>
           <input type="text" id="scanPorts" value="25565">
         </div>
       </div>
@@ -449,7 +449,7 @@ async function startScan() {
   const targets = document.getElementById('scanTargets').value.trim();
   if (!targets) { alert('请输入目标'); return; }
   const mode = document.getElementById('scanMode').value;
-  const ports = document.getElementById('scanPorts').value.split(',').map(p => parseInt(p.trim())).filter(p => p);
+  const ports = document.getElementById('scanPorts').value.trim();
   const res = await fetch('/api/scan/start', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
