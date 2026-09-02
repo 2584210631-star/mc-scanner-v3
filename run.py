@@ -4,7 +4,12 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _base_dir)
+# 加载本地依赖（离线可用，无需 pip install）
+_libs_dir = os.path.join(_base_dir, 'libs')
+if os.path.isdir(_libs_dir):
+    sys.path.insert(0, _libs_dir)
 
 if __name__ == "__main__":
     from web.app import run
