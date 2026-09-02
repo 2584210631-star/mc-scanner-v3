@@ -1,0 +1,24 @@
+{
+  "username": "SecurityBot",
+  "messages": [
+    "您好，我是安全扫描机器人，不会破坏您的服务器",
+    "检测到您的服务器处于离线模式(offline-mode)，攻击者可伪造OP用户名登录",
+    "建议：1.在 server.properties 中设置 online-mode=true",
+    "2.如必须离线模式，请安装 AuthMe 等登录插件并开启白名单",
+    "3.定期检查 ops.json，删除不认识的管理员"
+  ],
+  "ports": [25565, 25566, 25570],
+  "scan_threads": 200,
+  "scan_timeout": 2.5,
+  "bot_threads": 10,
+  "bot_timeout": 12,
+  "message_delay": 0.8,
+  "retry_count": 1,
+  "rate": 0,
+  "authme_password": "",
+  "exclude_file": "exclude.conf",
+  "db_path": "mcscanner.db",
+  "auto_save_db": true,
+  "output_format": "json",
+  "output_file": null
+}

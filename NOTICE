@@ -1,0 +1,30 @@
+# MC Scanner v3Pro - 来源与致谢
+
+本项目整合了多个开源项目的优点，在此致谢。
+
+## 直接改编（保留原许可）
+
+无。本项目所有代码为重新实现，采用 MIT 许可。
+
+## 思路参考（MIT / 无许可）
+
+以下项目的设计思路和架构对本项目有启发：
+
+- **2584210631-star/mc-scanner** (v1/v2) — 功能完整性、协议实现、Web 面板设计
+- **mdberkey/minecraft-server-scanner** — SQLite 存储、masscan 集成思路
+- **matscan** — 两阶段分离架构、扫描引擎设计
+- **azalea** — 协议表自动生成思路 (codegen)
+- **DilanBlue/mc-scanner** — 协议多级回退、白名单关键词识别
+- **PrismarineJS/minecraft-data** — 协议数据包 ID 数据源
+- **MCPyBot (Fireroth/MCPyBot)** — 协议实现参考
+- **mcprobe** — 认证模式检测思路
+- **MineScan** — 扫描器功能参考
+
+## 许可说明
+
+本项目整体采用 **MIT License**。所有代码均为重新实现，未直接复制 GPL 代码。
+协议数据包 ID 信息来自 PrismarineJS/minecraft-data（MIT License）。
+
+## 免责声明
+
+本工具仅供安全研究和授权测试使用。使用者需自行承担使用本工具的法律责任。
