@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from storage import db
 from scanner.engine import ScanEngine
+from scanner.random_scan import random_scan, parse_port_ranges
 from scanner.targets import parse_targets, count_targets
 from scanner.exclude import Excluder
 from scanner.masscan import has_masscan, run_masscan, parse_masscan_json, get_masscan_version
@@ -258,6 +259,66 @@ def start_scan():
     t = threading.Thread(target=_scan_worker, args=(parsed, config), daemon=True)
     t.start()
     return jsonify({"status": "started", "targets": len(parsed), "task_id": task_counter + 1})
+
+
+@app.route('/api/scan/random', methods=['POST'])
+def random_scan_api():
+    data = request.json or {}
+    if scan_state["running"]:
+        return jsonify({"error": "已有扫描任务在运行"}), 400
+    count = data.get("count", 1000)
+    ports = data.get("ports", "25565-25575")
+    workers = data.get("workers", 200)
+    timeout = data.get("timeout", 2.0)
+    do_probe = data.get("probe", True)
+
+    def _random_worker():
+        global task_counter
+        try:
+            task_counter += 1
+            with scan_lock:
+                scan_state["task_id"] = task_counter
+                scan_state["running"] = True
+                scan_state["results"] = []
+                scan_state["logs"] = []
+                scan_state["progress"] = 0
+                scan_state["start_time"] = time.time()
+            _log(f"随机暴力扫描开始: {count} 个目标, 端口 {ports}")
+            port_ranges = parse_port_ranges(ports)
+            def progress(done, total, found):
+                with scan_lock:
+                    scan_state["progress"] = done
+                    scan_state["total"] = total
+                    if done % 50 == 0:
+                        _log(f"随机扫描进度: {done}/{total}, 发现 {found} 个开放端口")
+            open_ports = random_scan(count, workers, timeout, port_ranges, progress)
+            _log(f"随机扫描完成: 发现 {len(open_ports)} 个开放端口")
+            if do_probe and open_ports:
+                _log(f"开始 SLP 探测 {len(open_ports)} 个目标...")
+                engine = ScanEngine(workers=min(32, workers), timeout=3.0)
+                results = engine.probe_list(open_ports)
+                with scan_lock:
+                    scan_state["results"] = results
+                    scan_state["progress"] = len(results)
+                    scan_state["total"] = len(results)
+                _log(f"SLP 探测完成: 发现 {len(results)} 个 MC 服务器")
+            else:
+                results = [{"ip": ip, "port": port, "auth": "unknown", "version": None,
+                           "players_online": 0, "players_max": 0, "motd": None}
+                          for ip, port in open_ports]
+                with scan_lock:
+                    scan_state["results"] = results
+                    scan_state["progress"] = len(results)
+                    scan_state["total"] = len(results)
+        except Exception as e:
+            _log(f"随机扫描出错: {e}")
+        finally:
+            with scan_lock:
+                scan_state["running"] = False
+
+    t = threading.Thread(target=_random_worker, daemon=True)
+    t.start()
+    return jsonify({"status": "started", "count": count, "task_id": task_counter + 1})
 
 
 @app.route('/api/scan/stop', methods=['POST'])
