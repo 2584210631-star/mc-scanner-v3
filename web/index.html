@@ -214,6 +214,7 @@ tr:hover { background: #f8f9fa; }
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
         <button class="btn btn-success" onclick="exportResults('html')" style="background:#8b5cf6">HTML报告</button>
         <button class="btn btn-danger" onclick="batchWarn()">批量警告离线服</button>
+        <button class="btn btn-warning" style="background:#9333ea;color:#fff" onclick="openMultiWarnModal()">多机器人警告</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
       </div>
@@ -323,6 +324,35 @@ tr:hover { background: #f8f9fa; }
       <button class="btn btn-primary" onclick="confirmWarn()">发送</button>
     </div>
     <div id="warnResult" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- 多机器人警告弹窗 -->
+<div class="modal-overlay hidden" id="multiWarnModal">
+  <div class="modal" style="max-width:520px;">
+    <h3>多机器人同时警告</h3>
+    <div class="form-row">
+      <div class="form-group"><label>服务器 IP</label><input type="text" id="multiWarnIp" placeholder="例如: 136.243.0.33"></div>
+      <div class="form-group"><label>端口</label><input type="number" id="multiWarnPort" value="25565"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>机器人数量 (1-50)</label><input type="number" id="multiWarnCount" value="10" min="1" max="50"></div>
+      <div class="form-group"><label>名称前缀</label><input type="text" id="multiWarnPrefix" value="SecurityBot"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>消息间隔(秒)</label><input type="number" id="multiWarnDelay" value="0.5" step="0.1" min="0.1"></div>
+      <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="multiWarnAuthme" placeholder="留空不启用"></div>
+    </div>
+    <div class="form-group"><label>警告消息（每行一条）</label><textarea id="multiWarnMessages" rows="5">WARNING: OFFLINE MODE DETECTED!
+Anyone can join with ANY username!
+Please enable online-mode=true!
+Or setup a WHITELIST!
+Protect your server NOW!</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeMultiWarnModal()">取消</button>
+      <button class="btn btn-danger" onclick="confirmMultiWarn()">开始警告</button>
+    </div>
+    <div id="multiWarnResult" style="margin-top:12px;"></div>
   </div>
 </div>
 
