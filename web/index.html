@@ -165,6 +165,7 @@ tr:hover { background: #f8f9fa; }
       </div>
       <div style="display:flex;gap:10px;margin-top:8px;">
         <button class="btn btn-primary" id="btnStartScan" onclick="startScan()">开始扫描</button>
+        <button class="btn btn-warning" onclick="startRandomScan()" style="background:#f59e0b;color:#fff">暴力随机扫描</button>
         <button class="btn btn-danger" id="btnStopScan" onclick="stopScan()" disabled>停止</button>
         <button class="btn btn-secondary" onclick="saveConfig()">保存配置</button>
       </div>
@@ -442,6 +443,25 @@ async function startScan() {
   document.getElementById('btnStartScan').disabled = true;
   document.getElementById('btnStopScan').disabled = false;
   document.getElementById('headerStatus').textContent = '扫描中...';
+  if (statusTimer) clearInterval(statusTimer);
+  statusTimer = setInterval(pollStatus, 1000);
+}
+
+async function startRandomScan() {
+  const count = prompt('随机扫描目标数量 (越多越容易找到):', '1000');
+  if (!count) return;
+  const ports = prompt('端口范围 (如 25565-25575, 全端口用 1-65535):', '25565-25575');
+  if (!ports) return;
+  const res = await fetch('/api/scan/random', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({count: parseInt(count), ports: ports, workers: 200, timeout: 2.0, probe: true})
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  alert('随机扫描已启动: ' + count + ' 个目标, 端口 ' + ports);
+  document.getElementById('progressPanel').style.display = 'block';
+  document.getElementById('btnStartScan').disabled = true;
+  document.getElementById('btnStopScan').disabled = false;
   if (statusTimer) clearInterval(statusTimer);
   statusTimer = setInterval(pollStatus, 1000);
 }

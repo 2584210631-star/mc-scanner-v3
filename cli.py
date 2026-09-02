@@ -33,6 +33,7 @@ from scanner.exclude import Excluder
 from scanner.portscan import scan_ports, get_open_ports
 from scanner.masscan import has_masscan, run_masscan
 from scanner.engine import ScanEngine
+from scanner.random_scan import random_scan, parse_port_ranges
 from storage import db
 from core.bot import join_and_warn, DEFAULT_WARNING_MESSAGES, MCBot
 from core.protocol import get_version_name
@@ -329,6 +330,68 @@ def cmd_web(args, cfg):
     run(args.db or cfg['db_path'], port=args.port, host=args.host)
 
 
+def cmd_random(args, cfg=None):
+    """随机IP随机端口暴力扫描"""
+    port_ranges = parse_port_ranges(args.ports)
+    print(f"[*] 随机暴力扫描模式")
+    print(f"[*] 目标数: {args.count} | 线程: {args.workers} | 超时: {args.timeout}s")
+    print(f"[*] 端口范围: {args.ports}")
+    print(f"[*] 排除私有/保留地址，仅扫描公网IP")
+    print()
+
+    def progress(done, total, found):
+        pct = done / total * 100
+        print(f"\r[*] 进度: {done}/{total} ({pct:.1f}%) | 发现: {found} 个开放端口", end="", flush=True)
+
+    import time
+    start = time.time()
+    open_ports = random_scan(
+        target_count=args.count,
+        max_workers=args.workers,
+        timeout=args.timeout,
+        port_ranges=port_ranges,
+        progress_callback=progress,
+    )
+    elapsed = time.time() - start
+    print(f"\n[*] 扫描完成! 耗时: {elapsed:.1f}s")
+    print(f"[*] 发现 {len(open_ports)} 个开放端口")
+    print()
+
+    if not open_ports:
+        print("[!] 没有发现开放端口，试试增加目标数量或扩大端口范围")
+        return
+
+    # SLP 探测
+    if args.probe:
+        print("[*] SLP 探测...")
+        from core.probe import slp_probe
+        servers = []
+        for i, (ip, port) in enumerate(open_ports):
+            info = slp_probe(ip, port, timeout=3)
+            if info and info.get("state") == "up":
+                servers.append({
+                    "ip": ip, "port": port,
+                    "version": info.get("version"),
+                    "players": f"{info.get('online', 0)}/{info.get('max', 0)}",
+                    "motd": str(info.get("motd", ""))[:60],
+                })
+                print(f"  [{i+1}/{len(open_ports)}] {ip}:{port} | {info.get('version','?')} | {info.get('online',0)}/{info.get('max',0)}")
+        print(f"\n[*] 发现 {len(servers)} 个 Minecraft 服务器")
+        if args.output:
+            import json
+            with open(args.output, 'w') as f:
+                json.dump(servers, f, indent=2, ensure_ascii=False)
+            print(f"[*] 结果已保存到 {args.output}")
+    else:
+        for ip, port in open_ports:
+            print(f"  {ip}:{port}")
+        if args.output:
+            import json
+            with open(args.output, 'w') as f:
+                json.dump([{"ip": ip, "port": port} for ip, port in open_ports], f, indent=2)
+            print(f"[*] 结果已保存到 {args.output}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="MC Scanner v3Pro - 综合 Minecraft 服务器扫描器")
     parser.add_argument("-c", "--config", help="配置文件路径")
@@ -434,6 +497,15 @@ def main():
     web.add_argument("--port", type=int, default=8080)
     web.add_argument("--host", default="127.0.0.1")
     web.set_defaults(func=cmd_web)
+
+    rnd = sub.add_parser("random", help="随机IP随机端口暴力扫描")
+    rnd.add_argument("-n", "--count", type=int, default=1000, help="随机目标数量 (默认: 1000)")
+    rnd.add_argument("-p", "--ports", default="25565-25575", help="端口范围 (默认: 25565-25575)")
+    rnd.add_argument("-w", "--workers", type=int, default=200, help="线程数 (默认: 200)")
+    rnd.add_argument("-t", "--timeout", type=float, default=2.0, help="超时秒数 (默认: 2.0)")
+    rnd.add_argument("--probe", action="store_true", help="扫描后自动SLP探测")
+    rnd.add_argument("-o", "--output", help="结果输出文件")
+    rnd.set_defaults(func=cmd_random)
 
     args = parser.parse_args()
     if not getattr(args, "func", None):
