@@ -65,6 +65,7 @@ class ScanEngine:
                                ("version", "proto", "motd", "ping_ms", "favicon")})
                 result["players_online"] = up.get("online", 0)
                 result["players_max"] = up.get("max", 0)
+                result["player_list"] = [p.get("name", "") for p in up.get("sample", [])]
                 result["is_modded"] = 1 if _looks_modded(up.get("version", "")) else 0
                 result["state"] = "up"
                 self._bump("up")
