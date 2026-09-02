@@ -92,11 +92,8 @@ def get_version_name(proto: int) -> str:
     """协议号转版本名"""
     if proto in PROTOCOL_TO_VERSION:
         return PROTOCOL_TO_VERSION[proto]
-    # 范围匹配
     if proto > 775:
         return f"1.21.12+ (协议{proto})"
-    if proto > 774:
-        return f"未知 (协议{proto})"
     return f"未知 (协议{proto})"
 
 
