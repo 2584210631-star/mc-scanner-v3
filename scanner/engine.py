@@ -21,7 +21,7 @@ class ScanEngine:
 
     def __init__(self, db_path: str = "mcscanner.db", workers: int = 32,
                  timeout: float = 4.0, auth_check: bool = True, rate_limit: int = 0,
-                 bot_workers: int = 10, bot_timeout: float = 12.0):
+                 bot_workers: int = 10, bot_timeout: float = 12.0, stop_event=None):
         self.db_path = db_path
         self.workers = workers
         self.timeout = timeout
@@ -29,8 +29,10 @@ class ScanEngine:
         self.rate_limit = rate_limit
         self.bot_workers = bot_workers
         self.bot_timeout = bot_timeout
+        self.stop_event = stop_event
         self._lock = threading.Lock()
         self._last_probe = 0.0
+        self._tokens = 0.0
         self.counters = {
             "total": 0, "up": 0, "cracked": 0, "online": 0,
             "whitelist": 0, "rejected": 0, "offline": 0, "error": 0,
@@ -67,6 +69,8 @@ class ScanEngine:
                 result["players_max"] = up.get("max", 0)
                 result["player_list"] = [p.get("name", "") for p in up.get("sample", [])]
                 result["is_modded"] = 1 if _looks_modded(up.get("version", "")) else 0
+                result["is_plugin"] = 1 if _looks_plugin(up.get("version", "")) else 0
+                result["server_type"] = "modded" if _looks_modded(up.get("version", "")) else ("plugin" if _looks_plugin(up.get("version", "")) else "vanilla")
                 result["state"] = "up"
                 self._bump("up")
             else:
@@ -99,6 +103,8 @@ class ScanEngine:
                        for ip, port in targets}
             done = 0
             for fut in concurrent.futures.as_completed(futures):
+                if self.stop_event and self.stop_event.is_set():
+                    break
                 try:
                     r = fut.result()
                 except Exception as e:
@@ -112,6 +118,25 @@ class ScanEngine:
                     self._print_progress(done)
         if results:
             db.upsert_many(self.db_path, results)
+        self.results = results
+        return results
+
+    def probe_list(self, targets: list) -> list:
+        """批量探测 (ip, port) 列表，返回结果（不存数据库）"""
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as ex:
+            futures = {ex.submit(self.probe_one, ip, port): (ip, port)
+                       for ip, port in targets}
+            for fut in concurrent.futures.as_completed(futures):
+                if self.stop_event and self.stop_event.is_set():
+                    break
+                try:
+                    r = fut.result()
+                except Exception as e:
+                    ip, port = futures[fut]
+                    r = {"ip": ip, "port": port, "state": "error", "error": str(e),
+                         "auth": "error", "version": None, "players_online": 0, "players_max": 0, "motd": None}
+                results.append(r)
         self.results = results
         return results
 
@@ -158,6 +183,8 @@ class ScanEngine:
 
             done = 0
             for fut in concurrent.futures.as_completed(futures):
+                if self.stop_event and self.stop_event.is_set():
+                    break
                 try:
                     r = fut.result()
                 except Exception as e:
@@ -229,6 +256,12 @@ class ScanEngine:
 
 
 def _looks_modded(version: str) -> bool:
+    """判断是否为模组服（Forge/Fabric/NeoForge/Quilt），不包含插件服"""
     v = (version or "").lower()
-    return any(kw in v for kw in ("forge", "fabric", "mod", "paper", "spigot",
-                                   "bukkit", "purpur", "fml"))
+    return any(kw in v for kw in ("forge", "fabric", "neoforge", "quilt", "fml", "modloader"))
+
+
+def _looks_plugin(version: str) -> bool:
+    """判断是否为插件服（Paper/Spigot/Bukkit/Purpur）"""
+    v = (version or "").lower()
+    return any(kw in v for kw in ("paper", "spigot", "bukkit", "purpur", "catserver", "arclight"))
