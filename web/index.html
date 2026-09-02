@@ -10,7 +10,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
 .header h1 { font-size: 20px; }
 .header .status { font-size: 13px; opacity: 0.9; }
-.tabs { display: flex; background: white; border-bottom: 1px solid #e0e0e0; padding: 0 24px; }
+.tabs { display: flex; background: white; border-bottom: 1px solid #e0e0e0; padding: 0 24px; flex-wrap: wrap; }
 .tab { padding: 12px 20px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; color: #666; }
 .tab.active { color: #667eea; border-bottom-color: #667eea; }
 .tab:hover { color: #667eea; }
@@ -30,6 +30,8 @@ textarea { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius
 .btn-danger:hover { background: #e53e3e; }
 .btn-success { background: #48bb78; color: white; }
 .btn-success:hover { background: #38a169; }
+.btn-warning { background: #ed8936; color: white; }
+.btn-warning:hover { background: #dd6b20; }
 .btn-secondary { background: #e2e8f0; color: #4a5568; }
 .btn-secondary:hover { background: #cbd5e0; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -61,29 +63,33 @@ tr:hover { background: #f8f9fa; }
 .pagination .info { font-size: 13px; color: #666; }
 .chart-container { height: 300px; position: relative; }
 .hidden { display: none !important; }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .actions .btn { padding: 4px 10px; font-size: 12px; }
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: white; border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
 .modal h3 { margin-bottom: 16px; }
 .modal .form-row { margin-bottom: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.tool-card { background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.tool-card h3 { font-size: 15px; margin-bottom: 8px; color: #333; }
+.tool-card p { font-size: 13px; color: #666; margin-bottom: 12px; }
+.masscan-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+.masscan-ok { background: #c6f6d5; color: #276749; }
+.masscan-no { background: #fed7d7; color: #c53030; }
 </style>
 </head>
 <body>
-
 <div class="header">
   <h1>MC Scanner v3Pro</h1>
   <div class="status" id="headerStatus">就绪</div>
 </div>
-
 <div class="tabs">
   <div class="tab active" data-tab="scan">扫描</div>
   <div class="tab" data-tab="results">结果</div>
   <div class="tab" data-tab="database">数据库</div>
   <div class="tab" data-tab="history">历史</div>
+  <div class="tab" data-tab="tools">工具</div>
 </div>
-
 <div class="container">
 
   <!-- 扫描标签页 -->
@@ -92,11 +98,26 @@ tr:hover { background: #f8f9fa; }
       <h2>扫描配置</h2>
       <div class="form-row">
         <div class="form-group" style="flex:2;">
-          <label>目标（IP / CIDR / 域名，逗号分隔，支持 @文件）</label>
+          <label>目标（IP / CIDR / 域名，逗号分隔）</label>
           <input type="text" id="scanTargets" placeholder="例如: 1.2.3.0/24,5.6.7.8,mc.example.com">
+        </div>
+        <div class="form-group">
+          <label>扫描端口（逗号分隔）</label>
+          <input type="text" id="scanPorts" value="25565">
         </div>
       </div>
       <div class="form-row">
+        <div class="form-group">
+          <label>扫描模式</label>
+          <select id="scanMode" onchange="toggleMasscanOptions()">
+            <option value="python">Python 多线程（稳定）</option>
+            <option value="masscan">masscan 高速扫描（快10倍）</option>
+          </select>
+        </div>
+        <div class="form-group" id="masscanRateGroup" style="display:none;">
+          <label>masscan 速率（包/秒）</label>
+          <input type="number" id="masscanRate" value="5000">
+        </div>
         <div class="form-group">
           <label>扫描线程数</label>
           <input type="number" id="scanThreads" value="200">
@@ -105,6 +126,8 @@ tr:hover { background: #f8f9fa; }
           <label>探测线程数</label>
           <input type="number" id="probeWorkers" value="32">
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label>扫描超时(秒)</label>
           <input type="number" id="scanTimeout" value="2.5" step="0.5">
@@ -126,6 +149,16 @@ tr:hover { background: #f8f9fa; }
             启用认证模式检测
           </label>
         </div>
+        <div class="form-group" style="flex:0 0 auto;">
+          <label style="visibility:hidden;">.</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="portscanOnly" style="width:auto;">
+            只扫端口不探测（更快）
+          </label>
+        </div>
+        <div class="form-group" style="flex:0 0 auto;align-self:flex-end;">
+          <span id="masscanStatus"></span>
+        </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:8px;">
         <button class="btn btn-primary" id="btnStartScan" onclick="startScan()">开始扫描</button>
@@ -133,7 +166,6 @@ tr:hover { background: #f8f9fa; }
         <button class="btn btn-secondary" onclick="saveConfig()">保存配置</button>
       </div>
     </div>
-
     <div class="panel" id="progressPanel" style="display:none;">
       <h2>扫描进度</h2>
       <div class="stats-grid">
@@ -177,19 +209,14 @@ tr:hover { background: #f8f9fa; }
         <button class="btn btn-success" onclick="exportResults('json')">导出JSON</button>
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
         <button class="btn btn-danger" onclick="batchWarn()">批量警告离线服</button>
+        <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
+        <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
       </div>
       <div style="overflow-x:auto;">
         <table>
           <thead>
             <tr>
-              <th>IP:端口</th>
-              <th>版本</th>
-              <th>协议</th>
-              <th>MOTD</th>
-              <th>玩家</th>
-              <th>认证</th>
-              <th>延迟</th>
-              <th>操作</th>
+              <th>IP:端口</th><th>版本</th><th>协议</th><th>MOTD</th><th>玩家</th><th>认证</th><th>延迟</th><th>操作</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
@@ -197,7 +224,6 @@ tr:hover { background: #f8f9fa; }
       </div>
       <div class="pagination" id="pagination"></div>
     </div>
-
     <div class="panel">
       <h2>版本分布</h2>
       <div class="chart-container"><canvas id="versionChart"></canvas></div>
@@ -230,9 +256,7 @@ tr:hover { background: #f8f9fa; }
       </div>
       <div style="overflow-x:auto;">
         <table>
-          <thead>
-            <tr><th>IP:端口</th><th>版本</th><th>MOTD</th><th>玩家</th><th>认证</th><th>最后更新</th></tr>
-          </thead>
+          <thead><tr><th>IP:端口</th><th>版本</th><th>MOTD</th><th>玩家</th><th>认证</th><th>最后更新</th></tr></thead>
           <tbody id="dbResultsBody"></tbody>
         </table>
       </div>
@@ -248,6 +272,36 @@ tr:hover { background: #f8f9fa; }
     </div>
   </div>
 
+  <!-- 工具标签页 -->
+  <div id="tab-tools" class="hidden">
+    <div class="tool-card">
+      <h3>给服务器发命令</h3>
+      <p>登录指定服务器并发送聊天命令（如 op、gamemode 等）。仅限授权服务器使用。</p>
+      <div class="form-row">
+        <div class="form-group"><label>服务器 IP</label><input type="text" id="toolCmdIp" placeholder="1.2.3.4"></div>
+        <div class="form-group"><label>端口</label><input type="number" id="toolCmdPort" value="25565"></div>
+        <div class="form-group"><label>机器人用户名</label><input type="text" id="toolCmdUser" value="SecurityBot"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;"><label>命令（不含 /）</label><input type="text" id="toolCmdCmd" placeholder="例如: op PlayerName 或 gamemode creative"></div>
+        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="toolCmdAuthme" placeholder="留空不启用"></div>
+      </div>
+      <button class="btn btn-primary" onclick="sendToolCommand()">发送命令</button>
+      <div id="toolCmdResult" style="margin-top:12px;"></div>
+    </div>
+    <div class="tool-card">
+      <h3>生成协议表</h3>
+      <p>从官方 minecraft-data 自动生成最新版本的协议包 ID 表。需要网络连接。</p>
+      <button class="btn btn-secondary" onclick="genPackets()">生成协议表</button>
+      <div id="genPacketsResult" style="margin-top:12px;"></div>
+    </div>
+    <div class="tool-card">
+      <h3>masscan 状态</h3>
+      <p>检查 masscan 是否可用及版本信息。</p>
+      <button class="btn btn-secondary" onclick="checkMasscan()">检查 masscan</button>
+      <div id="masscanCheckResult" style="margin-top:12px;"></div>
+    </div>
+  </div>
 </div>
 
 <!-- 单独警告弹窗 -->
@@ -255,19 +309,10 @@ tr:hover { background: #f8f9fa; }
   <div class="modal">
     <h3>发送警告 - <span id="warnTarget"></span></h3>
     <div class="form-row">
-      <div class="form-group">
-        <label>机器人用户名</label>
-        <input type="text" id="warnUsername" value="SecurityBot">
-      </div>
-      <div class="form-group">
-        <label>AuthMe密码（可选）</label>
-        <input type="text" id="warnAuthme" placeholder="留空不启用">
-      </div>
+      <div class="form-group"><label>机器人用户名</label><input type="text" id="warnUsername" value="SecurityBot"></div>
+      <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="warnAuthme" placeholder="留空不启用"></div>
     </div>
-    <div class="form-group">
-      <label>警告消息（每行一条）</label>
-      <textarea id="warnMessages" rows="5"></textarea>
-    </div>
+    <div class="form-group"><label>警告消息（每行一条）</label><textarea id="warnMessages" rows="5"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeWarnModal()">取消</button>
       <button class="btn btn-primary" onclick="confirmWarn()">发送</button>
@@ -276,17 +321,29 @@ tr:hover { background: #f8f9fa; }
   </div>
 </div>
 
+<!-- 发命令弹窗 -->
+<div class="modal-overlay hidden" id="cmdModal">
+  <div class="modal">
+    <h3>发送命令 - <span id="cmdTarget"></span></h3>
+    <div class="form-row">
+      <div class="form-group"><label>机器人用户名</label><input type="text" id="cmdUsername" value="SecurityBot"></div>
+      <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="cmdAuthme" placeholder="留空不启用"></div>
+    </div>
+    <div class="form-group"><label>命令（不含 /）</label><input type="text" id="cmdCommand" placeholder="例如: op PlayerName"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeCmdModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmCmd()">发送</button>
+    </div>
+    <div id="cmdResult" style="margin-top:12px;"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-let currentPage = 1;
-let totalResults = 0;
-let dbCurrentPage = 1;
-let dbTotal = 0;
-let statusTimer = null;
-let warnIp = null, warnPort = null;
-let versionChart = null;
+let currentPage = 1, totalResults = 0, dbCurrentPage = 1, dbTotal = 0;
+let statusTimer = null, warnIp = null, warnPort = null, versionChart = null;
+let cmdIp = null, cmdPort = null;
 
-// 标签页切换
 document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = function() {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -296,10 +353,15 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (this.dataset.tab === 'results') loadResults(1);
     if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
     if (this.dataset.tab === 'history') loadHistory();
+    if (this.dataset.tab === 'tools') checkMasscan();
   };
 });
 
-// 加载保存的配置
+function toggleMasscanOptions() {
+  const mode = document.getElementById('scanMode').value;
+  document.getElementById('masscanRateGroup').style.display = mode === 'masscan' ? 'block' : 'none';
+}
+
 function loadConfig() {
   const cfg = JSON.parse(localStorage.getItem('mcscanner_config') || '{}');
   if (cfg.scanThreads) document.getElementById('scanThreads').value = cfg.scanThreads;
@@ -308,7 +370,13 @@ function loadConfig() {
   if (cfg.probeTimeout) document.getElementById('probeTimeout').value = cfg.probeTimeout;
   if (cfg.rateLimit) document.getElementById('rateLimit').value = cfg.rateLimit;
   if (cfg.authCheck !== undefined) document.getElementById('authCheck').checked = cfg.authCheck;
+  if (cfg.scanMode) document.getElementById('scanMode').value = cfg.scanMode;
+  if (cfg.masscanRate) document.getElementById('masscanRate').value = cfg.masscanRate;
+  if (cfg.portscanOnly !== undefined) document.getElementById('portscanOnly').checked = cfg.portscanOnly;
+  if (cfg.scanPorts) document.getElementById('scanPorts').value = cfg.scanPorts;
+  toggleMasscanOptions();
 }
+
 function saveConfig() {
   const cfg = {
     scanThreads: document.getElementById('scanThreads').value,
@@ -317,19 +385,38 @@ function saveConfig() {
     probeTimeout: document.getElementById('probeTimeout').value,
     rateLimit: document.getElementById('rateLimit').value,
     authCheck: document.getElementById('authCheck').checked,
+    scanMode: document.getElementById('scanMode').value,
+    masscanRate: document.getElementById('masscanRate').value,
+    portscanOnly: document.getElementById('portscanOnly').checked,
+    scanPorts: document.getElementById('scanPorts').value,
   };
   localStorage.setItem('mcscanner_config', JSON.stringify(cfg));
   alert('配置已保存');
 }
 loadConfig();
 
-// 开始扫描
+async function checkMasscan() {
+  try {
+    const res = await fetch('/api/masscan/status');
+    const data = await res.json();
+    const html = data.available
+      ? `<span class="masscan-badge masscan-ok">已就绪</span> 版本: ${data.version}`
+      : `<span class="masscan-badge masscan-no">未找到</span> masscan.exe 不在程序目录或 PATH 中`;
+    document.getElementById('masscanStatus').innerHTML = html;
+    document.getElementById('masscanCheckResult').innerHTML = html;
+  } catch(e) {
+    document.getElementById('masscanStatus').innerHTML = '<span class="masscan-badge masscan-no">检查失败</span>';
+  }
+}
+checkMasscan();
+
 async function startScan() {
   const targets = document.getElementById('scanTargets').value.trim();
   if (!targets) { alert('请输入目标'); return; }
+  const mode = document.getElementById('scanMode').value;
+  const ports = document.getElementById('scanPorts').value.split(',').map(p => parseInt(p.trim())).filter(p => p);
   const res = await fetch('/api/scan/start', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       targets,
       scan_threads: parseInt(document.getElementById('scanThreads').value),
@@ -338,6 +425,10 @@ async function startScan() {
       timeout: parseFloat(document.getElementById('probeTimeout').value),
       rate: parseInt(document.getElementById('rateLimit').value),
       auth_check: document.getElementById('authCheck').checked,
+      use_masscan: mode === 'masscan',
+      portscan_only: document.getElementById('portscanOnly').checked,
+      masscan_rate: parseInt(document.getElementById('masscanRate').value),
+      ports: ports,
     })
   });
   const data = await res.json();
@@ -350,9 +441,7 @@ async function startScan() {
   statusTimer = setInterval(pollStatus, 1000);
 }
 
-function stopScan() {
-  fetch('/api/scan/stop', {method: 'POST'});
-}
+function stopScan() { fetch('/api/scan/stop', {method: 'POST'}); }
 
 async function pollStatus() {
   const res = await fetch('/api/scan/status');
@@ -376,7 +465,6 @@ async function pollStatus() {
   }
 }
 
-// 加载结果
 async function loadResults(page) {
   currentPage = page;
   const params = new URLSearchParams({
@@ -398,7 +486,10 @@ async function loadResults(page) {
       <td>${r.players_online || 0}/${r.players_max || 0}</td>
       <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
       <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
-      <td><div class="actions"><button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})">警告</button></div></td>
+      <td><div class="actions">
+        <button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})">警告</button>
+        <button class="btn btn-warning" onclick="openCmdModal('${r.ip}',${r.port})">发命令</button>
+      </div></td>
     </tr>
   `).join('');
   renderPagination('pagination', page, data.total, 50, loadResults);
@@ -416,10 +507,7 @@ function renderPagination(id, page, total, perPage, callback) {
 
 function drawVersionChart(results) {
   const counts = {};
-  results.forEach(r => {
-    const v = r.version || '未知';
-    counts[v] = (counts[v] || 0) + 1;
-  });
+  results.forEach(r => { const v = r.version || '未知'; counts[v] = (counts[v] || 0) + 1; });
   const labels = Object.keys(counts).sort((a,b) => counts[b]-counts[a]).slice(0, 15);
   const data = labels.map(l => counts[l]);
   if (versionChart) versionChart.destroy();
@@ -440,7 +528,21 @@ function exportResults(fmt) {
   window.open(`/api/scan/export?format=${fmt}&auth=${auth}`);
 }
 
-// 警告功能
+async function importMasscanResults(input) {
+  if (!input.files[0]) return;
+  const doAuth = confirm('导入后是否进行认证检测？\n确定=导入+认证检测\n取消=只导入不探测');
+  const formData = new FormData();
+  formData.append('file', input.files[0]);
+  formData.append('do_auth', doAuth ? '1' : '0');
+  try {
+    const res = await fetch('/api/import', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) { alert('导入失败: ' + data.error); }
+    else { alert('导入成功，共 ' + data.count + ' 个服务器'); loadResults(1); }
+  } catch(e) { alert('导入失败: ' + e.message); }
+  input.value = '';
+}
+
 function openWarnModal(ip, port) {
   warnIp = ip; warnPort = port;
   document.getElementById('warnTarget').textContent = ip + ':' + port;
@@ -448,9 +550,8 @@ function openWarnModal(ip, port) {
   document.getElementById('warnResult').innerHTML = '';
   document.getElementById('warnModal').classList.remove('hidden');
 }
-function closeWarnModal() {
-  document.getElementById('warnModal').classList.add('hidden');
-}
+function closeWarnModal() { document.getElementById('warnModal').classList.add('hidden'); }
+
 async function confirmWarn() {
   const messages = document.getElementById('warnMessages').value.split('\n').filter(m => m.trim());
   const res = await fetch('/api/warn/single', {
@@ -478,7 +579,62 @@ async function batchWarn() {
   alert(`批量警告完成：共 ${data.total} 台，发送 ${data.messages_sent} 条消息`);
 }
 
-// 数据库
+function openCmdModal(ip, port) {
+  cmdIp = ip; cmdPort = port;
+  document.getElementById('cmdTarget').textContent = ip + ':' + port;
+  document.getElementById('cmdCommand').value = '';
+  document.getElementById('cmdResult').innerHTML = '';
+  document.getElementById('cmdModal').classList.remove('hidden');
+}
+function closeCmdModal() { document.getElementById('cmdModal').classList.add('hidden'); }
+
+async function confirmCmd() {
+  const cmd = document.getElementById('cmdCommand').value.trim();
+  if (!cmd) { alert('请输入命令'); return; }
+  const res = await fetch('/api/bot/command', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ip: cmdIp, port: cmdPort,
+      username: document.getElementById('cmdUsername').value,
+      command: cmd,
+      authme_password: document.getElementById('cmdAuthme').value || null,
+    })
+  });
+  const data = await res.json();
+  document.getElementById('cmdResult').innerHTML = data.success
+    ? `<div style="color:#48bb78;">命令已发送: ${data.command}</div>`
+    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+}
+
+async function sendToolCommand() {
+  const ip = document.getElementById('toolCmdIp').value.trim();
+  const cmd = document.getElementById('toolCmdCmd').value.trim();
+  if (!ip || !cmd) { alert('请填写 IP 和命令'); return; }
+  document.getElementById('toolCmdResult').innerHTML = '发送中...';
+  const res = await fetch('/api/bot/command', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ip, port: parseInt(document.getElementById('toolCmdPort').value),
+      username: document.getElementById('toolCmdUser').value,
+      command: cmd,
+      authme_password: document.getElementById('toolCmdAuthme').value || null,
+    })
+  });
+  const data = await res.json();
+  document.getElementById('toolCmdResult').innerHTML = data.success
+    ? `<div style="color:#48bb78;">成功！命令已发送: ${data.command}</div>`
+    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+}
+
+async function genPackets() {
+  document.getElementById('genPacketsResult').innerHTML = '生成中...';
+  const res = await fetch('/api/tools/gen_packets', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+  const data = await res.json();
+  document.getElementById('genPacketsResult').innerHTML = data.success
+    ? `<div style="color:#48bb78;">${data.message}</div>`
+    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+}
+
 async function loadDbStats() {
   const res = await fetch('/api/db/stats');
   const data = await res.json();
@@ -515,7 +671,6 @@ async function loadDbResults(page) {
   renderPagination('dbPagination', page, data.total, 50, loadDbResults);
 }
 
-// 历史
 async function loadHistory() {
   const res = await fetch('/api/history');
   const data = await res.json();
@@ -524,6 +679,7 @@ async function loadHistory() {
       <div style="padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
         <div>
           <strong>任务 #${h.id}</strong> - ${h.time}
+          <span class="badge badge-${h.mode === 'masscan' ? 'whitelist' : (h.mode === 'portscan' ? 'unknown' : 'online')}" style="margin-left:8px;">${h.mode || 'full'}</span>
           <div style="font-size:12px;color:#666;margin-top:4px;">目标: ${h.targets} | 发现: ${h.found} 台</div>
         </div>
       </div>
