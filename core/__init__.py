@@ -1,1 +1,1 @@
-# MC Scanner v3Pro - core 协议核心层
+# MC Scanner v3-3.1 - core 协议核心层

@@ -48,9 +48,9 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                 length = 0
                 offset = 0
                 for i in range(5):
-                    if offset + i >= len(payload):
+                    if offset >= len(payload):
                         break
-                    b = payload[offset + i]
+                    b = payload[offset]
                     length |= (b & 0x7F) << (7 * i)
                     offset += 1
                     if not (b & 0x80):

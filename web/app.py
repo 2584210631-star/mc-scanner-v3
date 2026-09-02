@@ -14,6 +14,9 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import config
+import logger
+
 from storage import db
 from scanner.engine import ScanEngine
 from scanner.random_scan import random_scan, parse_port_ranges
@@ -58,6 +61,27 @@ def parse_ports_spec(ports_spec):
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
+
+def _get_web_token():
+    """获取Web访问token，空字符串表示不启用认证。"""
+    return config.get("web_token", "") or ""
+
+
+@app.before_request
+def _check_token():
+    """API请求token认证（首页和静态文件除外）。"""
+    token = _get_web_token()
+    if not token:
+        return None
+    if request.path == '/' or request.path.startswith('/static/'):
+        return None
+    if request.path.startswith('/api/'):
+        client_token = request.headers.get('X-API-Token', '') or request.args.get('token', '')
+        if client_token != token:
+            return jsonify({"error": "未授权访问，请配置正确的API Token"}), 401
+    return None
+
+
 scan_stop_event = threading.Event()
 
 scan_state = {
@@ -75,6 +99,7 @@ task_counter = 0
 
 
 def _log(msg: str):
+    logger.info(msg)
     with scan_lock:
         entry = {"time": datetime.now().strftime("%H:%M:%S"), "msg": msg}
         scan_state["logs"].append(entry)
@@ -474,7 +499,7 @@ def export_results():
         html_content += "td{padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}"
         html_content += "tr:hover{background:#f1f5f9}h2{color:#334155;margin-top:30px}"
         html_content += ".footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:30px}</style></head><body>"
-        html_content += "<h1>MC Scanner v3 扫描报告</h1><p>生成时间: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + "</p>"
+        html_content += "<h1>MC Scanner v3-3.1 扫描报告</h1><p>生成时间: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + "</p>"
         html_content += "<div class='stats'>"
         html_content += "<div class='stat'><div class='num'>" + str(len(results)) + "</div><div class='label'>总服务器</div></div>"
         html_content += "<div class='stat'><div class='num'>" + str(offline) + "</div><div class='label'>离线模式</div></div>"
@@ -484,7 +509,7 @@ def export_results():
         html_content += "<div class='stat'><div class='num'>" + str(total_players) + "</div><div class='label'>总玩家数</div></div>"
         html_content += "</div><h2>版本分布</h2><table><tr><th>版本</th><th>数量</th></tr>" + version_rows + "</table>"
         html_content += "<h2>服务器列表</h2><table><tr><th>地址</th><th>版本</th><th>人数</th><th>在线玩家</th><th>认证</th><th>MOTD</th></tr>" + server_rows + "</table>"
-        html_content += "<div class='footer'>MC Scanner v3 | 扫描报告自动生成</div></body></html>"
+        html_content += "<div class='footer'>MC Scanner v3-3.1 | 扫描报告自动生成</div></body></html>"
         return Response(html_content, mimetype="text/html",
                         headers={"Content-Disposition": "attachment; filename=mcscanner_report.html"})
     else:
@@ -647,9 +672,7 @@ def bot_command():
         return jsonify({"error": "IP 和命令不能为空"}), 400
     try:
         bot = MCBot(host=ip, port=port, username=username)
-        connected = bot.connect()
-        if not connected:
-            return jsonify({"success": False, "error": "连接失败"})
+        bot.connect()
         if authme_password:
             bot.authme_login(authme_password, register=False)
             time.sleep(1.0)
@@ -684,7 +707,6 @@ def masscan_status():
     return jsonify({
         "available": has_masscan(),
         "version": get_masscan_version() or "unknown",
-        "path": __import__('scanner.masscan', fromlist=['has_masscan']).has_masscan() if hasattr(__import__('scanner.masscan', fromlist=['has_masscan']), 'has_masscan') else False,
     })
 
 
@@ -737,9 +759,10 @@ def default_config():
 
 
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
+    logger.setup_logger()
     db.init_db(db_path)
-    print(f"[*] Web 面板启动: http://{host}:{port}")
-    print(f"[*] 数据库: {db_path}")
+    logger.info(f"[*] Web 面板启动: http://{host}:{port}")
+    logger.info(f"[*] 数据库: {db_path}")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 

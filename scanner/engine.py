@@ -95,49 +95,62 @@ class ScanEngine:
             self._bump("error")
         return result
 
-    def scan_targets(self, targets, save_every: int = 50) -> list:
-        """批量扫描目标（惰性生成器）"""
-        db.init_db(self.db_path)
+    def _run_batch(self, targets, fn, save_callback=None, save_every=50):
+        """分批提交任务到线程池，避免大网段一次性提交导致OOM。
+        fn: 接收 (ip, port) 返回结果的函数
+        save_callback: 每save_every个结果调用一次，接收结果列表
+        """
+        BATCH_SIZE = max(self.workers * 4, 200)
         results = []
+        done = 0
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as ex:
-            futures = {ex.submit(self.probe_one, ip, port): (ip, port)
-                       for ip, port in targets}
-            done = 0
-            for fut in concurrent.futures.as_completed(futures):
-                if self.stop_event and self.stop_event.is_set():
+            futures = {}
+            target_iter = iter(targets)
+            # 初始填充一批
+            for ip, port in target_iter:
+                if len(futures) >= BATCH_SIZE:
                     break
-                try:
-                    r = fut.result()
-                except Exception as e:
-                    ip, port = futures[fut]
-                    r = {"ip": ip, "port": port, "state": "error", "error": str(e)}
-                results.append(r)
-                done += 1
-                self._bump("total")
-                if done % save_every == 0:
-                    db.upsert_many(self.db_path, results[-save_every:])
-                    self._print_progress(done)
+                futures[ex.submit(fn, ip, port)] = (ip, port)
+            while futures:
+                if self.stop_event and self.stop_event.is_set():
+                    for f in futures:
+                        f.cancel()
+                    break
+                done_set, _ = concurrent.futures.wait(
+                    futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                for fut in done_set:
+                    ip, port = futures.pop(fut)
+                    try:
+                        r = fut.result()
+                    except Exception as e:
+                        r = {"ip": ip, "port": port, "state": "error", "error": str(e)}
+                    results.append(r)
+                    done += 1
+                    self._bump("total")
+                    if save_callback and done % save_every == 0:
+                        save_callback(results[-save_every:])
+                        self._print_progress(done)
+                # 补充新任务
+                for ip, port in target_iter:
+                    if len(futures) >= BATCH_SIZE:
+                        break
+                    futures[ex.submit(fn, ip, port)] = (ip, port)
+        return results, done
+
+    def scan_targets(self, targets, save_every: int = 50) -> list:
+        """批量扫描目标（分批提交，大网段不OOM）"""
+        db.init_db(self.db_path)
+        def _save(batch):
+            db.upsert_many(self.db_path, batch)
+        results, _ = self._run_batch(targets, self.probe_one, _save, save_every)
         if results:
             db.upsert_many(self.db_path, results)
         self.results = results
         return results
 
     def probe_list(self, targets: list) -> list:
-        """批量探测 (ip, port) 列表，返回结果（不存数据库）"""
-        results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as ex:
-            futures = {ex.submit(self.probe_one, ip, port): (ip, port)
-                       for ip, port in targets}
-            for fut in concurrent.futures.as_completed(futures):
-                if self.stop_event and self.stop_event.is_set():
-                    break
-                try:
-                    r = fut.result()
-                except Exception as e:
-                    ip, port = futures[fut]
-                    r = {"ip": ip, "port": port, "state": "error", "error": str(e),
-                         "auth": "error", "version": None, "players_online": 0, "players_max": 0, "motd": None}
-                results.append(r)
+        """批量探测 (ip, port) 列表，返回结果（不存数据库，分批提交不OOM）"""
+        results, _ = self._run_batch(targets, self.probe_one)
         self.results = results
         return results
 

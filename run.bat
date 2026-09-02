@@ -1,11 +1,11 @@
 @echo off
 cd /d "%~dp0"
-title MC Scanner v3
+title MC Scanner v3-3.1
 color 0A
 cls
 
 echo ========================================
-echo   MC Scanner v3 - Web Control Panel
+echo   MC Scanner v3-3.1 - Web Control Panel
 echo ========================================
 echo.
 

@@ -84,6 +84,11 @@ def _record_to_tuple(rec: dict) -> tuple:
     )
 
 
+def _escape_like(s: str) -> str:
+    """转义LIKE查询中的通配符 % 和 _"""
+    return s.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+
+
 def query(db_path: str, auth: str = None, modded: int = None,
           search: str = None, limit: int = 200, offset: int = 0) -> list:
     conn = get_conn(db_path)
@@ -98,8 +103,9 @@ def query(db_path: str, auth: str = None, modded: int = None,
         conds.append("is_modded = ?")
         args.append(1 if modded else 0)
     if search:
-        conds.append("(motd LIKE ? OR version LIKE ? OR ip LIKE ?)")
-        args += [f"%{search}%"] * 3
+        conds.append("(motd LIKE ? ESCAPE '\\' OR version LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\')")
+        escaped = f"%{_escape_like(search)}%"
+        args += [escaped] * 3
     if conds:
         sql += " WHERE " + " AND ".join(conds)
     sql += " ORDER BY last_updated DESC LIMIT ? OFFSET ?"
@@ -120,8 +126,9 @@ def count(db_path: str, auth: str = None, modded: int = None, search: str = None
         conds.append("is_modded = ?")
         args.append(1 if modded else 0)
     if search:
-        conds.append("(motd LIKE ? OR version LIKE ? OR ip LIKE ?)")
-        args += [f"%{search}%"] * 3
+        conds.append("(motd LIKE ? ESCAPE '\\' OR version LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\')")
+        escaped = f"%{_escape_like(search)}%"
+        args += [escaped] * 3
     if conds:
         sql += " WHERE " + " AND ".join(conds)
     total = conn.execute(sql, args).fetchone()[0]
