@@ -97,6 +97,7 @@ class ScanEngine:
 
     def scan_targets(self, targets, save_every: int = 50) -> list:
         """批量扫描目标（惰性生成器）"""
+        db.init_db(self.db_path)
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as ex:
             futures = {ex.submit(self.probe_one, ip, port): (ip, port)
