@@ -310,9 +310,8 @@ class MCBot:
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", salt)
                    + write_varint(0)
-                   + b'\x00\x00\x00')
-        if proto >= 770:
-            payload += b'\x00'  # checksum (1.21.5+)
+                   + b'\x00\x00\x00'
+                   + b'\x00')  # checksum (所有版本都需要)
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_761(self, message: str, chat_id: int):
