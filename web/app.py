@@ -502,6 +502,56 @@ def warn_batch():
     return jsonify({"total": len(results), "messages_sent": sent, "results": results})
 
 
+@app.route('/api/warn/multi', methods=['POST'])
+def warn_multi():
+    """多机器人同时警告单个服务器"""
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    bot_count = int(data.get("bot_count", 5))
+    name_prefix = data.get("name_prefix", "SecurityBot")
+    messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
+    message_delay = float(data.get("message_delay", 0.5))
+    authme_password = data.get("authme_password")
+
+    if not ip:
+        return jsonify({"error": "请指定 IP"}), 400
+    if bot_count < 1 or bot_count > 50:
+        return jsonify({"error": "机器人数量需在 1-50 之间"}), 400
+
+    _log(f"多机器人警告开始：{bot_count}个机器人 -> {ip}:{port}")
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    results = []
+
+    def run_bot(idx):
+        name = f"{name_prefix}_{idx:02d}"
+        try:
+            r = join_and_warn(ip, port, name, messages, timeout=15.0,
+                              message_delay=message_delay,
+                              authme_password=authme_password)
+            return {"name": name, "success": r.success,
+                    "messages_sent": r.messages_sent, "error": r.error}
+        except Exception as e:
+            return {"name": name, "success": False, "error": str(e)[:100]}
+
+    with ThreadPoolExecutor(max_workers=min(bot_count, 20)) as ex:
+        futures = [ex.submit(run_bot, i + 1) for i in range(bot_count)]
+        for fut in as_completed(futures):
+            results.append(fut.result())
+
+    success_count = sum(1 for r in results if r["success"])
+    total_messages = sum(r["messages_sent"] for r in results)
+    _log(f"多机器人警告完成：{success_count}/{bot_count}成功，共{total_messages}条消息")
+
+    return jsonify({
+        "total": bot_count,
+        "success": success_count,
+        "messages_sent": total_messages,
+        "results": results,
+    })
+
+
 # ===== 新增：导入 masscan 结果 =====
 @app.route('/api/import', methods=['POST'])
 def import_masscan_results():
