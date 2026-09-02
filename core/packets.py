@@ -9,46 +9,54 @@ from .protocol import get_chat_format
 # 每个表包含: sb_chat, sb_chat_command, cb_keep_alive, sb_keep_alive,
 #            cb_ping, sb_pong, cb_login, cb_teleport, sb_confirm_teleport, cb_disconnect
 _PLAY_TABLES = [
-    {
-        "min_proto": 766, "max_proto": 9999,
-        "sb_chat": 0x08, "sb_chat_command": 0x06,
-        "cb_keep_alive": 0x2B, "sb_keep_alive": 0x1B,
-        "cb_ping": 0x3E, "sb_pong": 0x2C,
-        "cb_login": 0x30, "cb_teleport": 0x3E,
-        "sb_confirm_teleport": 0x00, "cb_disconnect": 0x20,
-    },
-    {
-        "min_proto": 764, "max_proto": 765,
-        "sb_chat": 0x08, "sb_chat_command": 0x06,
-        "cb_keep_alive": 0x2A, "sb_keep_alive": 0x1A,
-        "cb_ping": 0x3D, "sb_pong": 0x2B,
-        "cb_login": 0x2B, "cb_teleport": 0x3D,
-        "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E,
-    },
-    {
-        "min_proto": 761, "max_proto": 763,
-        "sb_chat": 0x05, "sb_chat_command": 0x04,
-        "cb_keep_alive": 0x23, "sb_keep_alive": 0x15,
-        "cb_ping": 0x37, "sb_pong": 0x25,
-        "cb_login": 0x25, "cb_teleport": 0x38,
-        "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19,
-    },
-    {
-        "min_proto": 759, "max_proto": 760,
-        "sb_chat": 0x04, "sb_chat_command": None,
-        "cb_keep_alive": 0x21, "sb_keep_alive": 0x10,
-        "cb_ping": 0x33, "sb_pong": 0x1F,
-        "cb_login": 0x23, "cb_teleport": 0x36,
-        "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17,
-    },
-    {
-        "min_proto": 340, "max_proto": 758,
-        "sb_chat": 0x03, "sb_chat_command": None,
-        "cb_keep_alive": 0x1F, "sb_keep_alive": 0x0E,
-        "cb_ping": 0x2F, "sb_pong": 0x1D,
-        "cb_login": 0x23, "cb_teleport": 0x34,
-        "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A,
-    },
+    # 767: 1.21-1.21.1
+    {"min_proto": 767, "max_proto": 767, "sb_chat": 0x06, "sb_chat_command": 0x04,
+     "cb_keep_alive": 0x26, "sb_keep_alive": 0x18, "cb_ping": 0x35, "sb_pong": 0x27,
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1D},
+    # 766: 1.20.5-1.20.6
+    {"min_proto": 766, "max_proto": 766, "sb_chat": 0x06, "sb_chat_command": 0x04,
+     "cb_keep_alive": 0x26, "sb_keep_alive": 0x18, "cb_ping": 0x35, "sb_pong": 0x27,
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1D},
+    # 765: 1.20.3-1.20.4
+    {"min_proto": 765, "max_proto": 765, "sb_chat": 0x05, "sb_chat_command": 0x04,
+     "cb_keep_alive": 0x24, "sb_keep_alive": 0x15, "cb_ping": 0x33, "sb_pong": 0x24,
+     "cb_login": 0x29, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A},
+    # 764: 1.20.2
+    {"min_proto": 764, "max_proto": 764, "sb_chat": 0x05, "sb_chat_command": 0x04,
+     "cb_keep_alive": 0x24, "sb_keep_alive": 0x14, "cb_ping": 0x33, "sb_pong": 0x23,
+     "cb_login": 0x29, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A},
+    # 768-769: 1.21.2-1.21.4
+    {"min_proto": 768, "max_proto": 769, "sb_chat": 0x07, "sb_chat_command": 0x05,
+     "cb_keep_alive": 0x27, "sb_keep_alive": 0x1A, "cb_ping": 0x37, "sb_pong": 0x2B,
+     "cb_login": 0x2C, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+    # 770: 1.21.5
+    {"min_proto": 770, "max_proto": 770, "sb_chat": 0x07, "sb_chat_command": 0x05,
+     "cb_keep_alive": 0x26, "sb_keep_alive": 0x1A, "cb_ping": 0x36, "sb_pong": 0x2B,
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+    # 771-772: 1.21.6-1.21.8
+    {"min_proto": 771, "max_proto": 772, "sb_chat": 0x08, "sb_chat_command": 0x06,
+     "cb_keep_alive": 0x26, "sb_keep_alive": 0x1B, "cb_ping": 0x36, "sb_pong": 0x2C,
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+    # 773: 1.21.9
+    {"min_proto": 773, "max_proto": 773, "sb_chat": 0x08, "sb_chat_command": 0x06,
+     "cb_keep_alive": 0x2B, "sb_keep_alive": 0x1B, "cb_ping": 0x3B, "sb_pong": 0x2C,
+     "cb_login": 0x30, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+    # 774+: 1.21.10+
+    {"min_proto": 774, "max_proto": 9999, "sb_chat": 0x08, "sb_chat_command": 0x06,
+     "cb_keep_alive": 0x2B, "sb_keep_alive": 0x1B, "cb_ping": 0x3B, "sb_pong": 0x2C,
+     "cb_login": 0x30, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+    # 761-763: 1.19.3-1.20.1
+    {"min_proto": 761, "max_proto": 763, "sb_chat": 0x05, "sb_chat_command": 0x04,
+     "cb_keep_alive": 0x23, "sb_keep_alive": 0x15, "cb_ping": 0x37, "sb_pong": 0x25,
+     "cb_login": 0x25, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19},
+    # 759-760: 1.19
+    {"min_proto": 759, "max_proto": 760, "sb_chat": 0x04, "sb_chat_command": None,
+     "cb_keep_alive": 0x21, "sb_keep_alive": 0x10, "cb_ping": 0x33, "sb_pong": 0x1F,
+     "cb_login": 0x23, "cb_teleport": 0x36, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17},
+    # 340-758: 旧版本
+    {"min_proto": 340, "max_proto": 758, "sb_chat": 0x03, "sb_chat_command": None,
+     "cb_keep_alive": 0x1F, "sb_keep_alive": 0x0E, "cb_ping": 0x2F, "sb_pong": 0x1D,
+     "cb_login": 0x23, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A},
 ]
 
 _auto_tables = None
