@@ -379,19 +379,21 @@ def bot_command():
     if not ip or not command:
         return jsonify({"error": "IP 和命令不能为空"}), 400
     try:
-        bot = MCBot()
-        bot.connect(ip, port, username)
-        bot.login()
+        bot = MCBot(host=ip, port=port, username=username)
+        connected = bot.connect()
+        if not connected:
+            return jsonify({"success": False, "error": "连接失败"})
         if authme_password:
             bot.authme_login(authme_password, register=False)
-        time.sleep(1.0)
+            time.sleep(1.0)
+        bot.send_command(command)
+        bot.keep_alive(hold)
+        auth_mode = getattr(bot, 'auth_mode', 'unknown')
+        bot.close()
         cmd = command if command.startswith('/') else '/' + command
-        bot.send_chat(cmd)
-        time.sleep(hold)
-        bot.disconnect()
-        return jsonify({"success": True, "command": cmd, "auth_mode": bot.auth_mode if hasattr(bot, 'auth_mode') else "unknown"})
+        return jsonify({"success": True, "command": cmd, "auth_mode": auth_mode})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)})
 
 
 # ===== 新增：生成协议表 =====
