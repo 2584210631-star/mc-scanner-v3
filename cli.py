@@ -128,7 +128,7 @@ def cmd_scan(args, cfg):
 
     engine = ScanEngine(
         db_path=args.db or cfg['db_path'],
-        workers=args.workers or 32,
+        workers=args.probe_workers or 32,
         timeout=args.timeout or 4.0,
         auth_check=not args.no_auth,
         rate_limit=args.rate or cfg['rate'],
@@ -230,8 +230,9 @@ def cmd_warn_db(args, cfg):
                 continue
             fut = ex.submit(join_and_warn, ip, port,
                             args.username or cfg.get('username', 'SecurityBot'),
-                            messages, 15.0, cfg.get('message_delay', 0.8),
-                            args.authme or cfg.get('authme_password') or None, None)
+                            messages, timeout=15.0,
+                            message_delay=cfg.get('message_delay', 0.8),
+                            authme_password=args.authme or cfg.get('authme_password') or None)
             futures[fut] = (ip, port)
         for i, fut in enumerate(as_completed(futures), 1):
             ip, port = futures[fut]
