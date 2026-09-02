@@ -501,6 +501,10 @@ function stopScan() { fetch('/api/scan/stop', {method: 'POST'}); }
 async function pollStatus() {
   const res = await fetch('/api/scan/status');
   const data = await res.json();
+  if (data.error) {
+    document.getElementById('headerStatus').textContent = '错误: ' + data.error;
+    document.getElementById('headerStatus').style.color = '#ef4444';
+  }
   document.getElementById('statTotal').textContent = data.total || data.results_count;
   document.getElementById('statElapsed').textContent = Math.floor(data.elapsed) + 's';
   const pct = data.total > 0 ? Math.round(data.progress / data.total * 100) : 0;
