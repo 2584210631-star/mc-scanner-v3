@@ -96,13 +96,22 @@ def parse_targets(targets: list, default_ports: Optional[list] = None) -> Iterat
 
 
 def count_targets(targets: list, default_ports: Optional[list] = None) -> int:
-    """快速估算目标总数（不物化）"""
+    """快速估算目标总数（不物化），支持@文件递归统计"""
     if default_ports is None:
         default_ports = [25565]
     count = 0
     for target in targets:
         target = target.strip()
-        if not target or target.startswith('#') or target.startswith('@'):
+        if not target or target.startswith('#'):
+            continue
+        if target.startswith('@'):
+            filepath = target[1:]
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    file_targets = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                count += count_targets(file_targets, default_ports)
+            except FileNotFoundError:
+                pass
             continue
         addr_part = target
         port = None

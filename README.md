@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ MC Scanner v3Pro
+# 🛡️ MC Scanner v3-3.1
 ### Minecraft 服务器扫描与安全提醒机器人 · 超越版
 
 **整合 V1 功能完整性 + V2 架构优势 · 全版本支持 · Web 控制面板 · 多机器人警告 · 自动离线检测 · SQLite存储 · 协议回退 · Windows零依赖双击即用**
@@ -16,7 +16,7 @@
 
 ## 📖 简介
 
-MC Scanner v3Pro 是在 mc-scanner V1 和 V2 基础上整合优化的超越版。
+MC Scanner v3-3.1 是在 mc-scanner V1 和 V2 基础上整合优化的超越版。
 
 **设计理念：** 保留 V1 的全部功能（自动警告、AuthMe、完整 Web 面板、配置文件），套用 V2 的模块化分层架构，吸收两者的增强点（SLP 容错、masscan auto-import、完善测试体系、合规声明）。
 
@@ -159,8 +159,11 @@ python cli.py web --port 8080
   "authme_password": "",
   "exclude_file": "exclude.conf",
   "db_path": "mcscanner.db",
-  "auto_save_db": true
+  "auto_save_db": true,
+  "web_token": "",
+  "warn_bot_max": 20
 }
+> `web_token` 非空时 Web 面板 API 需带 `X-API-Token` 或 `?token=` 访问；`warn_bot_max` 为多机器人警告硬上限。
 ```
 
 ---
@@ -169,9 +172,11 @@ python cli.py web --port 8080
 
 ```
 mc-scanner-v3pro/
-├── cli.py                  # 命令行入口（8个子命令）
+├── cli.py                  # 命令行入口（9个子命令）
 ├── run.py                  # 快速启动
 ├── run.bat / run.sh        # 一键启动脚本
+├── config.py               # 统一配置模块（v3-3.1 新增）
+├── logger.py               # 统一日志模块（v3-3.1 新增）
 ├── config.json             # 配置文件
 ├── exclude.conf            # 排除列表
 ├── targets.txt             # 目标列表示例
@@ -185,11 +190,16 @@ mc-scanner-v3pro/
 │   └── bot.py              # 机器人核心（登录+发消息+AuthMe）
 ├── scanner/                # 扫描引擎层
 │   ├── engine.py           # 综合扫描引擎
+│   ├── base.py             # 扫描器抽象基类（v3-3.1 新增）
 │   ├── portscan.py         # 端口扫描
 │   ├── masscan.py          # masscan 集成
 │   ├── targets.py          # 目标解析
 │   ├── exclude.py          # 排除列表
 │   └── banner.py           # masscan banner 解析
+├── service/                # 业务编排层（v3-3.1 新增）
+│   ├── __init__.py         # 扫描/查询/统一扫描入口
+│   ├── scan_service.py     # 扫描服务
+│   └── warn_service.py     # 警告服务
 ├── storage/
 │   └── db.py               # SQLite 存储层
 ├── web/
@@ -206,6 +216,7 @@ mc-scanner-v3pro/
 │   └── test_integration.py # 集成测试
 ├── NOTICE                  # 来源与致谢
 ├── LICENSE                 # MIT 许可
+├── OPTIMIZATION.md         # v3-3.1 优化说明（13 个 bug 修复 + 架构优化）
 └── README.md               # 本文档
 ```
 

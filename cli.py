@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MC Scanner v3Pro - 综合 Minecraft 服务器扫描器
+MC Scanner v3-3.1 - 综合 Minecraft 服务器扫描器
 整合 V1 功能完整性与 V2 架构优势的超越版。
 
 子命令:
@@ -27,46 +27,20 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import config
+import logger
 
-from scanner.targets import parse_targets, count_targets, parse_port_spec
-from scanner.exclude import Excluder
-from scanner.portscan import scan_ports, get_open_ports
-from scanner.masscan import has_masscan, run_masscan
+from scanner.targets import parse_port_spec
+from scanner.portscan import get_open_ports
+from scanner.masscan import has_masscan
 from scanner.engine import ScanEngine
 from scanner.random_scan import random_scan, parse_port_ranges
-from storage import db
-from core.bot import join_and_warn, DEFAULT_WARNING_MESSAGES, MCBot
-from core.protocol import get_version_name
-
-
-DEFAULT_CONFIG = {
-    "username": "SecurityBot",
-    "messages": None,
-    "ports": [25565],
-    "scan_threads": 200,
-    "scan_timeout": 2.5,
-    "bot_threads": 10,
-    "bot_timeout": 12,
-    "message_delay": 0.8,
-    "retry_count": 1,
-    "rate": 0,
-    "authme_password": "",
-    "exclude_file": "exclude.conf",
-    "db_path": "mcscanner.db",
-    "auto_save_db": True,
-    "output_format": "json",
-    "output_file": None,
-}
+from core.bot import MCBot
 
 
 def load_config(path: str = None) -> dict:
-    cfg = DEFAULT_CONFIG.copy()
-    config_path = path or "config.json"
-    if os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            user_cfg = json.load(f)
-        cfg.update(user_cfg)
-        print(f"[*] 已加载配置: {config_path}")
+    """加载配置（委托给统一config模块，保持向后兼容）"""
+    cfg = config.load_config(path)
     if isinstance(cfg.get('ports'), str):
         cfg['ports'] = parse_port_spec(cfg['ports'])
     return cfg
@@ -91,22 +65,26 @@ def save_results(results, output_file: str, fmt: str = "json"):
                 w = csv.DictWriter(f, fieldnames=keys)
                 w.writeheader()
                 w.writerows(rows)
-        print(f"[*] 结果已保存: {output_file} (CSV)")
+        logger.info(f"[*] 结果已保存: {output_file} (CSV)")
     else:
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(rows, f, ensure_ascii=False, indent=2, default=str)
-        print(f"[*] 结果已保存: {output_file} (JSON)")
+        logger.info(f"[*] 结果已保存: {output_file} (JSON)")
 
 
 def cmd_portscan(args, cfg):
-    targets = list(parse_targets(args.targets.split(','), cfg['ports']))
-    ex = Excluder(args.exclude or cfg['exclude_file'])
-    targets = list(ex.filter_targets(iter(targets)))
-    if not targets:
-        print("[!] 没有有效目标"); return
-    print(f"[*] 目标数: {len(targets)} | 端口: {cfg['ports']} | 线程: {cfg['scan_threads']}")
-    results = scan_ports(targets, max_workers=cfg['scan_threads'],
-                         timeout=cfg['scan_timeout'], rate=args.rate or cfg['rate'])
+    from service import run_portscan_only
+    if args.workers:
+        config.set('scan_threads', args.workers)
+    if args.timeout:
+        config.set('scan_timeout', args.timeout)
+    results = run_portscan_only(
+        args.targets,
+        scan_threads=args.workers or cfg['scan_threads'],
+        scan_timeout=args.timeout or cfg['scan_timeout'],
+        rate=args.rate or cfg['rate'],
+        exclude_file=args.exclude or cfg['exclude_file'],
+    )
     open_ports = get_open_ports(results)
     print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
     for ip, port in open_ports:
@@ -115,27 +93,21 @@ def cmd_portscan(args, cfg):
         save_results([{'ip': r.ip, 'port': r.port, 'open': r.is_open,
                        'latency_ms': round(r.latency_ms, 1)} for r in results],
                      args.output, cfg['output_format'])
-
-
 def cmd_scan(args, cfg):
-    if args.workers: cfg['scan_threads'] = args.workers
-    if args.timeout: cfg['scan_timeout'] = args.timeout
-    targets = list(parse_targets(args.targets.split(','), cfg['ports']))
-    ex = Excluder(args.exclude or cfg['exclude_file'])
-    targets = list(ex.filter_targets(iter(targets)))
-    if not targets:
-        print("[!] 没有有效目标"); return
-
-    engine = ScanEngine(
-        db_path=args.db or cfg['db_path'],
-        workers=args.probe_workers or 32,
-        timeout=args.timeout or 4.0,
+    from service import run_full_scan
+    if args.workers:
+        config.set('scan_threads', args.workers)
+    if args.timeout:
+        config.set('scan_timeout', args.timeout)
+    results = run_full_scan(
+        args.targets,
+        workers=args.workers or cfg['workers'],
+        timeout=args.timeout or cfg['timeout'],
         auth_check=not args.no_auth,
-        rate_limit=args.rate or cfg['rate'],
+        rate=args.rate or cfg['rate'],
+        exclude_file=args.exclude or cfg['exclude_file'],
+        db_path=args.db or cfg['db_path'],
     )
-    results = engine.scan_with_portscan(iter(targets),
-                                          scan_threads=cfg['scan_threads'],
-                                          scan_timeout=cfg['scan_timeout'])
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
     for s in sorted(results, key=lambda x: x.get('proto', 0)):
         print(f"  {s['ip']}:{s['port']} | {s.get('version','?')}(协议{s.get('proto','?')}) "
@@ -146,42 +118,32 @@ def cmd_scan(args, cfg):
         from web.app import run
         run(args.db or cfg['db_path'], port=args.web)
     return results
-
-
 def cmd_warn(args, cfg):
-    if args.workers: cfg['scan_threads'] = args.workers
-    if args.bot_workers: cfg['bot_threads'] = args.bot_workers
-    targets = list(parse_targets(args.targets.split(','), cfg['ports']))
-    ex = Excluder(args.exclude or cfg['exclude_file'])
-    targets = list(ex.filter_targets(iter(targets)))
-    if not targets:
-        print("[!] 没有有效目标"); return
-
+    from service.warn_service import warn_targets
+    if args.workers:
+        config.set('scan_threads', args.workers)
+    if args.bot_workers:
+        config.set('bot_threads', args.bot_workers)
     messages = None
     if args.message:
         messages = args.message if isinstance(args.message, list) else [args.message]
     elif args.message_file:
         with open(args.message_file, 'r', encoding='utf-8') as f:
             messages = [l.strip() for l in f if l.strip()]
-    messages = messages or cfg['messages'] or DEFAULT_WARNING_MESSAGES
-
-    engine = ScanEngine(
-        db_path=args.db or cfg['db_path'],
-        workers=args.workers or 32,
-        timeout=args.timeout or 4.0,
-        auth_check=not args.no_auth,
-        rate_limit=args.rate or cfg['rate'],
-        bot_workers=cfg['bot_threads'],
-        bot_timeout=cfg['bot_timeout'],
-    )
-    results = engine.warn_targets(
-        iter(targets),
+    results = warn_targets(
+        args.targets,
         username=args.username or cfg['username'],
         messages=messages,
+        message_file=args.message_file,
+        workers=args.workers or cfg['workers'],
+        bot_workers=args.bot_workers or cfg['bot_threads'],
+        timeout=args.timeout or cfg['timeout'],
         message_delay=cfg['message_delay'],
         authme_password=args.authme or cfg['authme_password'] or None,
+        rate=args.rate or cfg['rate'],
+        exclude_file=args.exclude or cfg['exclude_file'],
+        db_path=args.db or cfg['db_path'],
     )
-
     success = sum(1 for r in results if r.success)
     offline = sum(1 for r in results if r.is_offline)
     msg_sent = sum(r.messages_sent for r in results)
@@ -194,102 +156,78 @@ def cmd_warn(args, cfg):
     print(f"{'='*50}")
     if args.output:
         save_results(results, args.output, cfg['output_format'])
-
-
 def cmd_warn_db(args, cfg):
     """从数据库读取已扫描结果，直接发警告，不重新扫描"""
+    from service.warn_service import warn_from_db
     db_path = args.db or cfg.get('db_path', 'mcscanner.db')
-    if not os.path.exists(db_path):
-        print(f"[!] 数据库不存在: {db_path}")
-        print("[!] 请先运行 scan 命令扫描并保存结果到数据库")
-        return
     auth = args.auth or "cracked"
-    print(f"[*] 从数据库读取认证模式为 '{auth}' 的服务器...")
-    rows = db.query(db_path, auth=auth, modded=args.modded,
-                     search=args.search, limit=args.limit or 100000, offset=0)
-    if not rows:
-        print("[!] 数据库中没有符合条件的服务器")
-        return
-    print(f"[*] 找到 {len(rows)} 个服务器，开始发送警告（不重新扫描）...")
     messages = None
     if args.message:
         messages = args.message if isinstance(args.message, list) else [args.message]
     elif args.message_file:
         with open(args.message_file, 'r', encoding='utf-8') as f:
             messages = [l.strip() for l in f if l.strip()]
-    messages = messages or cfg.get('messages') or DEFAULT_WARNING_MESSAGES
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    workers = args.workers or cfg.get('bot_threads', 5)
-    results = []
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {}
-        for row in rows:
-            ip = row.get('ip')
-            port = row.get('port', 25565)
-            if not ip:
-                continue
-            fut = ex.submit(join_and_warn, ip, port,
-                            args.username or cfg.get('username', 'SecurityBot'),
-                            messages, timeout=15.0,
-                            message_delay=cfg.get('message_delay', 0.8),
-                            authme_password=args.authme or cfg.get('authme_password') or None)
-            futures[fut] = (ip, port)
-        for i, fut in enumerate(as_completed(futures), 1):
-            ip, port = futures[fut]
-            try:
-                r = fut.result()
-                results.append(r)
-                status = "OK" if r.success else "FAIL"
-                print(f"  [{i}/{len(rows)}] {status} {ip}:{port} - 发{r.messages_sent}条 {r.error or ''}")
-            except Exception as e:
-                results.append(None)
-                print(f"  [{i}/{len(rows)}] FAIL {ip}:{port} - {e}")
-    success = sum(1 for r in results if r and r.success)
-    msg_sent = sum(r.messages_sent for r in results if r)
+    try:
+        results = warn_from_db(
+            auth=auth, modded=args.modded, search=args.search,
+            limit=args.limit,
+            username=args.username or cfg.get('username', 'SecurityBot'),
+            messages=messages, message_file=args.message_file,
+            workers=args.workers or cfg.get('bot_threads', 5),
+            message_delay=cfg.get('message_delay', 0.8),
+            authme_password=args.authme or cfg.get('authme_password') or None,
+            db_path=db_path,
+        )
+    except FileNotFoundError as e:
+        logger.error(f"[!] {e}")
+        logger.error("[!] 请先运行 scan 命令扫描并保存结果到数据库")
+        return
+    success = sum(1 for r in results if r.success)
+    msg_sent = sum(r.messages_sent for r in results)
     print(f"\n{'='*50}")
     print(f"  警告完成（从数据库，未重新扫描）")
     print(f"  总目标: {len(results)}")
     print(f"  成功登录: {success}")
     print(f"  发送消息总数: {msg_sent}")
     print(f"{'='*50}")
-
-
 def cmd_masscan(args, cfg):
+    from service import run_masscan_scan
     if not has_masscan():
-        print("[!] masscan 未安装，请先安装: sudo apt install masscan")
+        logger.warning("[!] masscan 未安装，请先安装: sudo apt install masscan")
         return
-    output_file = run_masscan(
+    result_path = run_masscan_scan(
         targets=args.targets or "0.0.0.0/0",
-        ports=args.port or "25565",
+        port=args.port or "25565",
         rate=args.rate or 1000,
         exclude_file=args.exclude or cfg['exclude_file'],
         output_file=args.output or "scan_results.ndjson",
+        auto_import=args.auto_import,
+        workers=args.workers or 32,
+        auth_check=not args.no_auth,
+        db_path=args.db or cfg['db_path'],
     )
-    print(f"[*] masscan 结果: {output_file}")
-    if args.auto_import:
-        engine = ScanEngine(db_path=args.db or cfg['db_path'],
-                            workers=args.workers or 32,
-                            auth_check=not args.no_auth)
-        engine.import_masscan(output_file, then_auth=not args.no_auth)
-
-
+    logger.info(f"[*] masscan 结果: {result_path}")
 def cmd_import(args, cfg):
-    engine = ScanEngine(db_path=args.db or cfg['db_path'],
-                        workers=args.workers or 32,
-                        timeout=args.timeout or 4.0,
-                        auth_check=not args.no_auth,
-                        rate_limit=args.rate or 0)
-    engine.import_masscan(args.ndjson, then_auth=not args.no_auth)
-    print(f"[*] 导入完成。统计: {engine.counters}")
-
-
+    from service import import_masscan_results
+    try:
+        results = import_masscan_results(
+            args.ndjson,
+            workers=args.workers or 32,
+            auth_check=not args.no_auth,
+            db_path=args.db or cfg['db_path'],
+        )
+    except FileNotFoundError as e:
+        logger.error(f"[!] {e}")
+        return
+    logger.info(f"[*] 导入完成，共 {len(results)} 条记录")
 def cmd_query(args, cfg):
+    from service import query_database, get_db_stats
     db_path = args.db or cfg['db_path']
     if not os.path.exists(db_path):
-        print(f"[!] 数据库不存在: {db_path}")
+        logger.error(f"[!] 数据库不存在: {db_path}")
         return
     if args.stats:
-        s = db.stats(db_path)
+        s = get_db_stats(db_path)
         print(f"\n数据库统计:")
         print(f"  总记录: {s['total']}")
         print(f"  有人在线: {s['online_servers']}")
@@ -297,14 +235,12 @@ def cmd_query(args, cfg):
         for auth, count in s['by_auth'].items():
             print(f"    {auth}: {count}")
         return
-    rows = db.query(db_path, auth=args.auth, modded=args.modded,
-                    search=args.search, limit=args.limit)
+    rows = query_database(db_path, auth=args.auth, modded=args.modded,
+                          search=args.search, limit=args.limit)
     print(f"{len(rows)} 条结果:")
     for r in rows:
         print(f"  {r['ip']}:{r['port']} [{r['auth']}] {r['version']} "
               f"在线 {r['players_online']}/{r['players_max']} · {r['motd'][:40]}")
-
-
 def cmd_bot(args, cfg):
     host, port = args.target.rsplit(":", 1)
     bot = MCBot(host, int(port), protocol_version=args.proto,
@@ -321,7 +257,7 @@ def cmd_bot(args, cfg):
         bot.keep_alive(args.hold or 4.0)
         print("[+] 保持连接结束")
     except Exception as e:
-        print(f"[!] 失败: {e}")
+        logger.error(f"[!] 失败: {e}")
     finally:
         bot.close()
 
@@ -334,10 +270,10 @@ def cmd_web(args, cfg):
 def cmd_random(args, cfg=None):
     """随机IP随机端口暴力扫描"""
     port_ranges = parse_port_ranges(args.ports)
-    print(f"[*] 随机暴力扫描模式")
-    print(f"[*] 目标数: {args.count} | 线程: {args.workers} | 超时: {args.timeout}s")
-    print(f"[*] 端口范围: {args.ports}")
-    print(f"[*] 排除私有/保留地址，仅扫描公网IP")
+    logger.info("[*] 随机暴力扫描模式")
+    logger.info(f"[*] 目标数: {args.count} | 线程: {args.workers} | 超时: {args.timeout}s")
+    logger.info(f"[*] 端口范围: {args.ports}")
+    logger.info("[*] 排除私有/保留地址，仅扫描公网IP")
     print()
 
     def progress(done, total, found):
@@ -354,35 +290,35 @@ def cmd_random(args, cfg=None):
         progress_callback=progress,
     )
     elapsed = time.time() - start
-    print(f"\n[*] 扫描完成! 耗时: {elapsed:.1f}s")
-    print(f"[*] 发现 {len(open_ports)} 个开放端口")
+    logger.info(f"[*] 扫描完成! 耗时: {elapsed:.1f}s")
+    logger.info(f"[*] 发现 {len(open_ports)} 个开放端口")
     print()
 
     if not open_ports:
-        print("[!] 没有发现开放端口，试试增加目标数量或扩大端口范围")
+        logger.warning("[!] 没有发现开放端口，试试增加目标数量或扩大端口范围")
         return
 
-    # SLP 探测
+    # SLP 探测（并发，不再串行）
     if args.probe:
-        print("[*] SLP 探测...")
-        from core.probe import slp_probe
+        logger.info("[*] SLP 探测...")
+        engine = ScanEngine(db_path=cfg["db_path"], workers=min(32, args.workers or 200), timeout=3.0)
+        results = engine.probe_list(open_ports)
         servers = []
-        for i, (ip, port) in enumerate(open_ports):
-            info = slp_probe(ip, port, timeout=3)
-            if info and info.get("state") == "up":
+        for i, info in enumerate(results):
+            if info.get("state") == "up":
                 servers.append({
-                    "ip": ip, "port": port,
+                    "ip": info["ip"], "port": info["port"],
                     "version": info.get("version"),
-                    "players": f"{info.get('online', 0)}/{info.get('max', 0)}",
+                    "players": f"{info.get('players_online', 0)}/{info.get('players_max', 0)}",
                     "motd": str(info.get("motd", ""))[:60],
                 })
-                print(f"  [{i+1}/{len(open_ports)}] {ip}:{port} | {info.get('version','?')} | {info.get('online',0)}/{info.get('max',0)}")
-        print(f"\n[*] 发现 {len(servers)} 个 Minecraft 服务器")
+                print(f"  [{i+1}/{len(results)}] {info['ip']}:{info['port']} | {info.get('version','?')} | {info.get('players_online',0)}/{info.get('players_max',0)}")
+        logger.info(f"[*] 发现 {len(servers)} 个 Minecraft 服务器")
         if args.output:
             import json
             with open(args.output, 'w') as f:
                 json.dump(servers, f, indent=2, ensure_ascii=False)
-            print(f"[*] 结果已保存到 {args.output}")
+            logger.info(f"[*] 结果已保存到 {args.output}")
     else:
         for ip, port in open_ports:
             print(f"  {ip}:{port}")
@@ -390,11 +326,11 @@ def cmd_random(args, cfg=None):
             import json
             with open(args.output, 'w') as f:
                 json.dump([{"ip": ip, "port": port} for ip, port in open_ports], f, indent=2)
-            print(f"[*] 结果已保存到 {args.output}")
+            logger.info(f"[*] 结果已保存到 {args.output}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MC Scanner v3Pro - 综合 Minecraft 服务器扫描器")
+    parser = argparse.ArgumentParser(description="MC Scanner v3-3.1 - 综合 Minecraft 服务器扫描器")
     parser.add_argument("-c", "--config", help="配置文件路径")
     parser.add_argument("--db", help="数据库路径")
     sub = parser.add_subparsers(dest="cmd")
@@ -514,6 +450,7 @@ def main():
         return 1
 
     cfg = load_config(args.config if hasattr(args, 'config') else None)
+    logger.setup_logger(cfg.get('log_level', 'INFO'))
     return args.func(args, cfg)
 
 

@@ -114,15 +114,21 @@ def generate_random_targets(count: int, port_ranges: Optional[List[Tuple[int, in
 
 
 def check_port(ip: str, port: int, timeout: float = 2.0) -> bool:
-    """检查端口是否开放"""
+    """检查端口是否开放（finally 保证 socket 关闭）"""
+    sock = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
         result = sock.connect_ex((ip, port))
-        sock.close()
         return result == 0
-    except:
+    except Exception:
         return False
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
 
 
 def random_scan(
