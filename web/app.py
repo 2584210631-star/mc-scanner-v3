@@ -23,6 +23,38 @@ from scanner.masscan import has_masscan, run_masscan, parse_masscan_json, get_ma
 from scanner.portscan import scan_ports, get_open_ports
 from core.bot import join_and_warn, DEFAULT_WARNING_MESSAGES, MCBot
 
+
+def parse_ports_spec(ports_spec):
+    """解析端口规格，支持单个端口、逗号分隔、范围(25565-25575)、混合"""
+    if isinstance(ports_spec, list):
+        result = []
+        for p in ports_spec:
+            result.extend(parse_ports_spec(p))
+        return sorted(set(result))
+    if not isinstance(ports_spec, str):
+        return [int(ports_spec)]
+    result = []
+    for part in ports_spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            try:
+                start, end = part.split('-', 1)
+                start = int(start.strip())
+                end = int(end.strip())
+                if start > end:
+                    start, end = end, start
+                result.extend(range(start, end + 1))
+            except ValueError:
+                continue
+        else:
+            try:
+                result.append(int(part))
+            except ValueError:
+                continue
+    return sorted(set(result))
+
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
@@ -243,13 +275,11 @@ def start_scan():
         return jsonify({"error": "已有扫描任务在运行"}), 400
     targets_list = list(targets_str.split(','))
     continuous = data.get("continuous", False)
+    ports = parse_ports_spec(data.get("ports", [25565]))
     excluder = Excluder(data.get("exclude_file", "exclude.conf"))
-    parsed = list(excluder.filter_targets(parse_targets(targets_list)))
+    parsed = list(excluder.filter_targets(parse_targets(targets_list, ports)))
     if not parsed:
         return jsonify({"error": "没有有效的目标"}), 400
-    ports = data.get("ports", [25565])
-    if isinstance(ports, str):
-        ports = [int(p.strip()) for p in ports.split(',') if p.strip()]
     config = {
         "workers": data.get("workers", 32),
         "timeout": data.get("timeout", 4.0),
