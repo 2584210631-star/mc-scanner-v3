@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 title MC Scanner v3
 color 0A
 cls
