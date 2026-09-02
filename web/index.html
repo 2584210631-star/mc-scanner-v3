@@ -608,6 +608,55 @@ function openWarnModal(ip, port) {
 }
 function closeWarnModal() { document.getElementById('warnModal').classList.add('hidden'); }
 
+function openMultiWarnModal() {
+  document.getElementById('multiWarnResult').innerHTML = '';
+  document.getElementById('multiWarnModal').classList.remove('hidden');
+}
+function closeMultiWarnModal() {
+  document.getElementById('multiWarnModal').classList.add('hidden');
+}
+async function confirmMultiWarn() {
+  const ip = document.getElementById('multiWarnIp').value.trim();
+  const port = parseInt(document.getElementById('multiWarnPort').value) || 25565;
+  const botCount = parseInt(document.getElementById('multiWarnCount').value) || 5;
+  const namePrefix = document.getElementById('multiWarnPrefix').value || 'SecurityBot';
+  const messageDelay = parseFloat(document.getElementById('multiWarnDelay').value) || 0.5;
+  const authme = document.getElementById('multiWarnAuthme').value.trim();
+  const messages = document.getElementById('multiWarnMessages').value.split('\n').filter(m => m.trim());
+  if (!ip) { alert('请输入服务器 IP'); return; }
+  if (!messages.length) { alert('请输入至少一条警告消息'); return; }
+  const resultDiv = document.getElementById('multiWarnResult');
+  resultDiv.innerHTML = '<div style="color:#f59e0b">正在启动 ' + botCount + ' 个机器人...</div>';
+  try {
+    const resp = await fetch('/api/warn/multi', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        ip, port, bot_count: botCount, name_prefix: namePrefix,
+        messages, message_delay: messageDelay,
+        authme_password: authme || null
+      })
+    });
+    const data = await resp.json();
+    if (data.error) {
+      resultDiv.innerHTML = '<div style="color:#ef4444">错误: ' + data.error + '</div>';
+      return;
+    }
+    let html = '<div style="color:#22c55e;font-weight:bold;margin-bottom:8px;">';
+    html += '完成: ' + data.success + '/' + data.total + ' 个机器人成功，共发送 ' + data.messages_sent + ' 条消息';
+    html += '</div><div style="max-height:200px;overflow-y:auto;font-size:12px;">';
+    data.results.forEach(r => {
+      const color = r.success ? '#22c55e' : '#ef4444';
+      html += '<div style="color:' + color + '">[' + (r.success ? 'OK' : 'FAIL') + '] ' + r.name;
+      html += ' (' + r.messages_sent + '条)' + (r.error ? ' - ' + r.error : '') + '</div>';
+    });
+    html += '</div>';
+    resultDiv.innerHTML = html;
+  } catch (e) {
+    resultDiv.innerHTML = '<div style="color:#ef4444">请求失败: ' + e.message + '</div>';
+  }
+}
+
 async function confirmWarn() {
   const messages = document.getElementById('warnMessages').value.split('\n').filter(m => m.trim());
   const res = await fetch('/api/warn/single', {
