@@ -27,7 +27,12 @@ class MCConnection:
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
-        self.sock.connect((self.host, self.port))
+        try:
+            self.sock.connect((self.host, self.port))
+        except Exception:
+            self.sock.close()
+            self.sock = None
+            raise
 
     def close(self):
         if self.sock:
@@ -126,8 +131,6 @@ class MCConnection:
                 break
             if num_read > 5:
                 raise ValueError("VarInt 过长")
-        if result >= (1 << 31):
-            result -= (1 << 32)
         return result
 
     def _recv_exact(self, n: int) -> bytes:
