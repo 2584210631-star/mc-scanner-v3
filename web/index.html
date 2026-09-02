@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MC Scanner v3Pro - 控制面板</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; font-size: 14px; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 20px; }
+.header .status { font-size: 13px; opacity: 0.9; }
+.tabs { display: flex; background: white; border-bottom: 1px solid #e0e0e0; padding: 0 24px; }
+.tab { padding: 12px 20px; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; color: #666; }
+.tab.active { color: #667eea; border-bottom-color: #667eea; }
+.tab:hover { color: #667eea; }
+.container { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+.panel { background: white; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.panel h2 { font-size: 16px; margin-bottom: 16px; color: #333; }
+.form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.form-group { flex: 1; min-width: 150px; }
+.form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+.form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; }
+textarea { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: monospace; resize: vertical; }
+.btn { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.btn-primary { background: #667eea; color: white; }
+.btn-primary:hover { background: #5568d3; }
+.btn-danger { background: #f56565; color: white; }
+.btn-danger:hover { background: #e53e3e; }
+.btn-success { background: #48bb78; color: white; }
+.btn-success:hover { background: #38a169; }
+.btn-secondary { background: #e2e8f0; color: #4a5568; }
+.btn-secondary:hover { background: #cbd5e0; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.progress-bar { background: #e2e8f0; border-radius: 4px; height: 24px; overflow: hidden; margin: 12px 0; }
+.progress-fill { background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 500; }
+.log-box { background: #1a1a2e; color: #a8e6cf; padding: 12px; border-radius: 4px; height: 200px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 12px; line-height: 1.6; }
+.log-box .time { color: #888; margin-right: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; }
+th { background: #f8f9fa; font-weight: 600; color: #555; position: sticky; top: 0; }
+tr:hover { background: #f8f9fa; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.badge-cracked { background: #fed7d7; color: #c53030; }
+.badge-online { background: #c6f6d5; color: #276749; }
+.badge-whitelist { background: #feebc8; color: #9c4221; }
+.badge-rejected { background: #e2e8f0; color: #4a5568; }
+.badge-unknown { background: #e9d8fd; color: #553c9a; }
+.badge-offline { background: #e2e8f0; color: #718096; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: linear-gradient(135deg, #f6f8fc, #eef1f8); padding: 16px; border-radius: 8px; text-align: center; }
+.stat-card .value { font-size: 28px; font-weight: 700; color: #667eea; }
+.stat-card .label { font-size: 12px; color: #666; margin-top: 4px; }
+.filter-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.pagination { display: flex; justify-content: center; gap: 8px; margin-top: 16px; align-items: center; }
+.pagination button { padding: 6px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; }
+.pagination button:hover { background: #f0f0f0; }
+.pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+.pagination .info { font-size: 13px; color: #666; }
+.chart-container { height: 300px; position: relative; }
+.hidden { display: none !important; }
+.actions { display: flex; gap: 8px; }
+.actions .btn { padding: 4px 10px; font-size: 12px; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: white; border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.modal h3 { margin-bottom: 16px; }
+.modal .form-row { margin-bottom: 12px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>MC Scanner v3Pro</h1>
+  <div class="status" id="headerStatus">就绪</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="scan">扫描</div>
+  <div class="tab" data-tab="results">结果</div>
+  <div class="tab" data-tab="database">数据库</div>
+  <div class="tab" data-tab="history">历史</div>
+</div>
+
+<div class="container">
+
+  <!-- 扫描标签页 -->
+  <div id="tab-scan">
+    <div class="panel">
+      <h2>扫描配置</h2>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>目标（IP / CIDR / 域名，逗号分隔，支持 @文件）</label>
+          <input type="text" id="scanTargets" placeholder="例如: 1.2.3.0/24,5.6.7.8,mc.example.com">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>扫描线程数</label>
+          <input type="number" id="scanThreads" value="200">
+        </div>
+        <div class="form-group">
+          <label>探测线程数</label>
+          <input type="number" id="probeWorkers" value="32">
+        </div>
+        <div class="form-group">
+          <label>扫描超时(秒)</label>
+          <input type="number" id="scanTimeout" value="2.5" step="0.5">
+        </div>
+        <div class="form-group">
+          <label>探测超时(秒)</label>
+          <input type="number" id="probeTimeout" value="4.0" step="0.5">
+        </div>
+        <div class="form-group">
+          <label>限速(次/秒, 0=不限)</label>
+          <input type="number" id="rateLimit" value="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:0 0 auto;">
+          <label style="visibility:hidden;">.</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="authCheck" checked style="width:auto;">
+            启用认证模式检测
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn btn-primary" id="btnStartScan" onclick="startScan()">开始扫描</button>
+        <button class="btn btn-danger" id="btnStopScan" onclick="stopScan()" disabled>停止</button>
+        <button class="btn btn-secondary" onclick="saveConfig()">保存配置</button>
+      </div>
+    </div>
+
+    <div class="panel" id="progressPanel" style="display:none;">
+      <h2>扫描进度</h2>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="value" id="statTotal">0</div><div class="label">总目标</div></div>
+        <div class="stat-card"><div class="value" id="statUp">0</div><div class="label">在线</div></div>
+        <div class="stat-card"><div class="value" id="statCracked">0</div><div class="label">离线/破解</div></div>
+        <div class="stat-card"><div class="value" id="statOnline">0</div><div class="label">正版</div></div>
+        <div class="stat-card"><div class="value" id="statElapsed">0s</div><div class="label">已用时间</div></div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%">0%</div>
+      </div>
+      <h3 style="font-size:14px;margin:12px 0 8px;">实时日志</h3>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+
+  <!-- 结果标签页 -->
+  <div id="tab-results" class="hidden">
+    <div class="panel">
+      <h2>扫描结果</h2>
+      <div class="filter-bar">
+        <select id="filterAuth" onchange="loadResults(1)">
+          <option value="">全部认证模式</option>
+          <option value="cracked">离线/破解</option>
+          <option value="online">正版</option>
+          <option value="whitelist">白名单</option>
+          <option value="rejected">被拒绝</option>
+          <option value="unknown">未知</option>
+        </select>
+        <select id="filterModded" onchange="loadResults(1)">
+          <option value="">全部类型</option>
+          <option value="1">模组服</option>
+          <option value="0">原版服</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;">
+          <input type="checkbox" id="filterOnline" onchange="loadResults(1)"> 仅有人在线
+        </label>
+        <input type="text" id="filterSearch" placeholder="搜索 IP/MOTD/版本..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadResults(1)">
+        <button class="btn btn-primary" onclick="loadResults(1)">搜索</button>
+        <button class="btn btn-success" onclick="exportResults('json')">导出JSON</button>
+        <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
+        <button class="btn btn-danger" onclick="batchWarn()">批量警告离线服</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>IP:端口</th>
+              <th>版本</th>
+              <th>协议</th>
+              <th>MOTD</th>
+              <th>玩家</th>
+              <th>认证</th>
+              <th>延迟</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div class="panel">
+      <h2>版本分布</h2>
+      <div class="chart-container"><canvas id="versionChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 数据库标签页 -->
+  <div id="tab-database" class="hidden">
+    <div class="panel">
+      <h2>数据库统计</h2>
+      <div class="stats-grid" id="dbStats"></div>
+    </div>
+    <div class="panel">
+      <h2>数据库查询</h2>
+      <div class="filter-bar">
+        <select id="dbFilterAuth" onchange="loadDbResults(1)">
+          <option value="">全部认证模式</option>
+          <option value="cracked">离线/破解</option>
+          <option value="online">正版</option>
+          <option value="whitelist">白名单</option>
+          <option value="rejected">被拒绝</option>
+        </select>
+        <select id="dbFilterModded" onchange="loadDbResults(1)">
+          <option value="">全部类型</option>
+          <option value="1">模组服</option>
+          <option value="0">原版服</option>
+        </select>
+        <input type="text" id="dbFilterSearch" placeholder="搜索..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadDbResults(1)">
+        <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr><th>IP:端口</th><th>版本</th><th>MOTD</th><th>玩家</th><th>认证</th><th>最后更新</th></tr>
+          </thead>
+          <tbody id="dbResultsBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="dbPagination"></div>
+    </div>
+  </div>
+
+  <!-- 历史标签页 -->
+  <div id="tab-history" class="hidden">
+    <div class="panel">
+      <h2>扫描历史（最近20次）</h2>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 单独警告弹窗 -->
+<div class="modal-overlay hidden" id="warnModal">
+  <div class="modal">
+    <h3>发送警告 - <span id="warnTarget"></span></h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>机器人用户名</label>
+        <input type="text" id="warnUsername" value="SecurityBot">
+      </div>
+      <div class="form-group">
+        <label>AuthMe密码（可选）</label>
+        <input type="text" id="warnAuthme" placeholder="留空不启用">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>警告消息（每行一条）</label>
+      <textarea id="warnMessages" rows="5"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeWarnModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmWarn()">发送</button>
+    </div>
+    <div id="warnResult" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let currentPage = 1;
+let totalResults = 0;
+let dbCurrentPage = 1;
+let dbTotal = 0;
+let statusTimer = null;
+let warnIp = null, warnPort = null;
+let versionChart = null;
+
+// 标签页切换
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = function() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(t => t.classList.add('hidden'));
+    document.getElementById('tab-' + this.dataset.tab).classList.remove('hidden');
+    if (this.dataset.tab === 'results') loadResults(1);
+    if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
+    if (this.dataset.tab === 'history') loadHistory();
+  };
+});
+
+// 加载保存的配置
+function loadConfig() {
+  const cfg = JSON.parse(localStorage.getItem('mcscanner_config') || '{}');
+  if (cfg.scanThreads) document.getElementById('scanThreads').value = cfg.scanThreads;
+  if (cfg.probeWorkers) document.getElementById('probeWorkers').value = cfg.probeWorkers;
+  if (cfg.scanTimeout) document.getElementById('scanTimeout').value = cfg.scanTimeout;
+  if (cfg.probeTimeout) document.getElementById('probeTimeout').value = cfg.probeTimeout;
+  if (cfg.rateLimit) document.getElementById('rateLimit').value = cfg.rateLimit;
+  if (cfg.authCheck !== undefined) document.getElementById('authCheck').checked = cfg.authCheck;
+}
+function saveConfig() {
+  const cfg = {
+    scanThreads: document.getElementById('scanThreads').value,
+    probeWorkers: document.getElementById('probeWorkers').value,
+    scanTimeout: document.getElementById('scanTimeout').value,
+    probeTimeout: document.getElementById('probeTimeout').value,
+    rateLimit: document.getElementById('rateLimit').value,
+    authCheck: document.getElementById('authCheck').checked,
+  };
+  localStorage.setItem('mcscanner_config', JSON.stringify(cfg));
+  alert('配置已保存');
+}
+loadConfig();
+
+// 开始扫描
+async function startScan() {
+  const targets = document.getElementById('scanTargets').value.trim();
+  if (!targets) { alert('请输入目标'); return; }
+  const res = await fetch('/api/scan/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      targets,
+      scan_threads: parseInt(document.getElementById('scanThreads').value),
+      workers: parseInt(document.getElementById('probeWorkers').value),
+      scan_timeout: parseFloat(document.getElementById('scanTimeout').value),
+      timeout: parseFloat(document.getElementById('probeTimeout').value),
+      rate: parseInt(document.getElementById('rateLimit').value),
+      auth_check: document.getElementById('authCheck').checked,
+    })
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  document.getElementById('progressPanel').style.display = 'block';
+  document.getElementById('btnStartScan').disabled = true;
+  document.getElementById('btnStopScan').disabled = false;
+  document.getElementById('headerStatus').textContent = '扫描中...';
+  if (statusTimer) clearInterval(statusTimer);
+  statusTimer = setInterval(pollStatus, 1000);
+}
+
+function stopScan() {
+  fetch('/api/scan/stop', {method: 'POST'});
+}
+
+async function pollStatus() {
+  const res = await fetch('/api/scan/status');
+  const data = await res.json();
+  document.getElementById('statTotal').textContent = data.total || data.results_count;
+  document.getElementById('statElapsed').textContent = Math.floor(data.elapsed) + 's';
+  const pct = data.total > 0 ? Math.round(data.progress / data.total * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressFill').textContent = pct + '%';
+  const logBox = document.getElementById('logBox');
+  logBox.innerHTML = data.logs.map(l => `<div><span class="time">${l.time}</span>${l.msg}</div>`).join('');
+  logBox.scrollTop = logBox.scrollHeight;
+  if (!data.running) {
+    clearInterval(statusTimer);
+    document.getElementById('btnStartScan').disabled = false;
+    document.getElementById('btnStopScan').disabled = true;
+    document.getElementById('headerStatus').textContent = '就绪';
+    document.getElementById('progressPanel').style.display = 'none';
+    loadResults(1);
+    document.querySelector('.tab[data-tab="results"]').click();
+  }
+}
+
+// 加载结果
+async function loadResults(page) {
+  currentPage = page;
+  const params = new URLSearchParams({
+    auth: document.getElementById('filterAuth').value,
+    modded: document.getElementById('filterModded').value,
+    only_online: document.getElementById('filterOnline').checked ? '1' : '0',
+    search: document.getElementById('filterSearch').value,
+    page, per_page: 50
+  });
+  const res = await fetch('/api/scan/results?' + params);
+  const data = await res.json();
+  totalResults = data.total;
+  document.getElementById('resultsBody').innerHTML = data.results.map(r => `
+    <tr>
+      <td>${r.ip}:${r.port}</td>
+      <td>${r.version || '-'}</td>
+      <td>${r.proto || '-'}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.motd||''}">${r.motd || '-'}</td>
+      <td>${r.players_online || 0}/${r.players_max || 0}</td>
+      <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
+      <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
+      <td><div class="actions"><button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})">警告</button></div></td>
+    </tr>
+  `).join('');
+  renderPagination('pagination', page, data.total, 50, loadResults);
+  drawVersionChart(data.results);
+}
+
+function renderPagination(id, page, total, perPage, callback) {
+  const totalPages = Math.ceil(total / perPage);
+  document.getElementById(id).innerHTML = `
+    <button onclick="${callback.name}(${page-1})" ${page<=1?'disabled':''}>上一页</button>
+    <span class="info">第 ${page} / ${totalPages} 页，共 ${total} 条</span>
+    <button onclick="${callback.name}(${page+1})" ${page>=totalPages?'disabled':''}>下一页</button>
+  `;
+}
+
+function drawVersionChart(results) {
+  const counts = {};
+  results.forEach(r => {
+    const v = r.version || '未知';
+    counts[v] = (counts[v] || 0) + 1;
+  });
+  const labels = Object.keys(counts).sort((a,b) => counts[b]-counts[a]).slice(0, 15);
+  const data = labels.map(l => counts[l]);
+  if (versionChart) versionChart.destroy();
+  const ctx = document.getElementById('versionChart');
+  if (ctx) {
+    versionChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ label: '服务器数量', data, backgroundColor: 'rgba(102,126,234,0.7)', borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+  }
+}
+
+function exportResults(fmt) {
+  const auth = document.getElementById('filterAuth').value;
+  window.open(`/api/scan/export?format=${fmt}&auth=${auth}`);
+}
+
+// 警告功能
+function openWarnModal(ip, port) {
+  warnIp = ip; warnPort = port;
+  document.getElementById('warnTarget').textContent = ip + ':' + port;
+  document.getElementById('warnMessages').value = '您好，我是安全扫描机器人\n检测到您的服务器处于离线模式，建议设置 online-mode=true';
+  document.getElementById('warnResult').innerHTML = '';
+  document.getElementById('warnModal').classList.remove('hidden');
+}
+function closeWarnModal() {
+  document.getElementById('warnModal').classList.add('hidden');
+}
+async function confirmWarn() {
+  const messages = document.getElementById('warnMessages').value.split('\n').filter(m => m.trim());
+  const res = await fetch('/api/warn/single', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ip: warnIp, port: warnPort,
+      username: document.getElementById('warnUsername').value,
+      authme_password: document.getElementById('warnAuthme').value || null,
+      messages
+    })
+  });
+  const data = await res.json();
+  document.getElementById('warnResult').innerHTML = data.success
+    ? `<div style="color:#48bb78;">成功！认证模式: ${data.auth_mode}, 发送消息: ${data.messages_sent}条</div>`
+    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+}
+
+async function batchWarn() {
+  if (!confirm('确定要对所有离线/破解服发送警告吗？')) return;
+  const res = await fetch('/api/warn/batch', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ auth: 'cracked', workers: 5 })
+  });
+  const data = await res.json();
+  alert(`批量警告完成：共 ${data.total} 台，发送 ${data.messages_sent} 条消息`);
+}
+
+// 数据库
+async function loadDbStats() {
+  const res = await fetch('/api/db/stats');
+  const data = await res.json();
+  document.getElementById('dbStats').innerHTML = `
+    <div class="stat-card"><div class="value">${data.total}</div><div class="label">总记录</div></div>
+    <div class="stat-card"><div class="value">${data.by_auth.cracked || 0}</div><div class="label">离线/破解</div></div>
+    <div class="stat-card"><div class="value">${data.by_auth.online || 0}</div><div class="label">正版</div></div>
+    <div class="stat-card"><div class="value">${data.by_auth.whitelist || 0}</div><div class="label">白名单</div></div>
+    <div class="stat-card"><div class="value">${data.online_servers}</div><div class="label">有人在线</div></div>
+  `;
+}
+
+async function loadDbResults(page) {
+  dbCurrentPage = page;
+  const params = new URLSearchParams({
+    auth: document.getElementById('dbFilterAuth').value,
+    modded: document.getElementById('dbFilterModded').value,
+    search: document.getElementById('dbFilterSearch').value,
+    limit: 50, offset: (page-1)*50
+  });
+  const res = await fetch('/api/db/query?' + params);
+  const data = await res.json();
+  dbTotal = data.total;
+  document.getElementById('dbResultsBody').innerHTML = data.results.map(r => `
+    <tr>
+      <td>${r.ip}:${r.port}</td>
+      <td>${r.version || '-'}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.motd || '-'}</td>
+      <td>${r.players_online || 0}/${r.players_max || 0}</td>
+      <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
+      <td>${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
+    </tr>
+  `).join('');
+  renderPagination('dbPagination', page, data.total, 50, loadDbResults);
+}
+
+// 历史
+async function loadHistory() {
+  const res = await fetch('/api/history');
+  const data = await res.json();
+  document.getElementById('historyList').innerHTML = data.history.length
+    ? data.history.map(h => `
+      <div style="padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <strong>任务 #${h.id}</strong> - ${h.time}
+          <div style="font-size:12px;color:#666;margin-top:4px;">目标: ${h.targets} | 发现: ${h.found} 台</div>
+        </div>
+      </div>
+    `).join('')
+    : '<div style="color:#999;text-align:center;padding:20px;">暂无历史记录</div>';
+}
+</script>
+</body>
+</html>
