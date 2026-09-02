@@ -1,11 +1,11 @@
 @echo off
 cd /d "%~dp0"
-title MC Scanner v3 - Debug Mode
+title MC Scanner v3-3.1 - Debug Mode
 color 0C
 cls
 
 echo ========================================
-echo   MC Scanner v3 - Debug Mode
+echo   MC Scanner v3-3.1 - Debug Mode
 echo ========================================
 echo.
 
