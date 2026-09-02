@@ -216,7 +216,12 @@ def _scan_worker(targets_list, config):
             if len(scan_state["history"]) > 20:
                 scan_state["history"] = scan_state["history"][:20]
     except Exception as e:
+        import traceback
         _log(f"扫描出错: {e}")
+        _log(f"错误详情: {traceback.format_exc()}")
+        with scan_lock:
+            scan_state["error"] = str(e)
+            scan_state["traceback"] = traceback.format_exc()
     finally:
         scan_stop_event.clear()
         with scan_lock:
@@ -345,6 +350,7 @@ def scan_status():
             "start_time": scan_state["start_time"],
             "task_id": scan_state["task_id"],
             "elapsed": time.time() - scan_state["start_time"] if scan_state["start_time"] else 0,
+            "error": scan_state.get("error", ""),
         })
 
 
