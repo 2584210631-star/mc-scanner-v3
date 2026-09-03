@@ -30,7 +30,7 @@ DEFAULT_CONFIG = {
     "web_token": "",          # Web面板访问token，空=不启用认证
     "log_level": "INFO",
     "warn_bot_max": 20,       # 多机器人警告硬上限，防止滥用
-    # v3.2.1 新增
+    # v3.3 新增
     "discord_webhook": "",     # Discord Webhook URL，空=不启用通知
     "rescan_enabled": False,   # 智能重扫（玩家历史追踪+动态重扫频率）
     "duplicate_detection": False,  # 重复服务器检测
