@@ -27,28 +27,34 @@ class AsyncScanResult:
 
 
 async def _check_port(ip: str, port: int, timeout: float,
-                      semaphore: asyncio.Semaphore) -> AsyncScanResult:
-    """异步检查单个端口。"""
+                      semaphore: asyncio.Semaphore, retries: int = 2) -> AsyncScanResult:
+    """异步检查单个端口，带重试。"""
     async with semaphore:
-        start = time.time()
-        try:
-            fut = asyncio.open_connection(ip, port)
-            reader, writer = await asyncio.wait_for(fut, timeout=timeout)
-            latency = (time.time() - start) * 1000
-            writer.close()
+        last_error = ""
+        for attempt in range(retries + 1):
+            start = time.time()
             try:
-                await writer.wait_closed()
-            except Exception:
-                pass
-            return AsyncScanResult(ip=ip, port=port, is_open=True, latency_ms=latency)
-        except asyncio.TimeoutError:
-            return AsyncScanResult(ip=ip, port=port, is_open=False, error="timeout")
-        except (ConnectionRefusedError, OSError) as e:
-            latency = (time.time() - start) * 1000
-            return AsyncScanResult(ip=ip, port=port, is_open=False,
-                                   latency_ms=latency, error=str(e)[:80])
-        except Exception as e:
-            return AsyncScanResult(ip=ip, port=port, is_open=False, error=str(e)[:80])
+                fut = asyncio.open_connection(ip, port)
+                reader, writer = await asyncio.wait_for(fut, timeout=timeout)
+                latency = (time.time() - start) * 1000
+                writer.close()
+                try:
+                    await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
+                except Exception:
+                    pass
+                return AsyncScanResult(ip=ip, port=port, is_open=True, latency_ms=latency)
+            except asyncio.TimeoutError:
+                last_error = "timeout"
+            except (ConnectionRefusedError, OSError) as e:
+                last_error = str(e)[:80]
+                # ConnectionRefused 不需要重试
+                if isinstance(e, ConnectionRefusedError):
+                    break
+            except Exception as e:
+                last_error = str(e)[:80]
+            if attempt < retries:
+                await asyncio.sleep(0.05 * (attempt + 1))
+        return AsyncScanResult(ip=ip, port=port, is_open=False, error=last_error)
 
 
 async def _scan_async(targets, concurrency: int, timeout: float,
@@ -68,7 +74,7 @@ async def _scan_async(targets, concurrency: int, timeout: float,
         if rate_interval > 0:
             await asyncio.sleep(rate_interval)
         try:
-            r = await _check_port(ip, port, timeout, semaphore)
+            r = await _check_port(ip, port, timeout, semaphore, retries=1)
         except Exception as e:
             r = AsyncScanResult(ip=ip, port=port, is_open=False, error=str(e)[:80])
         results.append(r)
