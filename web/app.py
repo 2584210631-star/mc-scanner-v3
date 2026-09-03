@@ -937,6 +937,114 @@ def rescan_clear():
     _log("重扫队列已清空")
     return jsonify({"success": True})
 
+
+# ===== v3.3 新增：代理管理 API =====
+@app.route('/api/proxy')
+def proxy_list():
+    from core.proxy import ProxyManager
+    manager = ProxyManager(proxy_file="proxies.txt", auto_fetch=False)
+    proxies = [{"proto": p.proto, "host": p.host, "port": p.port,
+                "fail_count": p.fail_count, "last_used": p.last_used}
+               for p in getattr(manager, 'proxies', [])]
+    return jsonify({"total": len(proxies), "proxies": proxies})
+
+@app.route('/api/proxy/fetch', methods=['POST'])
+def proxy_fetch():
+    data = request.json or {}
+    from core.proxy import ProxyManager
+    manager = ProxyManager(proxy_file="proxies.txt", auto_fetch=False)
+    count = manager.fetch_from_api(fetch_socks5=data.get("socks5", False))
+    _log(f"代理获取: {count} 个")
+    return jsonify({"success": True, "count": count})
+
+@app.route('/api/proxy/check', methods=['POST'])
+def proxy_check():
+    data = request.json or {}
+    from core.proxy import ProxyManager
+    manager = ProxyManager(proxy_file="proxies.txt", auto_fetch=False)
+    alive = manager.health_check(
+        test_host=data.get("test_host", "mc.hypixel.net"),
+        test_port=data.get("test_port", 25565),
+        timeout=data.get("timeout", 5.0))
+    _log(f"代理健康检查: {alive}/{len(manager)} 可用")
+    return jsonify({"success": True, "alive": alive, "total": len(manager)})
+
+# ===== v3.3 新增：RCON API =====
+@app.route('/api/rcon/execute', methods=['POST'])
+def rcon_execute_api():
+    data = request.json or {}
+    host = data.get("host")
+    port = int(data.get("port", 25575))
+    password = data.get("password", "")
+    command = data.get("command", "")
+    if not host or not command:
+        return jsonify({"error": "host 和 command 不能为空"}), 400
+    try:
+        from core.rcon import rcon_execute
+        result = rcon_execute(host, port, password, command, timeout=data.get("timeout", 10.0))
+        return jsonify({"success": True, "command": command, "response": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)[:200]})
+
+# ===== v3.3 新增：插件抓取 API =====
+@app.route('/api/plugins/capture', methods=['POST'])
+def plugins_capture():
+    data = request.json or {}
+    host = data.get("host")
+    port = int(data.get("port", 25565))
+    username = data.get("username", "PluginScanner")
+    if not host:
+        return jsonify({"error": "host 不能为空"}), 400
+    try:
+        from core.bot import MCBot
+        from core.plugins import capture_plugins
+        bot = MCBot(host=host, port=port, username=username)
+        bot.connect()
+        intel = capture_plugins(bot, wait_time=data.get("wait_time", 2.0))
+        bot.close()
+        return jsonify({
+            "success": True,
+            "server_software": intel.server_software,
+            "version": intel.version,
+            "plugins": [{"name": p.name, "version": p.version} for p in intel.plugins],
+            "anti_cheat": intel.anti_cheat,
+            "raw_text": intel.raw_text[:500],
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)[:200]})
+
+# ===== v3.3 新增：命令执行 API =====
+@app.route('/api/commands/run', methods=['POST'])
+def commands_run():
+    data = request.json or {}
+    host = data.get("host")
+    port = int(data.get("port", 25565))
+    username = data.get("username", "CommandBot")
+    commands = data.get("commands", [])
+    if not host or not commands:
+        return jsonify({"error": "host 和 commands 不能为空"}), 400
+    try:
+        from core.command_runner import CommandScript, CommandRunner
+        from core.bot import MCBot
+        script = CommandScript(delay=data.get("delay", 1.0))
+        for cmd in commands:
+            script.add(cmd)
+        bot = MCBot(host=host, port=port, username=username)
+        bot.connect()
+        if data.get("authme_password"):
+            bot.authme_login(data["authme_password"])
+        runner = CommandRunner(bot, delay=data.get("delay", 1.0), timeout=data.get("timeout", 10.0))
+        results = runner.run_script(script)
+        bot.close()
+        return jsonify({
+            "success": True,
+            "results": [{"command": r.command, "success": r.success,
+                         "response": r.response[:300]} for r in results],
+            "summary": runner.get_summary(),
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)[:200]})
+
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
     db.init_db(db_path)
