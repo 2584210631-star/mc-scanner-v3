@@ -242,18 +242,35 @@ def _scan_worker(targets_list, config):
                            for ip, port in open_ports]
                 _log(f"端口扫描完成，开放: {len(results)} 个")
             else:
-                engine = ScanEngine(stop_event=scan_stop_event, 
-                    db_path=config.get("db_path", "mcscanner.db"),
-                    workers=config.get("workers", 32),
-                    timeout=config.get("timeout", 4.0),
-                    auth_check=config.get("auth_check", True),
-                    rate_limit=config.get("rate", 0),
-                )
-                results = engine.scan_with_portscan(
-                    iter(targets_list),
-                    scan_threads=config.get("scan_threads", 200),
-                    scan_timeout=config.get("scan_timeout", 2.5),
-                )
+                if config.get("async_mode"):
+                    from scanner.async_engine import AsyncScanEngine
+                    from scanner.async_portscan import has_uvloop
+                    from scanner.async_probe import has_simdjson
+                    _log(f"异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
+                         f"simdjson: {'启用' if has_simdjson() else '未安装'}）")
+                    async_engine = AsyncScanEngine(
+                        db_path=config.get("db_path", "mcscanner.db"),
+                        concurrency=config.get("scan_threads", 1000),
+                        slp_concurrency=config.get("workers", 200),
+                        timeout=config.get("timeout", 4.0),
+                        auth_check=config.get("auth_check", True),
+                        rate_limit=config.get("rate", 0),
+                        stop_event=scan_stop_event,
+                    )
+                    results = async_engine.scan(iter(targets_list))
+                else:
+                    engine = ScanEngine(stop_event=scan_stop_event, 
+                        db_path=config.get("db_path", "mcscanner.db"),
+                        workers=config.get("workers", 32),
+                        timeout=config.get("timeout", 4.0),
+                        auth_check=config.get("auth_check", True),
+                        rate_limit=config.get("rate", 0),
+                    )
+                    results = engine.scan_with_portscan(
+                        iter(targets_list),
+                        scan_threads=config.get("scan_threads", 200),
+                        scan_timeout=config.get("scan_timeout", 2.5),
+                    )
 
         with scan_lock:
             scan_state["results"] = results
@@ -320,6 +337,7 @@ def start_scan():
         "ports": ports,
         "exclude_file": data.get("exclude_file", "exclude.conf"),
         "continuous": continuous,
+        "async_mode": data.get("async_mode", False),
     }
     t = threading.Thread(target=_scan_worker, args=(parsed, config), daemon=True)
     t.start()

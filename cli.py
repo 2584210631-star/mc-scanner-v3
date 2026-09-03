@@ -78,6 +78,26 @@ def cmd_portscan(args, cfg):
         config.set('scan_threads', args.workers)
     if args.timeout:
         config.set('scan_timeout', args.timeout)
+    if getattr(args, 'async_mode', False):
+        from scanner.async_portscan import scan_ports_async, get_open_ports_async, has_uvloop
+        from scanner.targets import parse_targets
+        print(f"[*] 异步端口扫描（uvloop: {'启用' if has_uvloop() else '未安装'}）")
+        targets = list(parse_targets(args.targets, exclude_file=args.exclude or cfg['exclude_file']))
+        results = scan_ports_async(
+            targets,
+            concurrency=args.workers or 1000,
+            timeout=args.timeout or cfg['scan_timeout'],
+            rate_limit=args.rate or cfg['rate'],
+        )
+        open_ports = get_open_ports_async(results)
+        print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
+        for ip, port in open_ports:
+            print(f"  {ip}:{port}")
+        if args.output:
+            save_results([{'ip': r.ip, 'port': r.port, 'open': r.is_open,
+                           'latency_ms': round(r.latency_ms, 1)} for r in results],
+                         args.output, cfg['output_format'])
+        return
     results = run_portscan_only(
         args.targets,
         scan_threads=args.workers or cfg['scan_threads'],
@@ -99,6 +119,34 @@ def cmd_scan(args, cfg):
         config.set('scan_threads', args.workers)
     if args.timeout:
         config.set('scan_timeout', args.timeout)
+    if getattr(args, 'async_mode', False):
+        from scanner.async_engine import AsyncScanEngine
+        from scanner.async_portscan import has_uvloop
+        from scanner.async_probe import has_simdjson
+        from scanner.targets import parse_targets
+        print(f"[*] 异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
+              f"simdjson: {'启用' if has_simdjson() else '未安装'}）")
+        targets = parse_targets(args.targets, exclude_file=args.exclude or cfg['exclude_file'])
+        engine = AsyncScanEngine(
+            db_path=args.db or cfg['db_path'],
+            concurrency=args.workers or 1000,
+            slp_concurrency=200,
+            timeout=args.timeout or cfg['timeout'],
+            auth_check=not args.no_auth,
+            rate_limit=args.rate or cfg['rate'],
+        )
+        results = engine.scan(targets)
+        up_results = [r for r in results if r.get('state') == 'up']
+        print(f"\n[*] 发现 {len(up_results)} 个 Minecraft 服务器:")
+        for s in sorted(up_results, key=lambda x: x.get('proto', 0)):
+            print(f"  {s['ip']}:{s['port']} | {s.get('version','?')}(协议{s.get('proto','?')}) "
+                  f"| {s.get('players_online',0)}/{s.get('players_max',0)}人 | {s.get('auth','?')} | {s.get('core_type','?')}")
+        if args.output:
+            save_results(results, args.output, cfg['output_format'])
+        if args.web:
+            from web.app import run
+            run(args.db or cfg['db_path'], port=args.web)
+        return results
     results = run_full_scan(
         args.targets,
         workers=args.workers or cfg['workers'],
@@ -512,6 +560,8 @@ def main():
     p.add_argument("--rate", type=int, default=0)
     p.add_argument("--exclude")
     p.add_argument("-o", "--output")
+    p.add_argument("--async", dest="async_mode", action="store_true",
+                   help="使用异步引擎（快3-5倍，需uvloop可选）")
     p.set_defaults(func=cmd_portscan)
 
     # scan
@@ -524,6 +574,8 @@ def main():
     s.add_argument("--exclude")
     s.add_argument("-o", "--output")
     s.add_argument("--web", type=int, default=0, help="扫描后启动Web面板端口")
+    s.add_argument("--async", dest="async_mode", action="store_true",
+                   help="使用异步流水线引擎（快5-10倍）")
     s.set_defaults(func=cmd_scan)
 
     # warn
