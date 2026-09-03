@@ -69,6 +69,7 @@ class MCBot:
         self.state = None
         self.stop_event = threading.Event()
         self.play_thread = None
+        self.player_list = {}  # uuid -> name
         # 模组服握手期间观察到的插件频道（Forge/Fabric 等）
         self.modded_channels = set()
 
@@ -204,8 +205,8 @@ class MCBot:
 
         while time.time() < deadline:
             if not sent_finish:
-                # 0.5秒后或收到KnownPacks后立即发送finish，不傻等1.5秒
-                should = sent_known or (time.time() - first > 0.5)
+                # 1.5秒后或收到KnownPacks后发送finish，给服务器足够时间发配置数据
+                should = sent_known or (time.time() - first > 1.5)
                 if should:
                     if cfg.get("sb_known_packs") is not None and not sent_known:
                         self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
@@ -384,6 +385,30 @@ class MCBot:
                         break
             elif packet_id == pkts.get("cb_disconnect"):
                 break
+            elif packet_id == pkts.get("cb_player_info") or packet_id == (pkts.get("cb_player_info", 0) + 1):
+                # Player Info Update — 解析玩家列表
+                try:
+                    stream = BytesStream(data)
+                    actions = read_varint(stream)
+                    count = read_varint(stream)
+                    for _ in range(count):
+                        try:
+                            uid = str(read_uuid(stream))
+                            if actions & 0x01:  # ADD_PLAYER
+                                name = read_string(stream)
+                                self.player_list[uid] = name
+                                props = read_varint(stream)
+                                for _ in range(props):
+                                    read_string(stream); read_string(stream)
+                                    if read_boolean(stream): read_string(stream)
+                            if actions & 0x02: read_varint(stream)  # gamemode
+                            if actions & 0x04: read_varint(stream)  # ping
+                            if actions & 0x08:
+                                if read_boolean(stream): read_string(stream)  # display name
+                        except Exception:
+                            break
+                except Exception:
+                    pass
 
     # ---- 各版本聊天消息格式 ----
     def _send_chat_new(self, message: str, chat_id: int):
