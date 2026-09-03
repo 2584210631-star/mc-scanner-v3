@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MC Scanner v3.2.1 - 综合 Minecraft 服务器扫描器
+MC Scanner v3.3 - 综合 Minecraft 服务器扫描器
 整合 V1 功能完整性与 V2 架构优势的超越版。
 
 子命令:
@@ -440,7 +440,7 @@ def cmd_fav(args, cfg):
 
 
 def cmd_rescan(args, cfg):
-    """智能重扫管理（v3.2.1 新增）"""
+    """智能重扫管理（v3.3 新增）"""
     from storage import rescan as rescan_db
     from scanner.rescanner import RescanScheduler
     db_path = args.db or cfg["db_path"]
@@ -498,7 +498,7 @@ def cmd_rescan(args, cfg):
 
 
 def cmd_distributed(args, cfg):
-    """分布式任务分片（v3.2.1 新增）"""
+    """分布式任务分片（v3.3 新增）"""
     from distributed.shard import ShardManager, shard_cidr
 
     if args.create:
@@ -546,8 +546,115 @@ def cmd_distributed(args, cfg):
 
     print("用法: python cli.py distributed --create CIDR --shards N / --worker ID / --status JOB")
 
+
+def cmd_proxy(args, cfg):
+    """代理管理（v3.3 新增）"""
+    from core.proxy import ProxyManager, get_proxy_manager
+    manager = get_proxy_manager(proxy_file=args.file or "proxies.txt", auto_fetch=False)
+    if args.fetch:
+        count = manager.fetch_from_api(fetch_socks5=args.socks5)
+        print(f"[+] 从 ProxyScrape 获取 {count} 个代理")
+        return
+    if args.check:
+        alive = manager.health_check(test_host=args.test_host or "mc.hypixel.net",
+                                      test_port=args.test_port or 25565,
+                                      timeout=args.timeout or 5.0)
+        print(f"[+] 健康检查完成: {alive}/{len(manager)} 个可用")
+        return
+    if args.add:
+        manager.add_proxy(args.add)
+        print(f"[+] 已添加代理: {args.add}")
+        return
+    # 默认列出代理
+    proxies = manager.load_from_file()
+    print(f"\n代理列表 ({len(manager)} 个):")
+    for p in manager.proxies if hasattr(manager, 'proxies') else []:
+        print(f"  {p.proto}://{p.host}:{p.port} (失败={p.fail_count})")
+    if not manager.proxies:
+        print("  (空，使用 --fetch 获取)")
+
+
+def cmd_rcon(args, cfg):
+    """RCON 客户端（v3.3 新增）"""
+    from core.rcon import RCONClient, rcon_execute
+    if not args.host:
+        print("用法: python cli.py rcon <host:port> -p <password> -c <command>")
+        return
+    if ":" in args.host:
+        host, port = args.host.rsplit(":", 1)
+        port = int(port)
+    else:
+        host, port = args.host, 25575
+    password = args.password or ""
+    if args.command:
+        result = rcon_execute(host, port, password, args.command, timeout=args.timeout or 10.0)
+        print(f"[RCON] {host}:{port}")
+        print(f"命令: {args.command}")
+        print(f"响应:\n{result}")
+        return
+    if args.commands_file:
+        try:
+            with open(args.commands_file, 'r', encoding='utf-8') as f:
+                commands = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except FileNotFoundError:
+            print(f"[!] 文件不存在: {args.commands_file}")
+            return
+        client = RCONClient(host, port, password, timeout=args.timeout or 10.0)
+        if not client.connect():
+            print("[!] RCON 连接失败或认证失败")
+            return
+        results = client.execute_many(commands, delay=args.delay or 0.3)
+        client.close()
+        print(f"[RCON] 执行 {len(results)} 条命令:")
+        for cmd, resp in results.items():
+            print(f"  > {cmd}")
+            print(f"    {resp[:200]}")
+        return
+    print("用法: python cli.py rcon <host:port> -p <password> -c <命令>")
+    print("  或: python cli.py rcon <host:port> -p <password> -f <命令文件>")
+
+
+def cmd_commands(args, cfg):
+    """登录后自动执行命令（v3.3 新增）"""
+    from core.command_runner import run_commands_on_server, CommandScript
+    if not args.target:
+        print("用法: python cli.py commands <host:port> -u <用户名> [选项]")
+        return
+    if ":" in args.target:
+        host, port = args.target.rsplit(":", 1)
+        port = int(port)
+    else:
+        host, port = args.target, 25565
+    username = args.username or "CommandBot"
+    if args.script:
+        script = CommandScript.from_file(args.script, delay=args.delay or 1.0)
+    elif args.commands:
+        script = CommandScript(delay=args.delay or 1.0)
+        for cmd in args.commands.split(';'):
+            script.add(cmd.strip())
+    else:
+        # 默认 info 脚本
+        script = CommandScript(delay=args.delay or 1.0)
+        script.add("/plugins")
+        script.add("/version")
+        script.add("/help")
+    print(f"[*] 登录 {host}:{port} 作为 {username}，执行 {len(script.commands)} 条命令...")
+    try:
+        results = run_commands_on_server(host, port, username, script,
+                                          timeout=args.timeout or 15.0,
+                                          authme_password=args.authme)
+        print(f"\n[+] 执行完成:")
+        for r in results:
+            status = "✅" if r.success else "❌"
+            print(f"  {status} {r.command}")
+            if r.response:
+                print(f"     {r.response[:150]}")
+    except Exception as e:
+        print(f"[!] 执行失败: {e}")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="MC Scanner v3.2.1 - 综合 Minecraft 服务器扫描器")
+    parser = argparse.ArgumentParser(description="MC Scanner v3.3 - 综合 Minecraft 服务器扫描器")
     parser.add_argument("-c", "--config", help="配置文件路径")
     parser.add_argument("--db", help="数据库路径")
     sub = parser.add_subparsers(dest="cmd")
@@ -677,8 +784,8 @@ def main():
     fav.add_argument("--timeout", type=float, default=5.0, help="重查超时秒数（rescan）")
     fav.add_argument("--workers", type=int, default=10, help="重查并发数（rescan全部）")
     fav.set_defaults(func=cmd_fav)
-    # rescan - 智能重扫管理（v3.2.1 新增）
-    rs = sub.add_parser("rescan", help="智能重扫管理（v3.2.1新增）")
+    # rescan - 智能重扫管理（v3.3 新增）
+    rs = sub.add_parser("rescan", help="智能重扫管理（v3.3新增）")
     rs.add_argument("--list", action="store_true", help="列出重扫队列")
     rs.add_argument("--run", action="store_true", help="执行到期重扫")
     rs.add_argument("--clear", action="store_true", help="清空重扫队列")
@@ -686,8 +793,8 @@ def main():
     rs.add_argument("--limit", type=int, default=50, help="限制数量")
     rs.add_argument("--db", help="数据库路径")
     rs.set_defaults(func=cmd_rescan)
-    # distributed - 分布式任务分片（v3.2.1 新增）
-    dist = sub.add_parser("distributed", help="分布式任务分片（v3.2.1新增）")
+    # distributed - 分布式任务分片（v3.3 新增）
+    dist = sub.add_parser("distributed", help="分布式任务分片（v3.3新增）")
     dist.add_argument("--create", help="创建分片 (CIDR)")
     dist.add_argument("--shards", type=int, default=4, help="分片数量")
     dist.add_argument("--worker", help="Worker ID（领取并执行分片）")
@@ -695,6 +802,37 @@ def main():
     dist.add_argument("--status", help="查看任务状态")
     dist.add_argument("--db", help="数据库路径")
     dist.set_defaults(func=cmd_distributed)
+
+    # proxy - 代理管理（v3.3 新增）
+    px = sub.add_parser("proxy", help="代理管理（获取/测试/列出）")
+    px.add_argument("--fetch", action="store_true", help="从 ProxyScrape 获取代理")
+    px.add_argument("--socks5", action="store_true", help="同时获取 SOCKS5 代理")
+    px.add_argument("--check", action="store_true", help="健康检查所有代理")
+    px.add_argument("--add", help="添加代理 (host:port 或 socks5://host:port)")
+    px.add_argument("--file", help="代理文件路径")
+    px.add_argument("--test-host", help="健康检查测试主机")
+    px.add_argument("--test-port", type=int, help="健康检查测试端口")
+    px.add_argument("--timeout", type=float, help="超时秒数")
+    px.set_defaults(func=cmd_proxy)
+    # rcon - RCON 客户端（v3.3 新增）
+    rc = sub.add_parser("rcon", help="RCON 连接和命令执行")
+    rc.add_argument("host", nargs="?", help="主机:端口")
+    rc.add_argument("-p", "--password", help="RCON 密码")
+    rc.add_argument("-c", "--command", help="执行单条命令")
+    rc.add_argument("-f", "--commands-file", help="从文件加载命令列表")
+    rc.add_argument("--delay", type=float, help="命令间延迟(秒)")
+    rc.add_argument("--timeout", type=float, help="超时秒数")
+    rc.set_defaults(func=cmd_rcon)
+    # commands - 登录后自动执行命令（v3.3 新增）
+    cm = sub.add_parser("commands", help="登录服务器后自动执行命令列表")
+    cm.add_argument("target", nargs="?", help="主机:端口")
+    cm.add_argument("-u", "--username", help="机器人用户名")
+    cm.add_argument("-c", "--commands", help="命令列表，分号分隔")
+    cm.add_argument("-s", "--script", help="命令脚本文件")
+    cm.add_argument("--delay", type=float, help="命令间延迟(秒)")
+    cm.add_argument("--timeout", type=float, help="超时秒数")
+    cm.add_argument("--authme", help="AuthMe 密码")
+    cm.set_defaults(func=cmd_commands)
 
     args = parser.parse_args()
     if not getattr(args, "func", None):
