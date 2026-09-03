@@ -84,9 +84,10 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
 
                 version = info.get("version", {})
                 players = info.get("players", {})
+                ver_name = version.get("name", "")
                 return {
                     "state": "up",
-                    "version": version.get("name", ""),
+                    "version": ver_name,
                     "proto": version.get("protocol", 0),
                     "motd": _motd_text(info.get("description", "")),
                     "online": players.get("online", 0),
@@ -94,6 +95,9 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                     "sample": players.get("sample", []),
                     "favicon": info.get("favicon", ""),
                     "ping_ms": ping_ms,
+                    "core_type": detect_core_type(ver_name, info),
+                    "mods": extract_mods(info),
+                    "forge_channels": extract_forge_channels(info),
                     "_raw": info,
                 }
         except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError, IndexError) as e:
@@ -204,6 +208,61 @@ def _motd_text(desc) -> str:
         if isinstance(extra, list):
             return "".join(_motd_text(e) for e in extra)
     return str(desc)
+
+def detect_core_type(version_name: str, raw: dict = None) -> str:
+    """识别服务器核心类型。
+    返回: vanilla / paper / spigot / bukkit / purpur / forge / fabric / neoforge / quilt / catserver / arclight / unknown
+    """
+    v = (version_name or "").lower()
+    if "neoforge" in v:
+        return "neoforge"
+    if "fabric" in v:
+        return "fabric"
+    if "quilt" in v:
+        return "quilt"
+    if "forge" in v or "fml" in v:
+        return "forge"
+    if "purpur" in v:
+        return "purpur"
+    if "paper" in v:
+        return "paper"
+    if "spigot" in v:
+        return "spigot"
+    if "catserver" in v:
+        return "catserver"
+    if "arclight" in v:
+        return "arclight"
+    if "bukkit" in v:
+        return "bukkit"
+    if raw and isinstance(raw, dict):
+        if raw.get("modinfo") or raw.get("forgeData"):
+            return "forge"
+    return "vanilla" if v else "unknown"
+
+def extract_mods(raw: dict = None) -> list:
+    """从 SLP 响应提取模组列表（仅老版本 Forge modinfo 暴露，新版本不暴露）。"""
+    if not raw or not isinstance(raw, dict):
+        return []
+    modinfo = raw.get("modinfo")
+    if modinfo and isinstance(modinfo, dict):
+        mods = modinfo.get("mods", [])
+        if isinstance(mods, list):
+            return [{"modid": m.get("modid", ""), "version": m.get("version", "")}
+                    for m in mods if isinstance(m, dict)]
+    return []
+
+def extract_forge_channels(raw: dict = None) -> list:
+    """提取 Forge 插件频道列表（1.13+ Forge SLP forgeData.channels）。"""
+    if not raw or not isinstance(raw, dict):
+        return []
+    forge_data = raw.get("forgeData")
+    if forge_data and isinstance(forge_data, dict):
+        channels = forge_data.get("channels", [])
+        if isinstance(channels, list):
+            return [{"res": c.get("res", ""), "version": c.get("version", ""),
+                     "required": c.get("required", False)}
+                    for c in channels if isinstance(c, dict)]
+    return []
 
 
 def _is_offline_err(e: str) -> bool:
