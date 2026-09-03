@@ -27,6 +27,10 @@ def _build_engine(db_path=None, workers=None, timeout=None, auth_check=True,
         auth_check=auth_check,
         rate_limit=rate_limit,
         stop_event=stop_event,
+        # v3.2.1 新增特性
+        rescan_enabled=cfg.get("rescan_enabled", False),
+        duplicate_detection=cfg.get("duplicate_detection", False),
+        discord_webhook=cfg.get("discord_webhook", ""),
     )
 
 
