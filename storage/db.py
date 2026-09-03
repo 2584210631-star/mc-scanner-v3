@@ -80,6 +80,13 @@ def init_db(db_path: str):
     _migrate(conn)
     conn.commit()
     conn.close()
+    # v3.2.1: 初始化扩展表（玩家历史、重扫队列）
+    try:
+        from storage import player_history, rescan
+        player_history.init_player_history(db_path)
+        rescan.init_rescan_queue(db_path)
+    except ImportError:
+        pass
 
 
 def upsert_server(db_path: str, rec: dict):

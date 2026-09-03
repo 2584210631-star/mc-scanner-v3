@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MC Scanner v3-3.1 - 综合 Minecraft 服务器扫描器
+MC Scanner v3.2.1 - 综合 Minecraft 服务器扫描器
 整合 V1 功能完整性与 V2 架构优势的超越版。
 
 子命令:
@@ -390,8 +390,116 @@ def cmd_fav(args, cfg):
         tags = favorites.get_all_tags()
         print(f"所有标签 ({len(tags)}): {', '.join(tags) if tags else '无'}")
 
+
+def cmd_rescan(args, cfg):
+    """智能重扫管理（v3.2.1 新增）"""
+    from storage import rescan as rescan_db
+    from scanner.rescanner import RescanScheduler
+    db_path = args.db or cfg["db_path"]
+    scheduler = RescanScheduler(db_path, enabled=True)
+
+    if args.list:
+        stats = scheduler.stats()
+        print(f"\n重扫队列统计:")
+        print(f"  总数: {stats['total']}")
+        print(f"  到期待扫: {stats['due_now']}")
+        print(f"  按策略分布:")
+        for strategy, count in stats["by_strategy"].items():
+            print(f"    {strategy}: {count}")
+        all_items = scheduler.get_all(limit=args.limit)
+        if all_items:
+            print(f"\n前 {len(all_items)} 个重扫计划:")
+            for item in all_items:
+                next_scan = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(item["next_scan"]))
+                print(f"  {item['ip']}:{item['port']} | strategy={item['strategy']} | "
+                      f"scan_count={item['scan_count']} | next={next_scan}")
+        return
+
+    if args.run:
+        due = scheduler.get_due(limit=args.limit)
+        if not due:
+            print("[*] 没有到期的重扫任务")
+            return
+        print(f"[*] 执行 {len(due)} 个到期重扫...")
+        engine = ScanEngine(db_path=db_path, workers=min(16, cfg["workers"]),
+                            timeout=cfg["timeout"], rescan_enabled=True)
+        results = []
+        for i, item in enumerate(due):
+            print(f"\r  [{i+1}/{len(due)}] {item['ip']}:{item['port']}...", end="", flush=True)
+            try:
+                r = engine.probe_one(item["ip"], item["port"])
+                results.append(r)
+            except Exception:
+                continue
+        up = sum(1 for r in results if r.get("state") == "up")
+        print(f"\n[+] 重扫完成: {len(results)} 个目标, {up} 个在线")
+        return
+
+    if args.clear:
+        scheduler.clear()
+        print("[*] 重扫队列已清空")
+        return
+
+    if args.remove:
+        ip, port = args.remove.rsplit(":", 1)
+        scheduler.remove(ip, int(port))
+        print(f"[*] 已移除: {ip}:{port}")
+        return
+
+    print("用法: python cli.py rescan --list / --run / --clear / --remove ip:port")
+
+
+def cmd_distributed(args, cfg):
+    """分布式任务分片（v3.2.1 新增）"""
+    from distributed.shard import ShardManager, shard_cidr
+
+    if args.create:
+        shards = shard_cidr(args.create, num_shards=args.shards, ports=cfg["ports"])
+        print(f"[*] 已生成 {len(shards)} 个分片:")
+        for s in shards:
+            print(f"  分片 {s['shard_id']}: {s['targets']} (~{s['estimated_hosts']} 主机)")
+        # 保存分片信息
+        manager = ShardManager()
+        manager.create_job(args.job or "default", args.create, args.shards, cfg["ports"])
+        print(f"[*] 任务已保存，使用 'python cli.py distributed --worker <id> --job {args.job or 'default'}' 领取分片")
+        return
+
+    if args.worker:
+        manager = ShardManager()
+        job_id = args.job or "default"
+        shard = manager.claim_shard(job_id, args.worker)
+        if not shard:
+            print("[-] 没有可用分片")
+            return
+        print(f"[*] Worker {args.worker} 领取分片 {shard['shard_id']}: {shard['targets']}")
+        # 执行扫描
+        engine = ScanEngine(db_path=args.db or cfg["db_path"], workers=cfg["workers"],
+                            timeout=cfg["timeout"], rescan_enabled=cfg.get("rescan_enabled", False))
+        from service import run_full_scan
+        results = run_full_scan(shard["targets"], workers=cfg["workers"],
+                                 timeout=cfg["timeout"], db_path=args.db or cfg["db_path"])
+        manager.complete_shard(job_id, shard["shard_id"], {"found": len(results)})
+        print(f"[+] 分片 {shard['shard_id']} 完成: 发现 {len(results)} 台服务器")
+        return
+
+    if args.status:
+        manager = ShardManager()
+        status = manager.get_job_status(args.status)
+        if not status:
+            print(f"[-] 任务不存在: {args.status}")
+            return
+        print(f"\n任务 {args.status} 状态:")
+        print(f"  总分片: {status['total_shards']}")
+        print(f"  已完成: {status['completed_shards']}")
+        print(f"  进度: {status['progress']}%")
+        for sid, info in status["shards"].items():
+            print(f"  分片 {sid}: {info['status']} (worker={info.get('worker') or '-'})")
+        return
+
+    print("用法: python cli.py distributed --create CIDR --shards N / --worker ID / --status JOB")
+
 def main():
-    parser = argparse.ArgumentParser(description="MC Scanner v3-3.1 - 综合 Minecraft 服务器扫描器")
+    parser = argparse.ArgumentParser(description="MC Scanner v3.2.1 - 综合 Minecraft 服务器扫描器")
     parser.add_argument("-c", "--config", help="配置文件路径")
     parser.add_argument("--db", help="数据库路径")
     sub = parser.add_subparsers(dest="cmd")
@@ -517,6 +625,24 @@ def main():
     fav.add_argument("--timeout", type=float, default=5.0, help="重查超时秒数（rescan）")
     fav.add_argument("--workers", type=int, default=10, help="重查并发数（rescan全部）")
     fav.set_defaults(func=cmd_fav)
+    # rescan - 智能重扫管理（v3.2.1 新增）
+    rs = sub.add_parser("rescan", help="智能重扫管理（v3.2.1新增）")
+    rs.add_argument("--list", action="store_true", help="列出重扫队列")
+    rs.add_argument("--run", action="store_true", help="执行到期重扫")
+    rs.add_argument("--clear", action="store_true", help="清空重扫队列")
+    rs.add_argument("--remove", help="移除指定目标 (ip:port)")
+    rs.add_argument("--limit", type=int, default=50, help="限制数量")
+    rs.add_argument("--db", help="数据库路径")
+    rs.set_defaults(func=cmd_rescan)
+    # distributed - 分布式任务分片（v3.2.1 新增）
+    dist = sub.add_parser("distributed", help="分布式任务分片（v3.2.1新增）")
+    dist.add_argument("--create", help="创建分片 (CIDR)")
+    dist.add_argument("--shards", type=int, default=4, help="分片数量")
+    dist.add_argument("--worker", help="Worker ID（领取并执行分片）")
+    dist.add_argument("--job", help="任务 ID")
+    dist.add_argument("--status", help="查看任务状态")
+    dist.add_argument("--db", help="数据库路径")
+    dist.set_defaults(func=cmd_distributed)
 
     args = parser.parse_args()
     if not getattr(args, "func", None):
