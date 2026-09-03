@@ -145,7 +145,7 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 conn.send_packet(pid, payload)
 
                 try:
-                    resp_id, resp_payload = conn.recv_packet()
+                    resp_id, resp_payload = _recv_login_response(conn, login_pkts)
                 except ConnectionError:
                     last_detail = "连接被关闭"
                     return {"state": STATE_WHITELIST, "detected_proto": proto,
@@ -165,25 +165,33 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                                 "detail": f"whitelist: {msg[:80]}"}
                     return {"state": STATE_REJECTED, "detected_proto": proto,
                             "detail": f"rejected: {msg[:80]}"}
-                if resp_id == login_pkts["cb_compress"]:
-                    threshold, _ = read_varint(resp_payload, 0)
-                    conn.set_compression(threshold)
-                    resp_id, resp_payload = conn.recv_packet()
-                    if resp_id == login_pkts["cb_success"]:
-                        return {"state": STATE_CRACKED, "detected_proto": proto,
-                                "detail": "login success (压缩)"}
-                    if resp_id == login_pkts["cb_encryption"]:
-                        return {"state": STATE_ONLINE, "detected_proto": proto,
-                                "detail": "encryption requested (压缩)"}
-                    if resp_id == login_pkts["cb_disconnect"]:
-                        msg, _ = read_string(resp_payload, 0)
-                        low = msg.lower()
-                        return {"state": STATE_WHITELIST if "whitelist" in low else STATE_REJECTED,
-                                "detected_proto": proto, "detail": msg[:80]}
                 last_detail = f"意外响应 0x{resp_id:02x}"
         except (ConnectionError, OSError, TimeoutError, socket_timeout) as e:
             last_detail = str(e)
     return {"state": STATE_OFFLINE, "detected_proto": None, "detail": last_detail}
+
+
+def _recv_login_response(conn, login_pkts):
+    """读取登录阶段服务端响应；自动处理插件请求（模组服）与压缩设置。
+
+    模组服（Forge/Fabric 等）会在登录阶段发送 LoginPluginRequest，
+    必须回一个 declined 的 LoginPluginResponse，否则服务端会一直等待。
+    """
+    while True:
+        resp_id, resp_payload = conn.recv_packet()
+        if resp_id == login_pkts.get("cb_plugin_request"):
+            try:
+                msg_id, _ = read_varint(resp_payload, 0)
+                conn.send_packet(login_pkts["sb_plugin_response"],
+                                 write_varint(msg_id) + b"\x00")
+            except Exception:
+                pass
+            continue
+        if resp_id == login_pkts.get("cb_compress"):
+            threshold, _ = read_varint(resp_payload, 0)
+            conn.set_compression(threshold)
+            continue
+        return resp_id, resp_payload
 
 
 def _motd_text(desc) -> str:
