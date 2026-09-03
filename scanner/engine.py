@@ -21,7 +21,9 @@ class ScanEngine:
 
     def __init__(self, db_path: str = "mcscanner.db", workers: int = 32,
                  timeout: float = 4.0, auth_check: bool = True, rate_limit: int = 0,
-                 bot_workers: int = 10, bot_timeout: float = 12.0, stop_event=None):
+                 bot_workers: int = 10, bot_timeout: float = 12.0, stop_event=None,
+                 rescan_enabled: bool = False, duplicate_detection: bool = False,
+                 discord_webhook: str = ""):
         self.db_path = db_path
         self.workers = workers
         self.timeout = timeout
@@ -30,6 +32,13 @@ class ScanEngine:
         self.bot_workers = bot_workers
         self.bot_timeout = bot_timeout
         self.stop_event = stop_event
+        # v3.2.1 新增特性
+        self.rescan_enabled = rescan_enabled
+        self.duplicate_detection = duplicate_detection
+        self.discord_webhook = discord_webhook
+        self._rescheduler = None
+        self._dup_detector = None
+        self._discord = None
         self._lock = threading.Lock()
         self._last_probe = 0.0
         self._tokens = 0.0
@@ -92,6 +101,8 @@ class ScanEngine:
                 self._bump(result["auth"])
             else:
                 result["auth"] = "unknown"
+            # v3.2.1: 探测后钩子（玩家历史/重扫/重复检测/Discord通知）
+            self._post_probe_hooks(result)
         except Exception as e:
             result["state"] = "error"
             result["error"] = str(e)
@@ -270,6 +281,88 @@ class ScanEngine:
         print(f"[{done:>6}] up={c['up']} cracked={c['cracked']} "
               f"online={c['online']} whitelist={c['whitelist']} "
               f"rejected={c['rejected']} offline={c['offline']} error={c['error']}")
+
+    # ===== v3.2.1 新增：探测后钩子 =====
+
+    def _get_rescheduler(self):
+        """惰性初始化重扫调度器。"""
+        if self._rescheduler is None:
+            from scanner.rescanner import RescanScheduler
+            self._rescheduler = RescanScheduler(self.db_path, enabled=self.rescan_enabled)
+        return self._rescheduler
+
+    def _get_dup_detector(self):
+        """惰性初始化重复检测器。"""
+        if self._dup_detector is None:
+            from scanner.duplicate import DuplicateDetector
+            self._dup_detector = DuplicateDetector()
+        return self._dup_detector
+
+    def _get_discord(self):
+        """惰性初始化 Discord 通知器。"""
+        if self._discord is None:
+            from notify.discord import DiscordNotifier
+            self._discord = DiscordNotifier(self.discord_webhook)
+        return self._discord
+
+    def _post_probe_hooks(self, result: dict):
+        """
+        探测成功后钩子：玩家历史、重扫队列、重复检测、Discord通知。
+        所有钩子都在 try/except 中，不影响主流程。
+        """
+        if result.get("state") != "up":
+            return
+        try:
+            # 1. 玩家历史 + 重扫队列
+            if self.rescan_enabled:
+                self._get_rescheduler().update(result)
+            elif result.get("player_list"):
+                # 即使不开启重扫，也记录玩家历史
+                from storage import player_history as ph
+                ph.update_players(self.db_path, result["ip"], result["port"], result["player_list"])
+        except Exception:
+            pass
+        try:
+            # 2. 重复服务器检测
+            if self.duplicate_detection:
+                self._get_dup_detector().add(result)
+        except Exception:
+            pass
+        try:
+            # 3. Discord 通知
+            if self.discord_webhook:
+                d = self._get_discord()
+                d.notify_new_server(result)
+                if result.get("auth") == "cracked":
+                    d.notify_cracked_server(result)
+        except Exception:
+            pass
+
+    def rescan_due(self, limit: int = 50) -> list:
+        """
+        执行到期的重扫任务（v3.2.1 新增）。
+        返回重扫结果列表。
+        """
+        if not self.rescan_enabled:
+            return []
+        scheduler = self._get_rescheduler()
+        due = scheduler.get_due(limit=limit)
+        if not due:
+            return []
+        results = []
+        for item in due:
+            try:
+                r = self.probe_one(item["ip"], item["port"])
+                results.append(r)
+            except Exception:
+                continue
+        return results
+
+    def get_duplicates(self) -> list:
+        """获取检测到的重复服务器组（v3.2.1 新增）。"""
+        if self._dup_detector:
+            return self._dup_detector.get_duplicates()
+        return []
 
 
 def _looks_modded(version: str) -> bool:

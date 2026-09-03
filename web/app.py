@@ -847,6 +847,78 @@ def fav_import():
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+
+# ===== v3.2.1 新增：玩家历史 API =====
+@app.route('/api/players')
+def players_history():
+    db_path = request.args.get("db_path", "mcscanner.db")
+    player_name = request.args.get("name")
+    ip = request.args.get("ip")
+    port = request.args.get("port", type=int)
+    limit = int(request.args.get("limit", 100))
+    if not os.path.exists(db_path):
+        return jsonify({"total": 0, "players": []})
+    from storage import player_history as ph
+    players = ph.get_player_history(db_path, player_name=player_name, ip=ip, port=port, limit=limit)
+    return jsonify({"total": len(players), "players": players})
+
+@app.route('/api/players/stats')
+def players_stats():
+    db_path = request.args.get("db_path", "mcscanner.db")
+    if not os.path.exists(db_path):
+        return jsonify({"total_records": 0, "unique_players": 0, "unique_servers": 0})
+    from storage import player_history as ph
+    return jsonify(ph.get_stats(db_path))
+
+# ===== v3.2.1 新增：智能重扫 API =====
+@app.route('/api/rescan')
+def rescan_list():
+    db_path = request.args.get("db_path", "mcscanner.db")
+    action = request.args.get("action", "list")
+    limit = int(request.args.get("limit", 100))
+    from storage import rescan as rescan_db
+    rescan_db.init_rescan_queue(db_path)
+    if action == "stats":
+        return jsonify(rescan_db.get_stats(db_path))
+    if action == "due":
+        due = rescan_db.get_due_rescans(db_path, limit=limit)
+        return jsonify({"total": len(due), "items": due})
+    all_items = rescan_db.get_all_rescans(db_path, limit=limit)
+    return jsonify({"total": len(all_items), "items": all_items, "stats": rescan_db.get_stats(db_path)})
+
+@app.route('/api/rescan/run', methods=['POST'])
+def rescan_run():
+    data = request.json or {}
+    db_path = data.get("db_path", "mcscanner.db")
+    limit = int(data.get("limit", 50))
+    from storage import rescan as rescan_db
+    from scanner.engine import ScanEngine
+    rescan_db.init_rescan_queue(db_path)
+    due = rescan_db.get_due_rescans(db_path, limit=limit)
+    if not due:
+        return jsonify({"status": "no_due", "count": 0})
+    _log(f"智能重扫开始: {len(due)} 个到期目标")
+    engine = ScanEngine(db_path=db_path, workers=16, timeout=4.0, rescan_enabled=True)
+    results = []
+    for item in due:
+        try:
+            r = engine.probe_one(item["ip"], item["port"])
+            results.append(r)
+        except Exception:
+            continue
+    up = sum(1 for r in results if r.get("state") == "up")
+    _log(f"智能重扫完成: {len(results)} 个目标, {up} 个在线")
+    return jsonify({"status": "completed", "total": len(results), "up": up})
+
+@app.route('/api/rescan/clear', methods=['POST'])
+def rescan_clear():
+    data = request.json or {}
+    db_path = data.get("db_path", "mcscanner.db")
+    from storage import rescan as rescan_db
+    rescan_db.clear_rescan(db_path)
+    _log("重扫队列已清空")
+    return jsonify({"success": True})
+
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
     db.init_db(db_path)
