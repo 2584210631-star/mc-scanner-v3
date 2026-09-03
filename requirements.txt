@@ -1,1 +1,5 @@
 flask>=2.0.0
+
+# 性能加速（可选，安装后自动启用）
+uvloop>=0.19.0; sys_platform != 'win32'   # Linux/Mac 异步事件循环加速
+pysimdjson>=5.0.0                          # SIMD JSON 解析加速（SLP 响应解析）
