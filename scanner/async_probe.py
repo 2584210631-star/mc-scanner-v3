@@ -218,15 +218,17 @@ async def async_auth_probe(ip: str, port: int, proto: int = 0,
     异步认证模式检测（简化版，实际登录握手）。
     返回 state: online/cracked/whitelist/rejected/offline/error
     """
-    # 异步认证检测需要完整的登录流程，比较复杂
-    # 这里先用同步版本作为回退（在线程池中执行）
     import concurrent.futures
     from core.probe import auth_probe
 
     loop = asyncio.get_event_loop()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        return await loop.run_in_executor(
-            ex, lambda: auth_probe(ip, port, proto, timeout))
+        result = await loop.run_in_executor(
+            ex, lambda: auth_probe(ip, port, reported_proto=proto, timeout=timeout))
+        # 统一返回格式：auth_mode 字段兼容旧代码
+        if isinstance(result, dict) and 'state' in result and 'auth_mode' not in result:
+            result['auth_mode'] = result['state']
+        return result
 
 
 def has_simdjson() -> bool:

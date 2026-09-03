@@ -6,57 +6,80 @@
 from .protocol import get_chat_format
 
 # 手写 Play 包 ID 表（按协议版本范围）
-# 每个表包含: sb_chat, sb_chat_command, cb_keep_alive, sb_keep_alive,
-#            cb_ping, sb_pong, cb_login, cb_teleport, sb_confirm_teleport, cb_disconnect
+# 包含: 聊天/保持连接/登录/传送/断开/插件消息/玩家信息 等常用包
 _PLAY_TABLES = [
     # 767: 1.21-1.21.1
     {"min_proto": 767, "max_proto": 767, "sb_chat": 0x06, "sb_chat_command": 0x04,
      "cb_keep_alive": 0x26, "sb_keep_alive": 0x18, "cb_ping": 0x35, "sb_pong": 0x27,
-     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1D},
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1D,
+     "cb_plugin_message": 0x19, "sb_plugin_message": 0x02, "cb_player_info": 0x38,
+     "cb_chat_message": 0x30, "cb_system_chat": 0x62},
     # 766: 1.20.5-1.20.6
     {"min_proto": 766, "max_proto": 766, "sb_chat": 0x06, "sb_chat_command": 0x04,
      "cb_keep_alive": 0x26, "sb_keep_alive": 0x18, "cb_ping": 0x35, "sb_pong": 0x27,
-     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1D},
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1D,
+     "cb_plugin_message": 0x19, "sb_plugin_message": 0x02, "cb_player_info": 0x38,
+     "cb_chat_message": 0x30, "cb_system_chat": 0x62},
     # 765: 1.20.3-1.20.4
     {"min_proto": 765, "max_proto": 765, "sb_chat": 0x05, "sb_chat_command": 0x04,
      "cb_keep_alive": 0x24, "sb_keep_alive": 0x15, "cb_ping": 0x33, "sb_pong": 0x24,
-     "cb_login": 0x29, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A},
+     "cb_login": 0x29, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A,
+     "cb_plugin_message": 0x19, "sb_plugin_message": 0x02, "cb_player_info": 0x38,
+     "cb_chat_message": 0x35, "cb_system_chat": 0x5F},
     # 764: 1.20.2
     {"min_proto": 764, "max_proto": 764, "sb_chat": 0x05, "sb_chat_command": 0x04,
      "cb_keep_alive": 0x24, "sb_keep_alive": 0x14, "cb_ping": 0x33, "sb_pong": 0x23,
-     "cb_login": 0x29, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A},
+     "cb_login": 0x29, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A,
+     "cb_plugin_message": 0x19, "sb_plugin_message": 0x02, "cb_player_info": 0x38,
+     "cb_chat_message": 0x35, "cb_system_chat": 0x5F},
     # 768-769: 1.21.2-1.21.4
     {"min_proto": 768, "max_proto": 769, "sb_chat": 0x07, "sb_chat_command": 0x05,
      "cb_keep_alive": 0x27, "sb_keep_alive": 0x1A, "cb_ping": 0x37, "sb_pong": 0x2B,
-     "cb_login": 0x2C, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+     "cb_login": 0x2C, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E,
+     "cb_plugin_message": 0x1C, "sb_plugin_message": 0x02, "cb_player_info": 0x3E,
+     "cb_chat_message": 0x31, "cb_system_chat": 0x67},
     # 770: 1.21.5
     {"min_proto": 770, "max_proto": 770, "sb_chat": 0x07, "sb_chat_command": 0x05,
      "cb_keep_alive": 0x26, "sb_keep_alive": 0x1A, "cb_ping": 0x36, "sb_pong": 0x2B,
-     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E,
+     "cb_plugin_message": 0x1B, "sb_plugin_message": 0x02, "cb_player_info": 0x3D,
+     "cb_chat_message": 0x30, "cb_system_chat": 0x66},
     # 771-772: 1.21.6-1.21.8
     {"min_proto": 771, "max_proto": 772, "sb_chat": 0x08, "sb_chat_command": 0x06,
      "cb_keep_alive": 0x26, "sb_keep_alive": 0x1B, "cb_ping": 0x36, "sb_pong": 0x2C,
-     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+     "cb_login": 0x2B, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E,
+     "cb_plugin_message": 0x1C, "sb_plugin_message": 0x03, "cb_player_info": 0x3E,
+     "cb_chat_message": 0x31, "cb_system_chat": 0x67},
     # 773: 1.21.9
     {"min_proto": 773, "max_proto": 773, "sb_chat": 0x08, "sb_chat_command": 0x06,
      "cb_keep_alive": 0x2B, "sb_keep_alive": 0x1B, "cb_ping": 0x3B, "sb_pong": 0x2C,
-     "cb_login": 0x30, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+     "cb_login": 0x30, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E,
+     "cb_plugin_message": 0x1F, "sb_plugin_message": 0x03, "cb_player_info": 0x43,
+     "cb_chat_message": 0x36, "cb_system_chat": 0x6C},
     # 774+: 1.21.10+
     {"min_proto": 774, "max_proto": 9999, "sb_chat": 0x08, "sb_chat_command": 0x06,
      "cb_keep_alive": 0x2B, "sb_keep_alive": 0x1B, "cb_ping": 0x3B, "sb_pong": 0x2C,
-     "cb_login": 0x30, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E},
+     "cb_login": 0x30, "cb_teleport": 0x40, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1E,
+     "cb_plugin_message": 0x1F, "sb_plugin_message": 0x03, "cb_player_info": 0x43,
+     "cb_chat_message": 0x36, "cb_system_chat": 0x6C},
     # 761-763: 1.19.3-1.20.1
     {"min_proto": 761, "max_proto": 763, "sb_chat": 0x05, "sb_chat_command": 0x04,
      "cb_keep_alive": 0x23, "sb_keep_alive": 0x15, "cb_ping": 0x37, "sb_pong": 0x25,
-     "cb_login": 0x25, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19},
+     "cb_login": 0x25, "cb_teleport": 0x38, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19,
+     "cb_plugin_message": 0x18, "sb_plugin_message": 0x0A, "cb_player_info": 0x34,
+     "cb_chat_message": 0x35, "cb_system_chat": 0x5F},
     # 759-760: 1.19
     {"min_proto": 759, "max_proto": 760, "sb_chat": 0x04, "sb_chat_command": None,
      "cb_keep_alive": 0x21, "sb_keep_alive": 0x10, "cb_ping": 0x33, "sb_pong": 0x1F,
-     "cb_login": 0x23, "cb_teleport": 0x36, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17},
+     "cb_login": 0x23, "cb_teleport": 0x36, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17,
+     "cb_plugin_message": 0x17, "sb_plugin_message": 0x0A, "cb_player_info": 0x32,
+     "cb_chat_message": 0x30, "cb_system_chat": 0x5D},
     # 340-758: 旧版本
     {"min_proto": 340, "max_proto": 758, "sb_chat": 0x03, "sb_chat_command": None,
      "cb_keep_alive": 0x1F, "sb_keep_alive": 0x0E, "cb_ping": 0x2F, "sb_pong": 0x1D,
-     "cb_login": 0x23, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A},
+     "cb_login": 0x23, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A,
+     "cb_plugin_message": 0x19, "sb_plugin_message": 0x0A, "cb_player_info": 0x30,
+     "cb_chat_message": 0x0F, "cb_system_chat": None},
 ]
 
 _auto_tables = None
@@ -90,6 +113,9 @@ def _load_auto_tables():
                 "cb_ping": cb.get("ping", cb.get("ping_pong")),
                 "sb_pong": sb.get("pong", sb.get("ping_pong")),
                 "cb_login": cb.get("login", cb.get("join_game")),
+                "cb_plugin_message": cb.get("custom_payload", cb.get("plugin_message")),
+                "sb_plugin_message": sb.get("custom_payload", sb.get("plugin_message")),
+                "cb_player_info": cb.get("player_info_update", cb.get("player_info")),
                 "chat_format": get_chat_format(proto),
                 "has_configuration": proto >= 764,
                 "login_start_uuid": proto >= 764,
@@ -147,31 +173,22 @@ def get_config_packets(proto: int) -> dict | None:
 
 
 def get_login_packets() -> dict:
-    """获取 Login 阶段包 ID（全版本通用）"""
-    from .protocol import (
-        LOGIN_CB_DISCONNECT, LOGIN_CB_ENCRYPTION_REQUEST, LOGIN_CB_LOGIN_SUCCESS,
-        LOGIN_CB_SET_COMPRESSION, LOGIN_CB_LOGIN_PLUGIN_REQUEST,
-        LOGIN_SB_LOGIN_START, LOGIN_SB_LOGIN_PLUGIN_RESPONSE,
-        LOGIN_SB_LOGIN_ACKNOWLEDGED,
-    )
+    """获取 Login 阶段包 ID（通用）"""
     return {
-        "cb_disconnect": LOGIN_CB_DISCONNECT,
-        "cb_encryption": LOGIN_CB_ENCRYPTION_REQUEST,
-        "cb_success": LOGIN_CB_LOGIN_SUCCESS,
-        "cb_compress": LOGIN_CB_SET_COMPRESSION,
-        "cb_plugin_request": LOGIN_CB_LOGIN_PLUGIN_REQUEST,
-        "sb_start": LOGIN_SB_LOGIN_START,
-        "sb_plugin_response": LOGIN_SB_LOGIN_PLUGIN_RESPONSE,
-        "sb_acknowledged": LOGIN_SB_LOGIN_ACKNOWLEDGED,
+        "sb_start": 0x00,
+        "cb_disconnect": 0x00,
+        "cb_encryption": 0x01,
+        "cb_success": 0x02,
+        "cb_compress": 0x03,
+        "cb_plugin_request": 0x04,
+        "sb_plugin_response": 0x02,
+        "sb_acknowledged": 0x03,
     }
 
 
 def supported_protos() -> list:
-    """返回所有支持的协议版本列表"""
-    auto = _load_auto_tables()
+    """返回所有支持的协议版本号"""
     protos = set()
-    if auto:
-        protos.update(auto.keys())
     for table in _PLAY_TABLES:
         protos.add(table["min_proto"])
         if table["max_proto"] < 9999:

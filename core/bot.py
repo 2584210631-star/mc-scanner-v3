@@ -192,19 +192,20 @@ class MCBot:
             pass
 
     def _do_configuration(self):
-        """Configuration 阶段：响应式流程，兼容 vanilla / Paper / Spigot"""
+        """Configuration 阶段：响应式流程，兼容 vanilla / Paper / Spigot / Velocity"""
         cfg = self.config_packets
-        deadline = time.time() + self.timeout * 2
+        deadline = time.time() + max(self.timeout, 8.0)
         self._send_client_information()
         self._send_brand()
         sent_known = False
         sent_finish = False
         first = time.time()
-        self.conn.sock.settimeout(0.5)
+        self.conn.sock.settimeout(0.3)
 
         while time.time() < deadline:
             if not sent_finish:
-                should = sent_known or (time.time() - first > 1.5)
+                # 0.5秒后或收到KnownPacks后立即发送finish，不傻等1.5秒
+                should = sent_known or (time.time() - first > 0.5)
                 if should:
                     if cfg.get("sb_known_packs") is not None and not sent_known:
                         self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
@@ -212,9 +213,15 @@ class MCBot:
                     if cfg.get("sb_finish") is not None:
                         self.conn.send_packet(cfg["sb_finish"], b"")
                         sent_finish = True
+                        finish_time = time.time()
             try:
                 resp_id, resp_payload = self.conn.recv_packet()
             except Exception:
+                # 发送finish后2秒仍未收到cb_finish，强行进入Play（兼容Velocity/Bungee）
+                if sent_finish and (time.time() - finish_time > 2.0):
+                    self.conn.state = PROTO_STATE_PLAY
+                    self.conn.sock.settimeout(self.timeout)
+                    return
                 continue
 
             if resp_id == cfg["cb_finish"]:
@@ -228,13 +235,14 @@ class MCBot:
             elif resp_id == cfg.get("cb_ping"):
                 self.conn.send_packet(cfg["sb_pong"], resp_payload[:4])
             elif cfg.get("cb_plugin_message") is not None and resp_id == cfg["cb_plugin_message"]:
-                # 配置阶段插件消息：brand / Fabric 协商 / Forge FML3 握手
                 self._handle_config_plugin_message(resp_payload)
             elif cfg.get("cb_known_packs") is not None and resp_id == cfg["cb_known_packs"]:
                 if cfg.get("sb_known_packs") is not None:
                     self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
                     sent_known = True
 
+        # 超时后强行进入Play（兼容不发finish的代理服）
+        self.conn.state = PROTO_STATE_PLAY
         self.conn.sock.settimeout(self.timeout)
 
     def _handle_config_plugin_message(self, payload: bytes):
