@@ -297,6 +297,12 @@ tbody tr:last-child td { border-bottom: none; }
             <input type="checkbox" id="portscanOnly"> 只扫端口不探测（更快）
           </label>
         </div>
+        <div class="form-group" style="flex:0 0 auto;">
+          <label style="visibility:hidden;">.</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text);">
+            <input type="checkbox" id="asyncMode"> 异步高速模式（快5-10倍）
+          </label>
+        </div>
         <div class="form-group" style="flex:0 0 auto;align-self:flex-end;">
           <span id="masscanStatus"></span>
         </div>
@@ -638,6 +644,7 @@ async function startScan() {
       auth_check: document.getElementById('authCheck').checked,
       use_masscan: mode === 'masscan',
       portscan_only: document.getElementById('portscanOnly').checked,
+      async_mode: document.getElementById('asyncMode').checked,
       masscan_rate: parseInt(document.getElementById('masscanRate').value),
       ports: ports,
     })
