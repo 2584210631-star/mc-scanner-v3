@@ -225,6 +225,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div class="tab active" data-tab="scan">扫描</div>
   <div class="tab" data-tab="results">结果</div>
   <div class="tab" data-tab="database">数据库</div>
+  <div class="tab" data-tab="favorites">收藏</div>
   <div class="tab" data-tab="history">历史</div>
   <div class="tab" data-tab="tools">工具</div>
 </nav>
@@ -342,6 +343,17 @@ tbody tr:last-child td { border-bottom: none; }
           <option value="1">模组服</option>
           <option value="0">原版服</option>
         </select>
+        <select id="filterCore" onchange="loadResults(1)">
+          <option value="">全部核心</option>
+          <option value="vanilla">Vanilla</option>
+          <option value="paper">Paper</option>
+          <option value="spigot">Spigot</option>
+          <option value="purpur">Purpur</option>
+          <option value="forge">Forge</option>
+          <option value="fabric">Fabric</option>
+          <option value="neoforge">NeoForge</option>
+          <option value="bukkit">Bukkit</option>
+        </select>
         <label><input type="checkbox" id="filterOnline" onchange="loadResults(1)"> 仅有人在线</label>
         <input type="text" id="filterSearch" placeholder="搜索 IP/MOTD/版本..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadResults(1)">
         <button class="btn btn-primary" onclick="loadResults(1)">搜索</button>
@@ -357,7 +369,7 @@ tbody tr:last-child td { border-bottom: none; }
         <table>
           <thead>
             <tr>
-              <th>IP:端口</th><th>版本</th><th>协议</th><th>MOTD</th><th>玩家</th><th>在线玩家</th><th>认证</th><th>延迟</th><th>操作</th>
+              <th>IP:端口</th><th>版本</th><th>核心</th><th>协议</th><th>MOTD</th><th>玩家</th><th>在线玩家</th><th>认证</th><th>延迟</th><th>操作</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
@@ -405,6 +417,32 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
   </div>
 
+  <!-- 收藏标签页 -->
+  <div id="tab-favorites" class="hidden">
+    <div class="panel">
+      <h2>收藏管理</h2>
+      <div class="filter-bar">
+        <select id="favFilterTag" onchange="loadFavorites()">
+          <option value="">全部标签</option>
+        </select>
+        <input type="text" id="favSearch" placeholder="搜索 IP/备注/标签..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadFavorites()">
+        <button class="btn btn-primary" onclick="loadFavorites()">搜索</button>
+        <button class="btn btn-success" onclick="rescanAllFavorites()">全部重查</button>
+        <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
+        <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
+        <button class="btn btn-secondary" onclick="exportFavorites()">导出JSON</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>IP:端口</th><th>版本</th><th>核心</th><th>玩家</th><th>认证</th><th>标签</th><th>备注</th><th>最后检查</th><th>操作</th></tr>
+          </thead>
+          <tbody id="favoritesBody"></tbody>
+        </table>
+      </div>
+      <div id="favEmpty" style="text-align:center;padding:30px;color:var(--text-3);">暂无收藏，在结果页点击 ☆ 按钮添加</div>
+    </div>
+  </div>
   <!-- 历史标签页 -->
   <div id="tab-history" class="hidden">
     <div class="panel">
@@ -523,6 +561,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('tab-' + this.dataset.tab).classList.remove('hidden');
     if (this.dataset.tab === 'results') loadResults(1);
     if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
+    if (this.dataset.tab === 'favorites') loadFavorites();
     if (this.dataset.tab === 'history') loadHistory();
     if (this.dataset.tab === 'tools') checkMasscan();
   };
@@ -665,6 +704,7 @@ async function loadResults(page) {
   const params = new URLSearchParams({
     auth: document.getElementById('filterAuth').value,
     modded: document.getElementById('filterModded').value,
+    core_type: document.getElementById('filterCore').value,
     only_online: document.getElementById('filterOnline').checked ? '1' : '0',
     search: document.getElementById('filterSearch').value,
     page, per_page: 50
@@ -676,6 +716,7 @@ async function loadResults(page) {
     <tr>
       <td>${r.ip}:${r.port}</td>
       <td>${r.version || '-'}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td><span class="badge badge-${r.core_type || 'unknown'}" style="text-transform:capitalize;">${r.core_type || '-'}</span></td>
       <td>${r.proto || '-'}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.motd||''}">${r.motd || '-'}</td>
       <td>${r.players_online || 0}/${r.players_max || 0}</td>
@@ -683,6 +724,7 @@ async function loadResults(page) {
       <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
       <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
       <td><div class="actions">
+        <button class="btn btn-success" onclick="toggleFavorite('${r.ip}',${r.port}, this)" title="收藏">☆</button>
         <button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})">警告</button>
         <button class="btn btn-warning" onclick="openCmdModal('${r.ip}',${r.port})">发命令</button>
       </div></td>
@@ -931,6 +973,151 @@ async function loadHistory() {
       </div>
     `).join('')
     : '<div style="color:#999;text-align:center;padding:20px;">暂无历史记录</div>';
+}
+
+// ===== 收藏管理 =====
+let favCache = {};
+async function loadFavorites() {
+  const tag = document.getElementById('favFilterTag').value;
+  const search = document.getElementById('favSearch').value;
+  const params = new URLSearchParams({ tag, search });
+  const res = await fetch('/api/favorites?' + params);
+  const data = await res.json();
+  // 更新标签下拉
+  const tagSelect = document.getElementById('favFilterTag');
+  const currentTag = tagSelect.value;
+  tagSelect.innerHTML = '<option value="">全部标签</option>' + data.tags.map(t => `<option value="${t}">${t}</option>`).join('');
+  tagSelect.value = currentTag;
+  // 缓存
+  favCache = {};
+  data.favorites.forEach(f => { favCache[f.ip + ':' + f.port] = f; });
+  // 渲染
+  const tbody = document.getElementById('favoritesBody');
+  const empty = document.getElementById('favEmpty');
+  if (!data.favorites.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = data.favorites.map(f => {
+    const info = f.last_info || {};
+    const state = info.state || 'unknown';
+    const stateColor = state === 'up' ? 'var(--green)' : (state === 'offline' ? 'var(--red)' : 'var(--text-3)');
+    const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${t}</span>`).join(' ');
+    return `<tr>
+      <td>${f.ip}:${f.port}</td>
+      <td>${info.version || '-'}</td>
+      <td><span class="badge badge-${info.core_type || 'unknown'}" style="text-transform:capitalize;">${info.core_type || '-'}</span></td>
+      <td style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
+      <td><span class="badge badge-${info.auth || 'unknown'}">${info.auth || '-'}</span></td>
+      <td>${tags || '-'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.note || ''}">${f.note || '-'}</td>
+      <td style="font-size:11px;color:var(--text-3);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
+      <td><div class="actions">
+        <button class="btn btn-success" onclick="rescanOneFavorite('${f.ip}',${f.port})" title="重查">↻</button>
+        <button class="btn btn-warning" onclick="editFavTags('${f.ip}',${f.port})" title="标签">🏷</button>
+        <button class="btn btn-warning" onclick="editFavNote('${f.ip}',${f.port})" title="备注">✎</button>
+        <button class="btn btn-danger" onclick="removeFavorite('${f.ip}',${f.port})" title="删除">✕</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+async function toggleFavorite(ip, port, btn) {
+  const key = ip + ':' + port;
+  if (favCache[key]) {
+    if (!confirm('确定移除收藏 ' + ip + ':' + port + ' ?')) return;
+    await fetch('/api/favorites/remove', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ip, port })
+    });
+    delete favCache[key];
+    btn.textContent = '☆';
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-success');
+  } else {
+    const res = await fetch('/api/favorites/add', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ip, port, tags: [], note: '' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      favCache[key] = data.favorite;
+      btn.textContent = '★';
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-danger');
+    }
+  }
+}
+async function removeFavorite(ip, port, reload = true) {
+  if (!confirm('确定移除收藏 ' + ip + ':' + port + ' ?')) return;
+  await fetch('/api/favorites/remove', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ip, port })
+  });
+  delete favCache[ip + ':' + port];
+  if (reload) loadFavorites();
+}
+async function rescanOneFavorite(ip, port) {
+  const res = await fetch('/api/favorites/rescan_one', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ip, port })
+  });
+  const data = await res.json();
+  if (data.success) loadFavorites();
+}
+async function rescanAllFavorites() {
+  if (!confirm('确定重新探测所有收藏服务器？')) return;
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '重查中...';
+  try {
+    const res = await fetch('/api/favorites/rescan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ timeout: 5.0, workers: 10 })
+    });
+    const data = await res.json();
+    if (data.success) loadFavorites();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '全部重查';
+  }
+}
+async function editFavTags(ip, port) {
+  const fav = favCache[ip + ':' + port];
+  const current = (fav && fav.tags || []).join(', ');
+  const input = prompt('输入标签（逗号分隔）:', current);
+  if (input === null) return;
+  const tags = input.split(',').map(t => t.trim()).filter(t => t);
+  await fetch('/api/favorites/tags', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ip, port, tags })
+  });
+  loadFavorites();
+}
+async function editFavNote(ip, port) {
+  const fav = favCache[ip + ':' + port];
+  const current = (fav && fav.note) || '';
+  const input = prompt('输入备注:', current);
+  if (input === null) return;
+  await fetch('/api/favorites/note', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ip, port, note: input })
+  });
+  loadFavorites();
+}
+async function importFavorites(input) {
+  if (!input.files[0]) return;
+  const formData = new FormData();
+  formData.append('file', input.files[0]);
+  const res = await fetch('/api/favorites/import', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (data.success) { alert('导入成功，共 ' + data.count + ' 个'); loadFavorites(); }
+  else alert('导入失败: ' + (data.error || ''));
+  input.value = '';
+}
+function exportFavorites() {
+  window.open('/api/favorites?tag=&search=');
 }
 </script>
 

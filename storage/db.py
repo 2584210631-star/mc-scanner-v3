@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 SQLite 存储层。
-融合 V1 和 V2 的字段（13字段，含 favicon），支持去重更新、按认证/模组/搜索查询、统计。
+支持去重更新、按认证/模组/核心类型/搜索查询、统计。
+v3.1 新增：core_type、mods、forge_channels 字段（自动迁移旧数据库）。
 """
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -22,21 +24,38 @@ CREATE TABLE IF NOT EXISTS servers (
     ping_ms INTEGER,
     json TEXT,
     last_updated TEXT,
+    core_type TEXT,
+    mods TEXT,
+    forge_channels TEXT,
     PRIMARY KEY (ip, port)
 )
 """
 
 UPSERT_SQL = """
     INSERT INTO servers (ip, port, version, proto, motd, is_modded, players_online,
-                         players_max, favicon, auth, ping_ms, json, last_updated)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         players_max, favicon, auth, ping_ms, json, last_updated,
+                         core_type, mods, forge_channels)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(ip, port) DO UPDATE SET
         version=excluded.version, proto=excluded.proto, motd=excluded.motd,
         is_modded=excluded.is_modded, players_online=excluded.players_online,
         players_max=excluded.players_max, favicon=excluded.favicon,
         auth=excluded.auth, ping_ms=excluded.ping_ms,
-        json=excluded.json, last_updated=excluded.last_updated
+        json=excluded.json, last_updated=excluded.last_updated,
+        core_type=excluded.core_type, mods=excluded.mods,
+        forge_channels=excluded.forge_channels
 """
+
+# 需要确保存在的列（用于旧数据库自动迁移）
+_REQUIRED_COLUMNS = {
+    "core_type": "TEXT",
+    "mods": "TEXT",
+    "forge_channels": "TEXT",
+}
+
+QUERY_COLS = ["ip", "port", "version", "proto", "motd", "is_modded",
+              "players_online", "players_max", "favicon", "auth", "ping_ms",
+              "last_updated", "core_type", "mods", "forge_channels"]
 
 
 def get_conn(db_path: str):
@@ -47,9 +66,18 @@ def get_conn(db_path: str):
     return conn
 
 
+def _migrate(conn):
+    """检查并添加缺失的列（旧数据库自动升级）。"""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(servers)").fetchall()}
+    for col, col_type in _REQUIRED_COLUMNS.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE servers ADD COLUMN {col} {col_type}")
+
+
 def init_db(db_path: str):
     conn = get_conn(db_path)
     conn.execute(SCHEMA)
+    _migrate(conn)
     conn.commit()
     conn.close()
 
@@ -73,6 +101,12 @@ def upsert_many(db_path: str, records: list) -> int:
 
 
 def _record_to_tuple(rec: dict) -> tuple:
+    mods = rec.get("mods")
+    if mods is not None and not isinstance(mods, str):
+        mods = json.dumps(mods, ensure_ascii=False)[:2000]
+    channels = rec.get("forge_channels")
+    if channels is not None and not isinstance(channels, str):
+        channels = json.dumps(channels, ensure_ascii=False)[:2000]
     return (
         rec.get('ip'), rec.get('port'),
         rec.get('version'), rec.get('proto'),
@@ -81,20 +115,33 @@ def _record_to_tuple(rec: dict) -> tuple:
         rec.get('favicon'), rec.get('auth', 'unknown'),
         rec.get('ping_ms'), rec.get('json'),
         datetime.now(timezone.utc).isoformat(),
+        rec.get('core_type', 'unknown'),
+        mods,
+        channels,
     )
 
 
+def _row_to_dict(row, cols):
+    d = dict(zip(cols, row))
+    for key in ("mods", "forge_channels"):
+        val = d.get(key)
+        if val and isinstance(val, str):
+            try:
+                d[key] = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                d[key] = []
+    return d
+
+
 def _escape_like(s: str) -> str:
-    """转义LIKE查询中的通配符 % 和 _"""
     return s.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
 
 
 def query(db_path: str, auth: str = None, modded: int = None,
-          search: str = None, limit: int = 200, offset: int = 0) -> list:
+          core_type: str = None, search: str = None,
+          limit: int = 200, offset: int = 0) -> list:
     conn = get_conn(db_path)
-    cols = ["ip", "port", "version", "proto", "motd", "is_modded",
-            "players_online", "players_max", "favicon", "auth", "ping_ms", "last_updated"]
-    sql = "SELECT " + ", ".join(cols) + " FROM servers"
+    sql = "SELECT " + ", ".join(QUERY_COLS) + " FROM servers"
     conds, args = [], []
     if auth:
         conds.append("auth = ?")
@@ -102,6 +149,9 @@ def query(db_path: str, auth: str = None, modded: int = None,
     if modded is not None:
         conds.append("is_modded = ?")
         args.append(1 if modded else 0)
+    if core_type:
+        conds.append("core_type = ?")
+        args.append(core_type)
     if search:
         conds.append("(motd LIKE ? ESCAPE '\\' OR version LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\')")
         escaped = f"%{_escape_like(search)}%"
@@ -112,10 +162,11 @@ def query(db_path: str, auth: str = None, modded: int = None,
     args += [limit, offset]
     rows = conn.execute(sql, args).fetchall()
     conn.close()
-    return [dict(zip(cols, r)) for r in rows]
+    return [_row_to_dict(r, QUERY_COLS) for r in rows]
 
 
-def count(db_path: str, auth: str = None, modded: int = None, search: str = None) -> int:
+def count(db_path: str, auth: str = None, modded: int = None,
+          core_type: str = None, search: str = None) -> int:
     conn = get_conn(db_path)
     sql = "SELECT COUNT(*) FROM servers"
     conds, args = [], []
@@ -125,6 +176,9 @@ def count(db_path: str, auth: str = None, modded: int = None, search: str = None
     if modded is not None:
         conds.append("is_modded = ?")
         args.append(1 if modded else 0)
+    if core_type:
+        conds.append("core_type = ?")
+        args.append(core_type)
     if search:
         conds.append("(motd LIKE ? ESCAPE '\\' OR version LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\')")
         escaped = f"%{_escape_like(search)}%"
@@ -149,15 +203,21 @@ def stats(db_path: str) -> dict:
             "SELECT version, COUNT(*) FROM servers GROUP BY version ORDER BY COUNT(*) DESC LIMIT 20")}
     except Exception:
         pass
+    by_core = {}
+    try:
+        by_core = {r[0]: r[1] for r in conn.execute(
+            "SELECT core_type, COUNT(*) FROM servers WHERE core_type IS NOT NULL AND core_type != '' GROUP BY core_type ORDER BY COUNT(*) DESC")}
+    except Exception:
+        pass
     conn.close()
     return {
         "total": total,
         "by_auth": by_auth,
         "online_servers": online_servers,
         "by_version": by_version,
+        "by_core": by_core,
     }
 
 
 def default_db_path() -> str:
-    """默认数据库路径：项目目录下的 mcscanner.db"""
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mcscanner.db')

@@ -329,6 +329,67 @@ def cmd_random(args, cfg=None):
             logger.info(f"[*] 结果已保存到 {args.output}")
 
 
+def cmd_fav(args, cfg):
+    """收藏管理：list/add/remove/rescan/tags/import"""
+    from storage import favorites
+    action = args.action
+    if action == "list":
+        tag = getattr(args, 'tag', None)
+        search = getattr(args, 'search', None)
+        favs = favorites.filter_favorites(tag=tag, search=search)
+        if not favs:
+            print("暂无收藏")
+            return
+        print(f"\n收藏列表 ({len(favs)} 个):")
+        print(f"{'地址':<22} {'版本':<20} {'核心':<10} {'玩家':<10} {'标签':<20} {'最后检查'}")
+        print("-" * 90)
+        for f in favs:
+            info = f.get("last_info") or {}
+            state = info.get("state", "unknown")
+            players = f"{info.get('online', 0)}/{info.get('max', 0)}" if state == "up" else state
+            tags = ",".join(f.get("tags", []))[:18]
+            last = f.get("last_check", "-")[:19] if f.get("last_check") else "-"
+            print(f"{f['ip']}:{f['port']:<17} {info.get('version','-'):<20} {info.get('core_type','-'):<10} {players:<10} {tags:<20} {last}")
+    elif action == "add":
+        ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
+        tags = args.tags.split(",") if args.tags else []
+        fav = favorites.add_favorite(ip, int(port), tags=tags, note=args.note or "")
+        print(f"[+] 已收藏: {fav['ip']}:{fav['port']}")
+    elif action == "remove":
+        ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
+        ok = favorites.remove_favorite(ip, int(port))
+        print(f"[{'+' if ok else '!'}] {'已移除' if ok else '未找到'}: {ip}:{port}")
+    elif action == "rescan":
+        if args.target:
+            ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
+            info = favorites.rescan_one(ip, int(port), timeout=args.timeout)
+            if info and info.get("state") == "up":
+                print(f"[+] {ip}:{port} | {info.get('version','?')} | {info.get('online',0)}/{info.get('max',0)}人 | {info.get('core_type','?')}")
+            else:
+                print(f"[-] {ip}:{port} 离线或不可达")
+        else:
+            print(f"[*] 重新探测所有收藏...")
+            def _progress(done, total):
+                print(f"\r[*] 进度: {done}/{total}", end="", flush=True)
+            favs = favorites.rescan_all(timeout=args.timeout, workers=args.workers, progress_callback=_progress)
+            print(f"\n[+] 完成，共 {len(favs)} 个收藏")
+            up = sum(1 for f in favs if (f.get("last_info") or {}).get("state") == "up")
+            print(f"    在线: {up}, 离线: {len(favs) - up}")
+    elif action == "tags":
+        ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
+        tags = args.tags.split(",") if args.tags else []
+        fav = favorites.update_tags(ip, int(port), tags)
+        if fav:
+            print(f"[+] 标签已更新: {fav['tags']}")
+        else:
+            print(f"[!] 未找到收藏: {ip}:{port}")
+    elif action == "import":
+        count = favorites.import_from_file(args.file)
+        print(f"[+] 从 {args.file} 导入 {count} 个收藏")
+    elif action == "tags-list":
+        tags = favorites.get_all_tags()
+        print(f"所有标签 ({len(tags)}): {', '.join(tags) if tags else '无'}")
+
 def main():
     parser = argparse.ArgumentParser(description="MC Scanner v3-3.1 - 综合 Minecraft 服务器扫描器")
     parser.add_argument("-c", "--config", help="配置文件路径")
@@ -443,6 +504,19 @@ def main():
     rnd.add_argument("--probe", action="store_true", help="扫描后自动SLP探测")
     rnd.add_argument("-o", "--output", help="结果输出文件")
     rnd.set_defaults(func=cmd_random)
+    # fav - 收藏管理
+    fav = sub.add_parser("fav", help="收藏管理（list/add/remove/rescan/tags/import）")
+    fav.add_argument("action", choices=["list", "add", "remove", "rescan", "tags", "import", "tags-list"],
+                     help="操作: list=列表, add=添加, remove=移除, rescan=重查, tags=设置标签, import=导入, tags-list=所有标签")
+    fav.add_argument("target", nargs="?", help="目标 host:port（add/remove/rescan/tags 需要）")
+    fav.add_argument("--tags", help="标签，逗号分隔（add/tags）")
+    fav.add_argument("--note", help="备注（add）")
+    fav.add_argument("--tag", help="按标签筛选（list）")
+    fav.add_argument("--search", help="关键词搜索（list）")
+    fav.add_argument("--file", help="导入文件路径（import），每行 ip:port")
+    fav.add_argument("--timeout", type=float, default=5.0, help="重查超时秒数（rescan）")
+    fav.add_argument("--workers", type=int, default=10, help="重查并发数（rescan全部）")
+    fav.set_defaults(func=cmd_fav)
 
     args = parser.parse_args()
     if not getattr(args, "func", None):
