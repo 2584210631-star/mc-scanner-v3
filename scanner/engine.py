@@ -64,15 +64,16 @@ class ScanEngine:
             up = slp_probe(ip, port, self.timeout)
             if up.get("state") == "up":
                 result.update({k: up.get(k) for k in
-                               ("version", "proto", "motd", "ping_ms", "favicon")})
+                               ("version", "proto", "motd", "ping_ms", "favicon",
+                                "core_type", "mods", "forge_channels")})
                 result["players_online"] = up.get("online", 0)
                 result["players_max"] = up.get("max", 0)
                 result["player_list"] = [p.get("name", "") for p in up.get("sample", [])]
-                # 模组服识别：优先用 Forge SLP 响应中的 modinfo 字段，其次按版本名关键词
-                modinfo = (up.get("_raw") or {}).get("modinfo")
-                result["is_modded"] = 1 if (modinfo or _looks_modded(up.get("version", ""))) else 0
-                result["is_plugin"] = 1 if _looks_plugin(up.get("version", "")) else 0
-                result["server_type"] = "modded" if result["is_modded"] else ("plugin" if _looks_plugin(up.get("version", "")) else "vanilla")
+                # 模组服/插件服识别：优先用 core_type，回退到关键词
+                ct = result.get("core_type", "unknown")
+                result["is_modded"] = 1 if ct in ("forge", "fabric", "neoforge", "quilt") else 0
+                result["is_plugin"] = 1 if ct in ("paper", "spigot", "bukkit", "purpur", "catserver", "arclight") else 0
+                result["server_type"] = ct if ct != "unknown" else ("modded" if result["is_modded"] else ("plugin" if result["is_plugin"] else "vanilla"))
                 result["state"] = "up"
                 self._bump("up")
             else:

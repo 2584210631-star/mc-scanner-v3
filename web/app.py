@@ -18,6 +18,7 @@ import config
 import logger
 
 from storage import db
+from storage import favorites
 from scanner.engine import ScanEngine
 from scanner.random_scan import random_scan, parse_port_ranges
 from scanner.targets import parse_targets, count_targets
@@ -414,6 +415,7 @@ def scan_results():
     auth = request.args.get("auth")
     search = request.args.get("search", "")
     modded = request.args.get("modded")
+    core_type = request.args.get("core_type")
     only_online = request.args.get("only_online") == "1"
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 50))
@@ -424,6 +426,8 @@ def scan_results():
         if auth and r.get("auth") != auth:
             continue
         if modded and str(r.get("is_modded", 0)) != modded:
+            continue
+        if core_type and r.get("core_type", "") != core_type:
             continue
         if only_online and r.get("players_online", 0) <= 0:
             continue
@@ -757,6 +761,91 @@ def default_config():
         "ports": [25565],
     })
 
+
+# ===== 收藏管理 API =====
+@app.route('/api/favorites')
+def fav_list():
+    tag = request.args.get("tag")
+    search = request.args.get("search", "")
+    favs = favorites.filter_favorites(tag=tag or None, search=search or None)
+    return jsonify({"total": len(favs), "favorites": favs, "tags": favorites.get_all_tags()})
+
+@app.route('/api/favorites/add', methods=['POST'])
+def fav_add():
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    tags = data.get("tags", [])
+    note = data.get("note", "")
+    info = data.get("info")
+    if not ip:
+        return jsonify({"error": "IP 不能为空"}), 400
+    fav = favorites.add_favorite(ip, port, tags=tags, note=note, info=info)
+    _log(f"收藏添加: {ip}:{port}")
+    return jsonify({"success": True, "favorite": fav})
+
+@app.route('/api/favorites/remove', methods=['POST'])
+def fav_remove():
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    ok = favorites.remove_favorite(ip, port)
+    if ok:
+        _log(f"收藏移除: {ip}:{port}")
+    return jsonify({"success": ok})
+
+@app.route('/api/favorites/tags', methods=['POST'])
+def fav_tags():
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    tags = data.get("tags", [])
+    fav = favorites.update_tags(ip, port, tags)
+    return jsonify({"success": fav is not None, "favorite": fav})
+
+@app.route('/api/favorites/note', methods=['POST'])
+def fav_note():
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    note = data.get("note", "")
+    fav = favorites.update_note(ip, port, note)
+    return jsonify({"success": fav is not None, "favorite": fav})
+
+@app.route('/api/favorites/rescan', methods=['POST'])
+def fav_rescan():
+    data = request.json or {}
+    timeout = float(data.get("timeout", 5.0))
+    workers = int(data.get("workers", 10))
+    def _progress(done, total):
+        _log(f"收藏重查进度: {done}/{total}")
+    favs = favorites.rescan_all(timeout=timeout, workers=workers, progress_callback=_progress)
+    _log(f"收藏重查完成: {len(favs)} 个")
+    return jsonify({"success": True, "total": len(favs), "favorites": favs})
+
+@app.route('/api/favorites/rescan_one', methods=['POST'])
+def fav_rescan_one():
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    info = favorites.rescan_one(ip, port, timeout=float(data.get("timeout", 5.0)))
+    return jsonify({"success": True, "info": info})
+
+@app.route('/api/favorites/import', methods=['POST'])
+def fav_import():
+    if 'file' not in request.files:
+        return jsonify({"error": "请选择文件"}), 400
+    f = request.files['file']
+    tmp_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'fav_import_' + str(int(time.time())) + '.txt')
+    f.save(tmp_path)
+    try:
+        count = favorites.import_from_file(tmp_path)
+        _log(f"收藏导入: {count} 个")
+        return jsonify({"success": True, "count": count})
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
