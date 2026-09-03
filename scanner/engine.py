@@ -68,9 +68,11 @@ class ScanEngine:
                 result["players_online"] = up.get("online", 0)
                 result["players_max"] = up.get("max", 0)
                 result["player_list"] = [p.get("name", "") for p in up.get("sample", [])]
-                result["is_modded"] = 1 if _looks_modded(up.get("version", "")) else 0
+                # 模组服识别：优先用 Forge SLP 响应中的 modinfo 字段，其次按版本名关键词
+                modinfo = (up.get("_raw") or {}).get("modinfo")
+                result["is_modded"] = 1 if (modinfo or _looks_modded(up.get("version", ""))) else 0
                 result["is_plugin"] = 1 if _looks_plugin(up.get("version", "")) else 0
-                result["server_type"] = "modded" if _looks_modded(up.get("version", "")) else ("plugin" if _looks_plugin(up.get("version", "")) else "vanilla")
+                result["server_type"] = "modded" if result["is_modded"] else ("plugin" if _looks_plugin(up.get("version", "")) else "vanilla")
                 result["state"] = "up"
                 self._bump("up")
             else:

@@ -123,18 +123,22 @@ def get_config_packets(proto: int) -> dict | None:
     if proto < 764:
         return None
     from .protocol import (
-        CONFIG_CB_FINISH_CONFIGURATION, CONFIG_CB_KEEP_ALIVE, CONFIG_CB_PING,
+        CONFIG_CB_PLUGIN_MESSAGE, CONFIG_CB_FINISH_CONFIGURATION,
+        CONFIG_CB_KEEP_ALIVE, CONFIG_CB_PING,
         CONFIG_CB_DISCONNECT, CONFIG_CB_KNOWN_PACKS,
-        CONFIG_SB_CLIENT_INFORMATION, CONFIG_SB_FINISH_CONFIGURATION,
+        CONFIG_SB_CLIENT_INFORMATION, CONFIG_SB_PLUGIN_MESSAGE,
+        CONFIG_SB_FINISH_CONFIGURATION,
         CONFIG_SB_KEEP_ALIVE, CONFIG_SB_PONG, CONFIG_SB_KNOWN_PACKS,
     )
     return {
+        "cb_plugin_message": CONFIG_CB_PLUGIN_MESSAGE,
         "cb_finish": CONFIG_CB_FINISH_CONFIGURATION,
         "cb_keep_alive": CONFIG_CB_KEEP_ALIVE,
         "cb_ping": CONFIG_CB_PING,
         "cb_disconnect": CONFIG_CB_DISCONNECT,
         "cb_known_packs": CONFIG_CB_KNOWN_PACKS,
         "sb_client_info": CONFIG_SB_CLIENT_INFORMATION,
+        "sb_plugin_message": CONFIG_SB_PLUGIN_MESSAGE,
         "sb_finish": CONFIG_SB_FINISH_CONFIGURATION,
         "sb_keep_alive": CONFIG_SB_KEEP_ALIVE,
         "sb_pong": CONFIG_SB_PONG,
@@ -146,14 +150,18 @@ def get_login_packets() -> dict:
     """获取 Login 阶段包 ID（全版本通用）"""
     from .protocol import (
         LOGIN_CB_DISCONNECT, LOGIN_CB_ENCRYPTION_REQUEST, LOGIN_CB_LOGIN_SUCCESS,
-        LOGIN_CB_SET_COMPRESSION, LOGIN_SB_LOGIN_START, LOGIN_SB_LOGIN_ACKNOWLEDGED,
+        LOGIN_CB_SET_COMPRESSION, LOGIN_CB_LOGIN_PLUGIN_REQUEST,
+        LOGIN_SB_LOGIN_START, LOGIN_SB_LOGIN_PLUGIN_RESPONSE,
+        LOGIN_SB_LOGIN_ACKNOWLEDGED,
     )
     return {
         "cb_disconnect": LOGIN_CB_DISCONNECT,
         "cb_encryption": LOGIN_CB_ENCRYPTION_REQUEST,
         "cb_success": LOGIN_CB_LOGIN_SUCCESS,
         "cb_compress": LOGIN_CB_SET_COMPRESSION,
+        "cb_plugin_request": LOGIN_CB_LOGIN_PLUGIN_REQUEST,
         "sb_start": LOGIN_SB_LOGIN_START,
+        "sb_plugin_response": LOGIN_SB_LOGIN_PLUGIN_RESPONSE,
         "sb_acknowledged": LOGIN_SB_LOGIN_ACKNOWLEDGED,
     }
 

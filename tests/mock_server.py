@@ -51,6 +51,8 @@ class MockMCServer:
         self.running = False
         self.thread = None
         self.received_messages = []
+        # 配置阶段收到的品牌/插件消息（模组服测试）
+        self.received_brands = []
 
     def start(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -136,6 +138,27 @@ class MockMCServer:
                         elif self.mode == "rejected":
                             self._send_disconnect(conn, "Connection rejected")
                             return
+                        elif self.mode == "forge":
+                            # 模拟 Forge FML2/FML3 登录握手：登录阶段发插件请求，客户端必须回应才放行
+                            try:
+                                username, _ = _read_string(payload, 0)
+                            except Exception:
+                                username = "TestBot"
+                            self._send_packet(conn, 0x04,
+                                              write_varint(1) + write_string("fml:loginwrapper") + b"\x00")
+                            conn.settimeout(3.0)
+                            try:
+                                rlen = read_varint_from_stream(stream)
+                                rdata = stream.read(rlen)
+                                rbuf = io.BytesIO(rdata)
+                                rpid = read_varint_from_stream(rbuf)
+                                if rpid != 0x02:  # 必须收到 LoginPluginResponse
+                                    raise ConnectionError("no plugin response")
+                            except Exception:
+                                return  # 客户端未响应插件消息 → 服务端挂起/断开
+                            conn.settimeout(8.0)
+                            player_uuid = uuid.uuid3(uuid.NAMESPACE_OID, f"OfflinePlayer:{username}")
+                            self._send_packet(conn, 0x02, write_uuid(player_uuid) + write_string(username))
                         else:
                             try:
                                 username, _ = _read_string(payload, 0)
@@ -154,7 +177,17 @@ class MockMCServer:
                             self._send_keep_alive(conn)
 
                 elif state == STATE_CONFIG:
-                    if packet_id == 0x03:  # Finish Configuration (client)
+                    if packet_id == 0x00:  # Client Information
+                        # 模拟服务端询问品牌（vanilla 客户端需回 minecraft:brand）
+                        self._send_packet(conn, 0x01, write_string("minecraft:brand"))
+                    elif packet_id == 0x02:  # Custom Payload（客户端插件消息）
+                        try:
+                            chan, _ = _read_string(payload, 0)
+                            if chan in ("minecraft:brand", "MC|Brand"):
+                                self.received_brands.append(payload)
+                        except Exception:
+                            pass
+                    elif packet_id == 0x03:  # Finish Configuration (client)
                         self._send_packet(conn, 0x03, b"")  # Finish Configuration (server)
                         state = STATE_PLAY
                         self._send_login_play(conn)
