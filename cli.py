@@ -34,7 +34,7 @@ from scanner.targets import parse_port_spec
 from scanner.portscan import get_open_ports
 from scanner.masscan import has_masscan
 from scanner.engine import ScanEngine
-from scanner.random_scan import random_scan, parse_port_ranges
+from scanner.random_scan import random_scan, async_random_scan, parse_port_ranges
 from core.bot import MCBot
 
 
@@ -82,7 +82,7 @@ def cmd_portscan(args, cfg):
         from scanner.async_portscan import scan_ports_async, get_open_ports_async, has_uvloop
         from scanner.targets import parse_targets
         print(f"[*] 异步端口扫描（uvloop: {'启用' if has_uvloop() else '未安装'}）")
-        targets = list(parse_targets(args.targets, exclude_file=args.exclude or cfg['exclude_file']))
+        targets = list(parse_targets(args.targets))
         results = scan_ports_async(
             targets,
             concurrency=args.workers or 1000,
@@ -126,7 +126,7 @@ def cmd_scan(args, cfg):
         from scanner.targets import parse_targets
         print(f"[*] 异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}）")
-        targets = parse_targets(args.targets, exclude_file=args.exclude or cfg['exclude_file'])
+        targets = parse_targets(args.targets)
         engine = AsyncScanEngine(
             db_path=args.db or cfg['db_path'],
             concurrency=args.workers or 1000,
@@ -318,10 +318,15 @@ def cmd_web(args, cfg):
 def cmd_random(args, cfg=None):
     """随机IP随机端口暴力扫描"""
     port_ranges = parse_port_ranges(args.ports)
+    exclude_file = None if args.no_exclude else (args.exclude or "exclude.conf")
     logger.info("[*] 随机暴力扫描模式")
-    logger.info(f"[*] 目标数: {args.count} | 线程: {args.workers} | 超时: {args.timeout}s")
+    mode = "异步高速" if getattr(args, 'async_mode', False) else "线程池"
+    logger.info(f"[*] 目标数: {args.count} | 模式: {mode} | 超时: {args.timeout}s")
     logger.info(f"[*] 端口范围: {args.ports}")
-    logger.info("[*] 排除私有/保留地址，仅扫描公网IP")
+    if exclude_file:
+        logger.info(f"[*] 排除列表: {exclude_file}（含中国IP段，专扫国外）")
+    else:
+        logger.info("[*] 不使用排除列表")
     print()
 
     def progress(done, total, found):
@@ -330,15 +335,32 @@ def cmd_random(args, cfg=None):
 
     import time
     start = time.time()
-    open_ports = random_scan(
-        target_count=args.count,
-        max_workers=args.workers,
-        timeout=args.timeout,
-        port_ranges=port_ranges,
-        progress_callback=progress,
-    )
+    if getattr(args, 'async_mode', False):
+        import asyncio
+        from scanner.async_portscan import has_uvloop
+        if has_uvloop():
+            import uvloop
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        open_ports = asyncio.run(async_random_scan(
+            target_count=args.count,
+            concurrency=max(args.workers, 500),
+            timeout=args.timeout,
+            port_ranges=port_ranges,
+            progress_callback=progress,
+            exclude_file=exclude_file,
+        ))
+    else:
+        open_ports = random_scan(
+            target_count=args.count,
+            max_workers=args.workers,
+            timeout=args.timeout,
+            port_ranges=port_ranges,
+            progress_callback=progress,
+            exclude_file=exclude_file,
+        )
     elapsed = time.time() - start
-    logger.info(f"[*] 扫描完成! 耗时: {elapsed:.1f}s")
+    print()
+    logger.info(f"[*] 扫描完成! 耗时: {elapsed:.1f}s ({args.count/elapsed:.0f} 目标/秒)")
     logger.info(f"[*] 发现 {len(open_ports)} 个开放端口")
     print()
 
@@ -769,6 +791,9 @@ def main():
     rnd.add_argument("-w", "--workers", type=int, default=200, help="线程数 (默认: 200)")
     rnd.add_argument("-t", "--timeout", type=float, default=2.0, help="超时秒数 (默认: 2.0)")
     rnd.add_argument("--probe", action="store_true", help="扫描后自动SLP探测")
+    rnd.add_argument("--async", dest="async_mode", action="store_true", help="异步高速模式（快3-5倍，需uvloop可选）")
+    rnd.add_argument("--exclude", default="exclude.conf", help="排除列表文件（默认: exclude.conf）")
+    rnd.add_argument("--no-exclude", action="store_true", help="不使用排除列表")
     rnd.add_argument("-o", "--output", help="结果输出文件")
     rnd.set_defaults(func=cmd_random)
     # fav - 收藏管理
