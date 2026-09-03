@@ -49,6 +49,7 @@ class BotResult:
     error: str = ""
     messages_sent: int = 0
     authme_used: bool = False
+    modded_channels: set = field(default_factory=set)  # 握手期间发现的插件频道（模组服特征）
 
 
 class MCBot:
@@ -68,6 +69,8 @@ class MCBot:
         self.state = None
         self.stop_event = threading.Event()
         self.play_thread = None
+        # 模组服握手期间观察到的插件频道（Forge/Fabric 等）
+        self.modded_channels = set()
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
@@ -131,6 +134,11 @@ class MCBot:
                         threshold = read_varint_from_stream(BytesStream(resp_payload))
                         self.conn.set_compression(threshold)
                         continue
+                    if resp_id == self.login_packets.get("cb_plugin_request"):
+                        # 模组服（Forge FML2/FML3、Fabric 等）在登录阶段发送插件请求。
+                        # vanilla 客户端对所有未知频道一律回复 declined，服务端 vanilla 验收后放行。
+                        self._handle_login_plugin_request(resp_payload)
+                        continue
                     if resp_id == self.login_packets["cb_success"]:
                         break
 
@@ -160,11 +168,35 @@ class MCBot:
 
         raise ConnectionError(f"所有协议版本尝试失败: {last_error}")
 
+    def _handle_login_plugin_request(self, payload: bytes):
+        """响应登录阶段插件消息（LoginPluginRequest → LoginPluginResponse）。
+
+        模组服（Forge 1.13~1.20.1 的 fml:loginwrapper / fml:login、
+        NeoForge、部分 Fabric）会在登录阶段发送插件请求。
+        vanilla 客户端对未知频道一律回复 declined（successful=false + 空载荷），
+        Forge 的 "Vanilla acceptance test" 通过后即放行；若不回复，服务端会一直等待导致进不去。
+        """
+        from .buffer import read_varint, read_string
+        try:
+            msg_id, off = read_varint(payload, 0)
+            channel, _ = read_string(payload, off)
+        except Exception:
+            channel = ""
+        if channel:
+            self.modded_channels.add(channel)
+        try:
+            # LoginPluginResponse: MessageID(VarInt) + Successful(Boolean=false)
+            self.conn.send_packet(self.login_packets["sb_plugin_response"],
+                                  write_varint(msg_id) + b"\x00")
+        except Exception:
+            pass
+
     def _do_configuration(self):
         """Configuration 阶段：响应式流程，兼容 vanilla / Paper / Spigot"""
         cfg = self.config_packets
         deadline = time.time() + self.timeout * 2
         self._send_client_information()
+        self._send_brand()
         sent_known = False
         sent_finish = False
         first = time.time()
@@ -195,12 +227,44 @@ class MCBot:
                 self.conn.send_packet(cfg["sb_keep_alive"], resp_payload[:8])
             elif resp_id == cfg.get("cb_ping"):
                 self.conn.send_packet(cfg["sb_pong"], resp_payload[:4])
+            elif cfg.get("cb_plugin_message") is not None and resp_id == cfg["cb_plugin_message"]:
+                # 配置阶段插件消息：brand / Fabric 协商 / Forge FML3 握手
+                self._handle_config_plugin_message(resp_payload)
             elif cfg.get("cb_known_packs") is not None and resp_id == cfg["cb_known_packs"]:
                 if cfg.get("sb_known_packs") is not None:
                     self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
                     sent_known = True
 
         self.conn.sock.settimeout(self.timeout)
+
+    def _handle_config_plugin_message(self, payload: bytes):
+        """处理配置阶段插件消息（Custom Payload）。
+
+        - minecraft:brand：回送客户端品牌（vanilla），部分服务端会等待
+        - fabric:negotiate：Fabric 1.20.2+ 配置协商任务，回同频道空载荷（尽力而为）
+        - fml:handshake / fml:play 等：vanilla 客户端直接忽略，Forge vanilla 验收放行
+        """
+        cfg = self.config_packets
+        from .buffer import read_string
+        try:
+            channel, off = read_string(payload, 0)
+        except Exception:
+            channel = ""
+        self.modded_channels.add(channel)
+        if channel in ("minecraft:brand", "MC|Brand"):
+            try:
+                self.conn.send_packet(cfg["sb_plugin_message"],
+                                      write_string("minecraft:brand") + write_string("vanilla"))
+            except Exception:
+                pass
+        elif channel == "fabric:negotiate":
+            # Fabric 配置协商：回复同频道空数据，表示“无 Fabric 模组”，多数服放行
+            try:
+                self.conn.send_packet(cfg["sb_plugin_message"],
+                                      write_string("fabric:negotiate") + b"")
+            except Exception:
+                pass
+        # fml:handshake 等其余频道保持静默（与 vanilla 客户端行为一致）
     def _send_client_information(self):
         """发送 Client Information 包（configuration 阶段）"""
         cfg = self.config_packets
@@ -216,6 +280,17 @@ class MCBot:
         if proto >= 769:
             payload += write_varint(0)  # particleStatus (1.21.4+)
         self.conn.send_packet(cfg["sb_client_info"], payload)
+
+    def _send_brand(self):
+        """发送客户端品牌（vanilla）。部分服务端（模组服/反作弊）会等待品牌包。"""
+        cfg = self.config_packets
+        if not cfg or cfg.get("sb_plugin_message") is None:
+            return
+        try:
+            self.conn.send_packet(cfg["sb_plugin_message"],
+                                  write_string("minecraft:brand") + write_string("vanilla"))
+        except Exception:
+            pass
 
     def send_chat(self, message: str):
         """发送聊天消息（自动适配版本格式）"""
@@ -375,6 +450,7 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
         result.auth_mode = "offline"
         result.protocol_version = bot.protocol_version
         result.version_name = get_version_name(bot.protocol_version)
+        result.modded_channels = set(bot.modded_channels)
 
         # AuthMe 自动注册/登录
         if authme_password:
