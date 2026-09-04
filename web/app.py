@@ -697,7 +697,7 @@ def bot_command():
     username = data.get("username", "SecurityBot")
     command = data.get("command", "")
     authme_password = data.get("authme_password")
-    hold = float(data.get("hold", 3.0))
+    hold = float(data.get("hold", 6.0))
     if not ip or not command:
         return jsonify({"error": "IP 和命令不能为空"}), 400
     try:
@@ -707,11 +707,16 @@ def bot_command():
             bot.authme_login(authme_password, register=False)
             time.sleep(1.0)
         bot.send_command(command)
+        time.sleep(1.5)  # 等服务器处理命令
         bot.keep_alive(hold)
         auth_mode = getattr(bot, 'auth_mode', 'unknown')
+        state = getattr(bot, 'state', 'unknown')
+        # 收集收到的聊天消息作为命令响应
+        chat_log = getattr(bot, 'chat_log', [])
         bot.close()
         cmd = command if command.startswith('/') else '/' + command
-        return jsonify({"success": True, "command": cmd, "auth_mode": auth_mode})
+        return jsonify({"success": True, "command": cmd, "auth_mode": auth_mode,
+                        "state": state, "hold": hold, "chat": chat_log[-5:]})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
