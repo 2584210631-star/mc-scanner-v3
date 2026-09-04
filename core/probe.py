@@ -404,6 +404,88 @@ def fingerprint_server(raw: dict, proto: int = 0) -> dict:
     }
 
 
+def active_fingerprint(host: str, port: int, proto: int, timeout: float = 4.0) -> dict:
+    """主动协议指纹（参考 matscan active fingerprinting）。
+    发送 malformed login 请求（用户名长度0+额外数据），根据服务器返回的
+    错误消息中的包名识别服务端软件。
+    返回: {software, raw_error, confidence}
+    """
+    import re
+    result = {"software": "unknown", "raw_error": "", "confidence": 0}
+
+    try:
+        with MCConnection(host, port, timeout) as conn:
+            # Handshake: next_state=2 (login)
+            conn.handshake(protocol=proto, next_state=PROTO_STATE_LOGIN)
+
+            # Malformed Login Start: 用户名长度=0 + UUID全零 + 额外字节
+            login_pkts = get_login_packets()
+            pid = login_pkts["sb_start"]
+            payload = write_string("")  # 用户名长度0
+            if proto >= 764:  # 1.20.2+ 带 UUID
+                payload += write_uuid(offline_uuid(""))
+            payload += b"\x00"  # 额外数据，触发错误
+
+            conn.send_packet(pid, payload)
+
+            # 读取 disconnect 响应
+            try:
+                resp_id, resp_payload = _recv_login_response(conn, login_pkts)
+            except Exception:
+                return result
+
+            if resp_id != login_pkts.get("cb_disconnect", 0x00):
+                return result
+
+            msg, _ = read_string(resp_payload, 0)
+            result["raw_error"] = msg[:200]
+
+            # matscan 正则: java.io.IOException: Packet N/N (PacketName)
+            m = re.search(r"java\.io\.IOException: Packet (?:\d+|login)/\d+ \(([^)]+)\)", msg)
+            if m:
+                packet_name = m.group(1)
+                if packet_name == "PacketLoginInStart":
+                    result["software"] = "paper"
+                    result["confidence"] = 90
+                elif packet_name == "ServerboundHelloPacket":
+                    result["software"] = "forge"
+                    result["confidence"] = 90
+                elif packet_name.startswith("class_"):
+                    result["software"] = "fabric"
+                    result["confidence"] = 85
+                elif 2 <= len(packet_name) <= 3:
+                    result["software"] = "vanilla"
+                    result["confidence"] = 80
+                else:
+                    result["software"] = "unknown"
+                    result["confidence"] = 20
+            elif "Forge" in msg or "FML" in msg or "forge" in msg.lower():
+                result["software"] = "forge"
+                result["confidence"] = 85
+            elif "Paper" in msg:
+                result["software"] = "paper"
+                result["confidence"] = 80
+            elif "Velocity" in msg or "Bungee" in msg or "bungeecord" in msg.lower():
+                result["software"] = "proxy"
+                result["confidence"] = 75
+            elif "netty" in msg.lower() and ("DecoderException" in msg or "CodecException" in msg):
+                # Bukkit 系(Paper/Spigot/Purpur)用 netty，错误格式为 DecoderException
+                result["software"] = "bukkit_based"
+                result["confidence"] = 60
+            elif "IOException" in msg and "Packet" in msg:
+                # Vanilla 风格错误但包名提取失败
+                result["software"] = "vanilla_like"
+                result["confidence"] = 40
+            elif not msg.strip():
+                result["software"] = "empty_response"
+                result["confidence"] = 30
+
+    except Exception:
+        pass
+
+    return result
+
+
 def _is_offline_err(e: str) -> bool:
     s = str(e).lower()
     return "timed out" in s or "timeout" in s or "refused" in s or "unreachable" in s
