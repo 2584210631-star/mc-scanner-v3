@@ -205,10 +205,11 @@ class AsyncScanEngine:
             list(targets),
             concurrency=scan_concurrency,
             timeout=scan_timeout,
+            stop_event=self.stop_event,
         )
         open_ports = get_open_ports_async(port_results)
         print(f"[*] 发现 {len(open_ports)} 个开放端口")
-        if not open_ports:
+        if not open_ports or (self.stop_event and self.stop_event.is_set()):
             return []
         # 阶段2: 对开放端口做SLP+认证探测
         print(f"[*] 阶段2: SLP探测 + 认证检测...")
