@@ -68,6 +68,19 @@ def _get_web_token():
     return config.get("web_token", "") or ""
 
 
+def _safe_db_path(path: str) -> str:
+    """校验数据库路径，防止路径遍历攻击。只允许当前目录下的 .db 文件。"""
+    if not path:
+        return "mcscanner.db"
+    # 禁止路径遍历
+    if ".." in path or path.startswith("/") or (len(path) >= 2 and path[1] == ":"):
+        return "mcscanner.db"
+    # 只允许 .db 后缀
+    if not path.endswith(".db"):
+        return "mcscanner.db"
+    return path
+
+
 @app.before_request
 def _check_token():
     """API请求token认证（首页和静态文件除外）。"""
@@ -748,7 +761,7 @@ def masscan_status():
 
 @app.route('/api/db/query')
 def db_query():
-    db_path = request.args.get("db_path", "mcscanner.db")
+    db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
     auth = request.args.get("auth")
     modded = request.args.get("modded")
     search = request.args.get("search")
@@ -764,7 +777,7 @@ def db_query():
 
 @app.route('/api/db/stats')
 def db_stats():
-    db_path = request.args.get("db_path", "mcscanner.db")
+    db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
     if not os.path.exists(db_path):
         return jsonify({"total": 0, "by_auth": {}, "online_servers": 0, "by_version": {}})
     return jsonify(db.stats(db_path))

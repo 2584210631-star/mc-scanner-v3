@@ -11,10 +11,22 @@ from typing import Optional, AsyncIterator
 
 try:
     import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     _HAS_UVLOOP = True
 except ImportError:
     _HAS_UVLOOP = False
+
+_uvloop_installed = False
+
+
+def _install_uvloop():
+    """惰性安装 uvloop，只在首次使用异步扫描时设置，避免模块导入时全局副作用"""
+    global _uvloop_installed
+    if _HAS_UVLOOP and not _uvloop_installed:
+        try:
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        except Exception:
+            pass
+        _uvloop_installed = True
 
 
 @dataclass
@@ -123,6 +135,8 @@ def scan_ports_async(targets, concurrency: int = 1000, timeout: float = 3.0,
     target_list = list(targets)
     if not target_list:
         return []
+
+    _install_uvloop()
 
     async def _run():
         return await _scan_async(iter(target_list), concurrency, timeout,
