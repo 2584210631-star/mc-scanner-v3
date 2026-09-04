@@ -70,7 +70,9 @@ class MCBot:
         self.state = None
         self.stop_event = threading.Event()
         self.play_thread = None
+        self.connected = False  # 是否仍处于 play 阶段（观察者依赖此判断掉线）
         self.player_list = {}  # uuid -> name
+        self.player_callback = None  # callable(name: str, action: str) -> None  action: join/leave
         # 模组服握手期间观察到的插件频道（Forge/Fabric 等）
         self.modded_channels = set()
         # 聊天消息监听（用于插件抓取等）
@@ -164,6 +166,7 @@ class MCBot:
                 self.stop_event.clear()
                 self.play_thread = threading.Thread(target=self._handle_play_packets, daemon=True)
                 self.play_thread.start()
+                self.connected = True
                 return True
 
             except Exception as e:
@@ -363,74 +366,128 @@ class MCBot:
             self.conn = None
 
     def _handle_play_packets(self):
-        """后台线程：处理 Play 阶段 incoming 包（Keep Alive / Teleport / Ping / Disconnect）"""
+        """后台线程：处理 Play 阶段 incoming 包（Keep Alive / Teleport / Ping / Disconnect）。
+        观察者依赖本循环维护：聊天抓取(chat_callback)、玩家进出(player_callback)、连接状态(connected)。"""
         pkts = self.play_packets
-        while not self.stop_event.is_set():
-            try:
-                packet_id, data = self.conn.recv_packet(timeout=1.0)
-            except socket.timeout:
-                continue
-            except Exception:
-                break
-
-            if packet_id == pkts["cb_keep_alive"]:
-                if len(data) >= 8:
-                    try:
-                        self.conn.send_packet(pkts["sb_keep_alive"], data[:8])
-                    except Exception:
-                        break
-            elif packet_id == pkts.get("cb_teleport"):
+        try:
+            while not self.stop_event.is_set():
                 try:
-                    teleport_id = read_varint_from_stream(BytesStream(data))
-                    self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
+                    packet_id, data = self.conn.recv_packet(timeout=1.0)
+                except socket.timeout:
+                    continue
                 except Exception:
-                    pass
-            elif packet_id == pkts.get("cb_ping"):
-                if len(data) >= 4:
-                    try:
-                        self.conn.send_packet(pkts["sb_pong"], data[:4])
-                    except Exception:
-                        break
-            elif packet_id == pkts.get("cb_disconnect"):
-                break
-            elif packet_id == pkts.get("cb_player_info") or packet_id == (pkts.get("cb_player_info", 0) + 1):
-                # Player Info Update — 解析玩家列表
-                try:
-                    stream = BytesStream(data)
-                    actions = read_varint(stream)
-                    count = read_varint(stream)
-                    for _ in range(count):
+                    break
+
+                if packet_id == pkts["cb_keep_alive"]:
+                    if len(data) >= 8:
                         try:
-                            uid = str(read_uuid(stream))
-                            if actions & 0x01:  # ADD_PLAYER
-                                name = read_string_from_stream(stream)
-                                self.player_list[uid] = name
-                                props = read_varint_from_stream(stream)
-                                for _ in range(props):
-                                    read_string_from_stream(stream); read_string_from_stream(stream)
-                                    if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                            if actions & 0x02: read_varint_from_stream(stream)  # gamemode
-                            if actions & 0x04: read_varint_from_stream(stream)  # ping
-                            if actions & 0x08:
-                                if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
+                            self.conn.send_packet(pkts["sb_keep_alive"], data[:8])
                         except Exception:
                             break
-                except Exception:
-                    pass
-            elif packet_id == pkts.get("cb_chat_message") or packet_id == pkts.get("cb_system_chat"):
-                # 聊天消息 — 提取文本用于插件抓取/命令响应
-                try:
-                    text = self._extract_chat_text(data, packet_id == pkts.get("cb_system_chat"))
-                    if text:
-                        with self._chat_lock:
-                            self.chat_messages.append(text)
-                        if self.chat_callback:
+                elif packet_id == pkts.get("cb_teleport"):
+                    try:
+                        teleport_id = read_varint_from_stream(BytesStream(data))
+                        self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
+                    except Exception:
+                        pass
+                elif packet_id == pkts.get("cb_ping"):
+                    if len(data) >= 4:
+                        try:
+                            self.conn.send_packet(pkts["sb_pong"], data[:4])
+                        except Exception:
+                            break
+                elif packet_id == pkts.get("cb_disconnect"):
+                    break
+                elif packet_id == pkts.get("cb_player_info"):
+                    # Player Info Update — 解析玩家列表
+                    try:
+                        stream = BytesStream(data)
+                        actions = read_varint_from_stream(stream)
+                        count = read_varint_from_stream(stream)
+                        for _ in range(count):
                             try:
-                                self.chat_callback(text)
+                                uid = str(read_uuid_from_stream(stream))
+                                if actions & 0x01:  # ADD_PLAYER
+                                    name = read_string_from_stream(stream)
+                                    is_new = uid not in self.player_list
+                                    self.player_list[uid] = name
+                                    props = read_varint_from_stream(stream)
+                                    for _ in range(props):
+                                        read_string_from_stream(stream); read_string_from_stream(stream)
+                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                                    if is_new and self.player_callback:
+                                        try:
+                                            self.player_callback(name, "join")
+                                        except Exception:
+                                            pass
+                                if self.protocol_version >= 761:
+                                    # 1.19.3+ 动作位：add(0x01) init_chat(0x02) gamemode(0x04)
+                                    # listed(0x08) latency(0x10) display(0x20)；移除走独立 cb_player_remove 包
+                                    if actions & 0x02:  # initialize_chat — chat session
+                                        if read_boolean_from_stream(stream):
+                                            stream.read(16)  # uuid
+                                            stream.read(8)   # expireTime
+                                            klen = read_varint_from_stream(stream)
+                                            stream.read(klen)
+                                    if actions & 0x04: read_varint_from_stream(stream)  # update_game_mode
+                                    if actions & 0x08: read_varint_from_stream(stream)  # update_listed
+                                    if actions & 0x10: read_varint_from_stream(stream)  # update_latency
+                                    if actions & 0x20:
+                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
+                                else:
+                                    # 旧版(<761, 1.19.2前) 动作位：add(0x01) gamemode(0x02)
+                                    # latency(0x04) display(0x08) remove(0x10)
+                                    if actions & 0x02: read_varint_from_stream(stream)  # gamemode
+                                    if actions & 0x04: read_varint_from_stream(stream)  # latency
+                                    if actions & 0x08:
+                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
+                                    if actions & 0x10:  # REMOVE_PLAYER
+                                        old = self.player_list.pop(uid, None)
+                                        if old is not None and self.player_callback:
+                                            try:
+                                                self.player_callback(old, "leave")
+                                            except Exception:
+                                                pass
                             except Exception:
-                                pass
-                except Exception:
-                    pass
+                                break
+                    except Exception:
+                        pass
+                elif packet_id == pkts.get("cb_player_remove"):
+                    # 1.19.3+ 独立玩家移除包：UUID 数组
+                    try:
+                        stream = BytesStream(data)
+                        count = read_varint_from_stream(stream)
+                        for _ in range(count):
+                            try:
+                                uid = str(read_uuid_from_stream(stream))
+                                old = self.player_list.pop(uid, None)
+                                if old is not None and self.player_callback:
+                                    try:
+                                        self.player_callback(old, "leave")
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                break
+                    except Exception:
+                        pass
+                elif packet_id == pkts.get("cb_chat_message") or packet_id == pkts.get("cb_system_chat") or packet_id == pkts.get("cb_profileless_chat"):
+                    # 聊天消息 — 提取文本用于插件抓取/命令响应
+                    try:
+                        is_system = (packet_id == pkts.get("cb_system_chat")) or (packet_id == pkts.get("cb_profileless_chat"))
+                        text = self._extract_chat_text(data, is_system)
+                        if text:
+                            with self._chat_lock:
+                                self.chat_messages.append(text)
+                            if self.chat_callback:
+                                try:
+                                    self.chat_callback(text)
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+        finally:
+            # 循环退出（掉线/被断开/停止）即视为连接结束，观察者据此判断
+            self.connected = False
 
     def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
         """从聊天包 payload 中提取纯文本（简化版，尽力解析 JSON 组件）"""
@@ -438,11 +495,29 @@ class MCBot:
         try:
             stream = BytesStream(data)
             if is_system:
-                # System Chat: JSON String + VarInt(type)
+                # System Chat: 1.20.5+ 内容为 network NBT 聊天组件；
+                # 旧版本为 JSON String + VarInt(type)
+                if self.protocol_version >= 766:
+                    # 用 NBT 解析（content 为匿名 NBT 文本组件）
+                    try:
+                        txt = self._nbt_component_to_text(stream)
+                        if txt:
+                            return txt
+                    except Exception:
+                        pass
                 json_str = read_string_from_stream(stream)
-            else:
-                # Player Chat: UUID(16) + nickname(JSON String) + timestamp(8) + salt(8)
+            elif self.protocol_version >= 761:
+                # Player Chat (1.19.3+): senderUuid(16) + index(VarInt)
                 # + has_signature(Boolean) + signature(256 if true) + message(JSON String) + ...
+                stream.read(16)  # senderUuid
+                read_varint_from_stream(stream)  # index
+                if read_boolean_from_stream(stream):  # signature option
+                    stream.read(256)  # signature
+                json_str = read_string_from_stream(stream)  # plainMessage
+            else:
+                # Player Chat (旧版 1.19.2 前): UUID(16) + nickname(JSON String)
+                # + timestamp(8) + salt(8) + has_signature(Boolean)
+                # + signature(256 if true) + message(JSON String) + ...
                 stream.read(16)  # UUID
                 read_string_from_stream(stream)  # nickname
                 stream.read(8)  # timestamp
@@ -480,6 +555,119 @@ class MCBot:
         if isinstance(obj, list):
             return "".join(MCBot._json_component_to_text(e) for e in obj)
         return str(obj) if obj else ""
+
+    # ---- 1.20.5+ system chat 使用 network NBT 编码的聊天组件 ----
+    @staticmethod
+    def _nbt_read_string(stream) -> str:
+        """network NBT 字符串：2 字节大端长度 + UTF-8"""
+        raw = stream.read(2)
+        if len(raw) < 2:
+            return ""
+        slen = int.from_bytes(raw, "big")
+        return stream.read(slen).decode("utf-8", "ignore")
+
+    @staticmethod
+    def _nbt_skip_value(stream, tag: int):
+        """跳过未知 NBT 值"""
+        if tag == 0x01:  # byte
+            stream.read(1)
+        elif tag == 0x02:  # short
+            stream.read(2)
+        elif tag in (0x03, 0x05, 0x06):  # int / float / double
+            stream.read(4) if tag in (0x03, 0x05) else stream.read(8)
+        elif tag == 0x04:  # long
+            stream.read(8)
+        elif tag == 0x07:  # byte array
+            stream.read(int.from_bytes(stream.read(4), "big"))
+        elif tag == 0x08:  # string
+            MCBot._nbt_read_string(stream)
+        elif tag == 0x09:  # list
+            elem = stream.read(1)
+            if not elem:
+                return
+            count = int.from_bytes(stream.read(4), "big")
+            for _ in range(count):
+                MCBot._nbt_skip_value(stream, elem[0])
+        elif tag == 0x0a:  # compound
+            MCBot._nbt_compound_to_text(stream)
+        elif tag == 0x0b:  # int array
+            stream.read(4 * int.from_bytes(stream.read(4), "big"))
+        elif tag == 0x0c:  # long array
+            stream.read(8 * int.from_bytes(stream.read(4), "big"))
+
+    @staticmethod
+    def _nbt_compound_to_text(stream) -> str:
+        """解析 network NBT 聊天组件（TAG_Compound），提取可读文本"""
+        text_val = ""
+        translate_key = ""
+        with_parts = []
+        extra_parts = []
+        while True:
+            raw = stream.read(1)
+            if not raw:
+                break
+            tag = raw[0]
+            if tag == 0x00:  # TAG_End
+                break
+            name = MCBot._nbt_read_string(stream)
+            if tag == 0x08:  # TAG_String
+                val = MCBot._nbt_read_string(stream)
+                if name == "text":
+                    text_val = val
+                elif name == "translate":
+                    translate_key = val
+            elif tag == 0x09:  # TAG_List（with / extra）
+                elem_type_raw = stream.read(1)
+                if not elem_type_raw:
+                    break
+                elem_type = elem_type_raw[0]
+                count = int.from_bytes(stream.read(4), "big")
+                items = []
+                for _ in range(count):
+                    if elem_type == 0x0a:
+                        items.append(MCBot._nbt_compound_to_text(stream))
+                    elif elem_type == 0x08:
+                        items.append(MCBot._nbt_read_string(stream))
+                    else:
+                        MCBot._nbt_skip_value(stream, elem_type)
+                if name == "with":
+                    with_parts = items
+                elif name == "extra":
+                    extra_parts = items
+            elif tag == 0x0a:  # 嵌套 compound（hoverEvent 等，跳过）
+                MCBot._nbt_compound_to_text(stream)
+            else:
+                MCBot._nbt_skip_value(stream, tag)
+        # translate 常见键的友好翻译
+        _TRANSLATE = {
+            "multiplayer.player.joined": "加入了游戏",
+            "multiplayer.player.left": "离开了游戏",
+            "multiplayer.player.list": "玩家列表",
+            "chat.type.text": "",
+        }
+        if translate_key:
+            prefix = "".join(with_parts)
+            friendly = _TRANSLATE.get(translate_key)
+            if friendly is not None:
+                return prefix + (" " + friendly if friendly else "")
+            return prefix + " " + translate_key
+        return text_val + "".join(extra_parts)
+
+    @staticmethod
+    def _nbt_component_to_text(stream) -> str:
+        """解析 network NBT 聊天组件（根节点可能为 Compound 或 String）"""
+        raw = stream.read(1)
+        if not raw:
+            return ""
+        tag = raw[0]
+        if tag == 0x0a:  # TAG_Compound
+            return MCBot._nbt_compound_to_text(stream)
+        if tag == 0x08:  # TAG_String（纯文本组件）
+            return MCBot._nbt_read_string(stream)
+        if tag == 0x00:  # TAG_End
+            return ""
+        MCBot._nbt_skip_value(stream, tag)
+        return ""
 
     # ---- 各版本聊天消息格式 ----
     def _send_chat_new(self, message: str, chat_id: int):
