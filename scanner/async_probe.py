@@ -8,10 +8,14 @@
 import asyncio
 import json
 import time
+import concurrent.futures
 
 from core.buffer import write_varint, read_varint
 from core.protocol import COMMON_PROTOCOLS
 from core.probe import detect_core_type, extract_mods, extract_forge_channels, _motd_text
+
+# 全局认证检测线程池（避免每次调用创建/销毁）
+_AUTH_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=100, thread_name_prefix="auth-probe")
 
 try:
     import simdjson
@@ -218,17 +222,15 @@ async def async_auth_probe(ip: str, port: int, proto: int = 0,
     异步认证模式检测（简化版，实际登录握手）。
     返回 state: online/cracked/whitelist/rejected/offline/error
     """
-    import concurrent.futures
     from core.probe import auth_probe
 
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        result = await loop.run_in_executor(
-            ex, lambda: auth_probe(ip, port, reported_proto=proto, timeout=timeout))
-        # 统一返回格式：auth_mode 字段兼容旧代码
-        if isinstance(result, dict) and 'state' in result and 'auth_mode' not in result:
-            result['auth_mode'] = result['state']
-        return result
+    result = await loop.run_in_executor(
+        _AUTH_EXECUTOR, lambda: auth_probe(ip, port, reported_proto=proto, timeout=timeout))
+    # 统一返回格式：auth_mode 字段兼容旧代码
+    if isinstance(result, dict) and 'state' in result and 'auth_mode' not in result:
+        result['auth_mode'] = result['state']
+    return result
 
 
 def has_simdjson() -> bool:

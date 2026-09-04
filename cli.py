@@ -664,7 +664,7 @@ def cmd_commands(args, cfg):
         script.add("/help")
     print(f"[*] 登录 {host}:{port} 作为 {username}，执行 {len(script.commands)} 条命令...")
     try:
-        results = run_commands_on_server(host, port, username, script,
+        results = run_commands_on_server(host, port, username, script.commands,
                                           timeout=args.timeout or 15.0,
                                           authme_password=args.authme)
         print(f"\n[+] 执行完成:")

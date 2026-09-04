@@ -245,15 +245,26 @@ class ScanEngine:
                     print(f"[*] 警告进度: {done}/{len(offline_servers)} "
                           f"(已发送 {self.counters['messages_sent']} 条消息)")
 
-        # 更新数据库
+        # 更新数据库（从scan_results补充完整字段，避免UPSERT覆盖丢失）
+        scan_map = {(r["ip"], r["port"]): r for r in scan_results}
         records = []
         for r in warn_results:
+            base = scan_map.get((r.ip, r.port), {})
             records.append({
                 "ip": r.ip, "port": r.port,
-                "version": r.version_name, "proto": r.protocol_version,
-                "motd": r.motd[:200], "is_modded": 0,
-                "players_online": r.players_online, "players_max": r.players_max,
-                "auth": r.auth_mode, "ping_ms": None,
+                "version": r.version_name or base.get("version", ""),
+                "proto": r.protocol_version or base.get("proto", 0),
+                "motd": (r.motd or base.get("motd", ""))[:200],
+                "is_modded": base.get("is_modded", 0),
+                "favicon": base.get("favicon", ""),
+                "core_type": base.get("core_type", "unknown"),
+                "mods": json.dumps(base.get("mods", []), ensure_ascii=False),
+                "forge_channels": json.dumps(base.get("forge_channels", []), ensure_ascii=False),
+                "fingerprint": json.dumps(base.get("fingerprint", {}), ensure_ascii=False),
+                "players_online": r.players_online,
+                "players_max": r.players_max,
+                "auth": r.auth_mode,
+                "ping_ms": base.get("ping_ms"),
                 "json": json.dumps({"messages_sent": r.messages_sent,
                                      "authme_used": r.authme_used,
                                      "error": r.error}, ensure_ascii=False)[:2000],
