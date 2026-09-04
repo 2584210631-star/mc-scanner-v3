@@ -1,9 +1,9 @@
 <div align="center">
 
-# 🛡️ MC Scanner v3.2.1
+# 🛡️ MC Scanner v3.3.2
 ### Minecraft 服务器扫描与安全提醒机器人 · 超越版
 
-**自研协议栈 · 全版本支持 · Web 控制面板 · 多机器人警告 · 自动离线检测 · 收藏管理 · 智能重扫 · 分布式分片 · 玩家历史 · 服务器指纹**
+**自研协议栈 · 全版本支持 · Web 控制面板 · 多机器人警告 · 自动离线检测 · 收藏管理 · 智能重扫 · 分布式分片 · 玩家历史 · 协议指纹识别**
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -16,11 +16,13 @@
 
 ## 📖 简介
 
-MC Scanner v3.2.1 是在 mc-scanner V1 和 V2 基础上整合优化的超越版，v3.2 系列新增收藏管理、核心类型细分、智能重扫、分布式分片、玩家历史追踪、服务器指纹识别等能力。
+MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版，v3.2 系列新增收藏管理、核心类型细分、智能重扫、分布式分片、玩家历史追踪；v3.3 系列新增协议被动指纹识别（参考 matscan）、异步高速扫描、RCON/命令执行、代理服支持。
 
 **设计理念：** 保留 V1 的全部功能（自动警告、AuthMe、完整 Web 面板、配置文件），套用 V2 的模块化分层架构，持续吸收增强点（SLP 容错、masscan auto-import、完善测试体系、合规声明）。
 
-**v3.2 新增：** 收藏管理系统、12 种核心类型识别、模组列表提取、智能重扫队列、分布式任务分片、玩家历史追踪、服务器指纹匹配、Discord 通知、扫描去重
+**v3.2 新增：** 收藏管理系统、12 种核心类型识别、模组列表提取、智能重扫队列、分布式任务分片、玩家历史追踪、Discord 通知、扫描去重
+
+**v3.3 新增：** 协议被动指纹识别（JSON字段顺序/空sample/空favicon推断服务端软件）、异步高速扫描模式（uvloop+pysimdjson，快5-10倍）、RCON远程命令执行、代理服(BungeeCord/Velocity)兼容、多机器人并发警告优化
 
 ---
 
@@ -35,7 +37,7 @@ MC Scanner v3.2.1 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 🔄 **协议多级回退** — 未知协议号自动尝试常见协议号，兼容性更强
 - 🏷️ **12 种核心类型识别** — vanilla/paper/spigot/bukkit/purpur/forge/fabric/neoforge/quilt/catserver/arclight/unknown
 - 🧩 **模组列表提取** — 老版本 Forge 自动提取 modinfo.mods，新版本提取 forgeData.channels
-- 👆 **服务器指纹识别** — 基于 MOTD/版本/插件特征匹配已知服务端类型
+- 👆 **协议被动指纹识别**（v3.3 新增，参考 matscan）— 基于 SLP JSON 字段顺序、空 sample、空 favicon 等特征推断服务端软件（vanilla/paper/spigot/forge/fabric/neoforge/velocity/bungeecord/folia），带置信度评分
 
 ### 收藏管理（v3.2 新增）
 - ⭐ **一键收藏** — 结果页点击 ☆ 收藏服务器
@@ -68,6 +70,14 @@ MC Scanner v3.2.1 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 🚫 **结果去重** — 自动合并重复 IP:Port 结果
 - 🔁 **重扫执行器** — 独立的 rescanner 模块处理重扫任务
 
+### 协议被动指纹（v3.3 新增，参考 matscan）
+- 🔍 **JSON 字段顺序检测** — vanilla 1.19.4+ 固定顺序为 version→description→players，顺序异常即可判定非 vanilla
+- 📭 **空 sample 检测** — 零玩家在线时不应返回 sample 字段，返回了说明是非 vanilla 实现
+- 🖼️ **空 favicon 检测** — favicon 为空字符串的弱特征
+- 🎯 **软件推断** — 综合多特征推断 vanilla/paper/spigot/purpur/forge/fabric/neoforge/velocity/bungeecord/folia
+- 📊 **置信度评分** — 0-100%，字段顺序异常+30%，版本名匹配+40%，Forge数据+90%
+- 🌐 **Web 展示** — 结果表格新增指纹列，hover 显示字段顺序详情
+
 ### 全版本兼容
 - 📦 支持 **Minecraft 1.12.2 ~ 最新版本**（协议 340+）
 - 📝 5 种聊天消息格式自动适配（1.12 ~ 1.21.11+）
@@ -78,6 +88,7 @@ MC Scanner v3.2.1 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 📊 实时进度条 + 实时日志输出
 - 🔎 结果筛选（认证模式/模组/核心类型/有人在线）+ 关键词搜索
 - 📈 版本分布柱状图
+- 🧬 **协议指纹列** — 显示推断服务端软件+置信度，hover 查看字段顺序
 - 💾 一键导出 JSON / CSV
 - 🕐 历史记录（最近 20 次任务）
 - ⚙️ 配置自动保存到浏览器 localStorage
@@ -97,7 +108,7 @@ MC Scanner v3.2.1 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 🎲 **随机暴力扫描** — 随机 IP + 随机端口，BGP 分布加权
 
 ### 数据存储
-- 🗄️ **SQLite 持久化** — 16 字段（含 favicon/core_type/mods/forge_channels），UPSERT 去重更新
+- 🗄️ **SQLite 持久化** — 17 字段（含 favicon/core_type/mods/forge_channels/fingerprint），UPSERT 去重更新，旧数据库自动迁移
 - 🔍 **query 命令** — 命令行查询数据库，按认证/模组/核心类型/关键词过滤
 - 📊 统计信息：总数/各认证模式分布/有人在线数/版本分布/核心类型分布
 - 👤 **玩家历史库** — 独立的 player_history 表追踪玩家出现记录
@@ -252,7 +263,7 @@ mc-scanner-v3/
 │   ├── conn.py             # MCConnection 连接类
 │   ├── protocol.py         # 协议常量与版本映射
 │   ├── packets.py          # 多版本包 ID 表管理
-│   ├── probe.py            # SLP 探测 + 认证检测 + 核心类型识别
+│   ├── probe.py            # SLP 探测 + 认证检测 + 核心类型识别 + 协议被动指纹（v3.3）
 │   ├── bot.py              # 机器人核心（登录+发消息+AuthMe）
 │   └── fingerprint.py      # 服务器指纹识别（v3.2.1 新增）
 ├── scanner/                # 扫描引擎层
@@ -271,7 +282,7 @@ mc-scanner-v3/
 │   ├── scan_service.py     # 扫描服务
 │   └── warn_service.py     # 警告服务
 ├── storage/
-│   ├── db.py               # SQLite 存储层（16字段）
+│   ├── db.py               # SQLite 存储层（17字段，含fingerprint自动迁移）
 │   ├── favorites.py        # 收藏管理（v3.2 新增）
 │   ├── player_history.py   # 玩家历史追踪（v3.2.1 新增）
 │   └── rescan.py           # 智能重扫队列（v3.2.1 新增）
