@@ -174,7 +174,7 @@ def main():
                         stats["mc_servers"] += 1
                         if result["auth"] == "cracked" and result["ip"] not in known_ips:
                             # 用 notch 身份实际登录验证
-                            join_ok, join_detail = try_join_as_notch(ip, result["port"], result["proto"])
+                            join_ok, join_detail = try_join_as_notch(result["ip"], result["port"], result["proto"])
                             result["notch_join"] = join_ok
                             result["notch_detail"] = join_detail
                             if join_ok:

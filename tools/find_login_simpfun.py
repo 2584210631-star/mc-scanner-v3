@@ -80,14 +80,15 @@ def try_login(port, protocol=None, slp_info=None):
                 "players_max": (slp_info or {}).get("players_max", 0),
                 "login_time": datetime.now().isoformat(),
             }
-            try:
-                bot.conn.close()
-            except:
-                pass
             return True, info
     except Exception as e:
         err = str(e)[:80]
         return False, {"port": port, "error": err}
+    finally:
+        try:
+            bot.close()
+        except Exception:
+            pass
     return False, {"port": port, "error": "unknown"}
 
 def save_results(results):
