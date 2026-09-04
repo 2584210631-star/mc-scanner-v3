@@ -59,7 +59,8 @@ async def _check_port(ip: str, port: int, timeout: float,
 
 async def _scan_async(targets, concurrency: int, timeout: float,
                       rate_limit: int = 0,
-                      progress_cb=None) -> list:
+                      progress_cb=None,
+                      stop_event=None) -> list:
     """异步扫描核心逻辑。"""
     semaphore = asyncio.Semaphore(concurrency)
     tasks = []
@@ -71,8 +72,12 @@ async def _scan_async(targets, concurrency: int, timeout: float,
 
     async def _wrapped(ip, port):
         nonlocal done, open_count, last_report
+        if stop_event and stop_event.is_set():
+            return AsyncScanResult(ip=ip, port=port, is_open=False, error="stopped")
         if rate_interval > 0:
             await asyncio.sleep(rate_interval)
+        if stop_event and stop_event.is_set():
+            return AsyncScanResult(ip=ip, port=port, is_open=False, error="stopped")
         try:
             r = await _check_port(ip, port, timeout, semaphore, retries=1)
         except Exception as e:
@@ -87,10 +92,12 @@ async def _scan_async(targets, concurrency: int, timeout: float,
         return r
 
     for ip, port in targets:
+        if stop_event and stop_event.is_set():
+            break
         tasks.append(asyncio.create_task(_wrapped(ip, port)))
 
     if tasks:
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     if progress_cb:
         progress_cb(done, open_count)
@@ -98,7 +105,7 @@ async def _scan_async(targets, concurrency: int, timeout: float,
 
 
 def scan_ports_async(targets, concurrency: int = 1000, timeout: float = 3.0,
-                     rate_limit: int = 0, progress_cb=None) -> list:
+                     rate_limit: int = 0, progress_cb=None, stop_event=None) -> list:
     """
     异步端口扫描（同步入口，内部运行事件循环）。
 
@@ -108,6 +115,7 @@ def scan_ports_async(targets, concurrency: int = 1000, timeout: float = 3.0,
         timeout: 连接超时秒数
         rate_limit: 每秒最大连接数（0=不限）
         progress_cb: 进度回调 callback(done, open_count)
+        stop_event: threading.Event，设置后停止扫描
 
     Returns:
         list[AsyncScanResult]
@@ -118,7 +126,7 @@ def scan_ports_async(targets, concurrency: int = 1000, timeout: float = 3.0,
 
     async def _run():
         return await _scan_async(iter(target_list), concurrency, timeout,
-                                 rate_limit, progress_cb)
+                                 rate_limit, progress_cb, stop_event)
 
     try:
         loop = asyncio.get_event_loop()
