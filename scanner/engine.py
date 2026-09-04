@@ -23,10 +23,7 @@ class ScanEngine:
                  timeout: float = 4.0, auth_check: bool = True, rate_limit: int = 0,
                  bot_workers: int = 10, bot_timeout: float = 12.0, stop_event=None,
                  rescan_enabled: bool = False, duplicate_detection: bool = False,
-                 discord_webhook: str = "",
-                 neighbors_enabled: bool = False,
-                 neighbors_port_range: tuple = (10000, 40000),
-                 neighbors_workers: int = 200):
+                 discord_webhook: str = ""):
         self.db_path = db_path
         self.workers = workers
         self.timeout = timeout
@@ -39,13 +36,6 @@ class ScanEngine:
         self.rescan_enabled = rescan_enabled
         self.duplicate_detection = duplicate_detection
         self.discord_webhook = discord_webhook
-        # v3.3.3 新增：邻居发现
-        self.neighbors_enabled = neighbors_enabled
-        self.neighbors_port_range = neighbors_port_range
-        self.neighbors_workers = neighbors_workers
-        self._neighbor_ips = set()  # 已做过邻居发现的IP，避免重复
-        self._neighbor_lock = threading.Lock()
-        self._neighbor_results = []  # 邻居发现的额外结果
         self._rescheduler = None
         self._dup_detector = None
         self._discord = None
@@ -55,7 +45,7 @@ class ScanEngine:
         self.counters = {
             "total": 0, "up": 0, "cracked": 0, "online": 0,
             "whitelist": 0, "rejected": 0, "offline": 0, "error": 0,
-            "messages_sent": 0, "neighbors_found": 0,
+            "messages_sent": 0,
         }
         self.results = []
 
@@ -69,62 +59,6 @@ class ScanEngine:
             if wait > 0:
                 time.sleep(wait)
             self._last_probe = time.time()
-
-    def _discover_neighbors(self, ip: str, exclude_port: int) -> list:
-        """邻居发现：对同一IP扫描端口范围，找出其他MC服务器。
-        只做SLP探测，不做认证检测，速度快。
-        """
-        import socket as _socket
-        lo, hi = self.neighbors_port_range
-        ports = [p for p in range(lo, hi + 1) if p != exclude_port]
-        open_ports = []
-
-        def _check(p):
-            try:
-                s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-                s.settimeout(0.8)
-                r = s.connect_ex((ip, p))
-                s.close()
-                return r == 0
-            except:
-                return False
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.neighbors_workers) as ex:
-            futures = {ex.submit(_check, p): p for p in ports}
-            for fut in concurrent.futures.as_completed(futures):
-                if self.stop_event and self.stop_event.is_set():
-                    for f in futures:
-                        f.cancel()
-                    break
-                if fut.result():
-                    open_ports.append(futures[fut])
-
-        neighbors = []
-        for p in open_ports:
-            try:
-                up = slp_probe(ip, p, min(self.timeout, 2.0))
-                if up.get("state") == "up":
-                    r = {
-                        "ip": ip, "port": p, "state": "up",
-                        "version": up.get("version"), "proto": up.get("proto"),
-                        "motd": up.get("motd"), "ping_ms": up.get("ping_ms"),
-                        "favicon": up.get("favicon"), "core_type": up.get("core_type"),
-                        "mods": up.get("mods"), "forge_channels": up.get("forge_channels"),
-                        "fingerprint": up.get("fingerprint"),
-                        "players_online": up.get("online", 0),
-                        "players_max": up.get("max", 0),
-                        "player_list": [pl.get("name", "") for pl in up.get("sample", [])],
-                        "auth": "unknown", "is_neighbor": True,
-                    }
-                    ct = r.get("core_type", "unknown")
-                    r["is_modded"] = 1 if ct in ("forge", "fabric", "neoforge", "quilt") else 0
-                    r["is_plugin"] = 1 if ct in ("paper", "spigot", "bukkit", "purpur", "catserver", "arclight") else 0
-                    r["server_type"] = ct if ct != "unknown" else ("modded" if r["is_modded"] else ("plugin" if r["is_plugin"] else "vanilla"))
-                    neighbors.append(r)
-                    self._bump("neighbors_found")
-            except:
-                pass
-        return neighbors
 
     def _bump(self, key: str, n: int = 1):
         with self._lock:
@@ -187,20 +121,6 @@ class ScanEngine:
                 pass
             # v3.2.1: 探测后钩子（玩家历史/重扫/重复检测/Discord通知）
             self._post_probe_hooks(result)
-            # v3.3.3: 邻居发现——发现MC服后自动深挖同IP其他端口
-            if self.neighbors_enabled and result.get("state") == "up":
-                should_discover = False
-                with self._neighbor_lock:
-                    if ip not in self._neighbor_ips:
-                        self._neighbor_ips.add(ip)
-                        should_discover = True
-                if should_discover:
-                    neighbors = self._discover_neighbors(ip, port)
-                    if neighbors:
-                        print(f"  [邻居发现] {ip}:{port} → 同IP发现 {len(neighbors)} 个MC服")
-                        for nb in neighbors:
-                            self._post_probe_hooks(nb)
-                        self._neighbor_results.extend(neighbors)
         except Exception as e:
             result["state"] = "error"
             result["error"] = str(e)
@@ -255,10 +175,6 @@ class ScanEngine:
         def _save(batch):
             db.upsert_many(self.db_path, batch)
         results, _ = self._run_batch(targets, self.probe_one, _save, save_every)
-        # 合并邻居发现的结果
-        if self._neighbor_results:
-            db.upsert_many(self.db_path, self._neighbor_results)
-            results.extend(self._neighbor_results)
         if results:
             db.upsert_many(self.db_path, results)
         self.results = results

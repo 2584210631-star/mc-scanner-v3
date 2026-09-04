@@ -155,8 +155,6 @@ def cmd_scan(args, cfg):
         rate=args.rate or cfg['rate'],
         exclude_file=args.exclude or cfg['exclude_file'],
         db_path=args.db or cfg['db_path'],
-        neighbors_enabled=getattr(args, 'neighbors', False),
-        neighbor_range=tuple(int(x) for x in getattr(args, 'neighbor_range', '10000-40000').split('-')),
     )
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
     for s in sorted(results, key=lambda x: x.get('proto', 0)):
@@ -709,10 +707,6 @@ def main():
     s.add_argument("--web", type=int, default=0, help="扫描后启动Web面板端口")
     s.add_argument("--async", dest="async_mode", action="store_true",
                    help="使用异步流水线引擎（快5-10倍）")
-    s.add_argument("--neighbors", action="store_true",
-                   help="邻居发现：扫到MC服后自动深挖同IP其他端口")
-    s.add_argument("--neighbor-range", default="10000-40000",
-                   help="邻居发现端口范围，默认10000-40000")
     s.set_defaults(func=cmd_scan)
 
     # warn
