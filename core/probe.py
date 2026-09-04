@@ -85,10 +85,12 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                 version = info.get("version", {})
                 players = info.get("players", {})
                 ver_name = version.get("name", "")
+                proto_ver = version.get("protocol", 0)
+                fp = fingerprint_server(info, proto_ver)
                 return {
                     "state": "up",
                     "version": ver_name,
-                    "proto": version.get("protocol", 0),
+                    "proto": proto_ver,
                     "motd": _motd_text(info.get("description", "")),
                     "online": players.get("online", 0),
                     "max": players.get("max", 0),
@@ -98,6 +100,7 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                     "core_type": detect_core_type(ver_name, info),
                     "mods": extract_mods(info),
                     "forge_channels": extract_forge_channels(info),
+                    "fingerprint": fp,
                     "_raw": info,
                 }
         except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError, IndexError) as e:
@@ -263,6 +266,142 @@ def extract_forge_channels(raw: dict = None) -> list:
                      "required": c.get("required", False)}
                     for c in channels if isinstance(c, dict)]
     return []
+
+
+def fingerprint_server(raw: dict, proto: int = 0) -> dict:
+    """协议指纹识别（参考 matscan passive_fingerprint）。
+    通过 SLP JSON 的字段顺序、空 sample、空 favicon 等特征判断服务器软件。
+    返回: {field_order, incorrect_order, empty_sample, empty_favicon, likely_software, confidence}
+    """
+    if not isinstance(raw, dict):
+        return {"field_order": "", "incorrect_order": False, "empty_sample": False,
+                "empty_favicon": False, "likely_software": "unknown", "confidence": 0}
+
+    # 1.19.4+ (协议762+) Mojang 改了字段顺序为 version, description, players
+    if proto >= 762:
+        correct_order = ["version", "description", "players"]
+    else:
+        correct_order = ["description", "players", "version"]
+
+    correct_players_order = ["max", "online"]
+    correct_version_order = ["name", "protocol"]
+
+    # 提取顶层字段顺序
+    top_keys = [k for k in raw.keys() if k in correct_order]
+
+    players_obj = raw.get("players")
+    version_obj = raw.get("version")
+    players_keys = []
+    version_keys = []
+    if isinstance(players_obj, dict):
+        players_keys = [k for k in players_obj.keys() if k in correct_players_order]
+    if isinstance(version_obj, dict):
+        version_keys = [k for k in version_obj.keys() if k in correct_version_order]
+
+    incorrect_order = (top_keys != correct_order or
+                       players_keys != correct_players_order or
+                       version_keys != correct_version_order)
+
+    # 构建字段顺序描述
+    field_order_parts = []
+    for key in top_keys:
+        if key == "players" and players_keys != correct_players_order:
+            field_order_parts.append(f"players({','.join(players_keys)})")
+        elif key == "version" and version_keys != correct_version_order:
+            field_order_parts.append(f"version({','.join(version_keys)})")
+        else:
+            field_order_parts.append(key)
+    field_order = ",".join(field_order_parts)
+
+    # 空 sample 检测：没人在线时不应有 sample 字段
+    empty_sample = False
+    online_count = 0
+    if isinstance(players_obj, dict):
+        online_count = players_obj.get("online", 0)
+        sample = players_obj.get("sample")
+        if isinstance(sample, list) and len(sample) == 0 and online_count == 0:
+            empty_sample = True
+
+    # 空 favicon 检测
+    empty_favicon = raw.get("favicon") == ""
+
+    # 基于指纹推断服务器软件
+    likely_software = "vanilla"
+    confidence = 0
+    ver_name = ""
+    if isinstance(version_obj, dict):
+        ver_name = (version_obj.get("name") or "").lower()
+
+    if incorrect_order:
+        confidence += 30
+        if "paper" in ver_name:
+            likely_software = "paper"
+            confidence += 40
+        elif "spigot" in ver_name:
+            likely_software = "spigot"
+            confidence += 40
+        elif "purpur" in ver_name:
+            likely_software = "purpur"
+            confidence += 40
+        elif "fabric" in ver_name:
+            likely_software = "fabric"
+            confidence += 40
+        elif "forge" in ver_name or "fml" in ver_name:
+            likely_software = "forge"
+            confidence += 40
+        elif "velocity" in ver_name:
+            likely_software = "velocity"
+            confidence += 40
+        elif "bungee" in ver_name:
+            likely_software = "bungeecord"
+            confidence += 40
+        elif "folia" in ver_name:
+            likely_software = "folia"
+            confidence += 40
+        else:
+            # 字段顺序不对但版本名是 vanilla → 很可能是 Paper（Paper 不改版本名）
+            likely_software = "paper(推测)"
+            confidence += 15
+    else:
+        # 字段顺序正确
+        if "paper" in ver_name:
+            likely_software = "paper"
+            confidence = 70
+        elif "spigot" in ver_name:
+            likely_software = "spigot"
+            confidence = 70
+        elif any(k in ver_name for k in ("vanilla", "1.2", "1.1", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18", "1.19", "1.20", "1.21")):
+            likely_software = "vanilla"
+            confidence = 60
+        else:
+            likely_software = "unknown"
+            confidence = 10
+
+    if empty_sample:
+        confidence += 10  # 空 sample 是非 vanilla 的弱特征
+    if empty_favicon:
+        confidence += 5
+
+    # Forge/Fabric 数据覆盖
+    if raw.get("forgeData") or raw.get("modinfo"):
+        likely_software = "forge"
+        confidence = 90
+    if "neoforge" in ver_name:
+        likely_software = "neoforge"
+        confidence = 90
+    if "fabric" in ver_name:
+        likely_software = "fabric"
+        confidence = 90
+
+    return {
+        "field_order": field_order,
+        "correct_order": ",".join(correct_order),
+        "incorrect_order": incorrect_order,
+        "empty_sample": empty_sample,
+        "empty_favicon": empty_favicon,
+        "likely_software": likely_software,
+        "confidence": min(confidence, 100),
+    }
 
 
 def _is_offline_err(e: str) -> bool:

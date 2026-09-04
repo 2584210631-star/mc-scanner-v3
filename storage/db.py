@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS servers (
     core_type TEXT,
     mods TEXT,
     forge_channels TEXT,
+    fingerprint TEXT,
     PRIMARY KEY (ip, port)
 )
 """
@@ -34,8 +35,8 @@ CREATE TABLE IF NOT EXISTS servers (
 UPSERT_SQL = """
     INSERT INTO servers (ip, port, version, proto, motd, is_modded, players_online,
                          players_max, favicon, auth, ping_ms, json, last_updated,
-                         core_type, mods, forge_channels)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         core_type, mods, forge_channels, fingerprint)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(ip, port) DO UPDATE SET
         version=excluded.version, proto=excluded.proto, motd=excluded.motd,
         is_modded=excluded.is_modded, players_online=excluded.players_online,
@@ -43,7 +44,7 @@ UPSERT_SQL = """
         auth=excluded.auth, ping_ms=excluded.ping_ms,
         json=excluded.json, last_updated=excluded.last_updated,
         core_type=excluded.core_type, mods=excluded.mods,
-        forge_channels=excluded.forge_channels
+        forge_channels=excluded.forge_channels, fingerprint=excluded.fingerprint
 """
 
 # 需要确保存在的列（用于旧数据库自动迁移）
@@ -51,11 +52,12 @@ _REQUIRED_COLUMNS = {
     "core_type": "TEXT",
     "mods": "TEXT",
     "forge_channels": "TEXT",
+    "fingerprint": "TEXT",
 }
 
 QUERY_COLS = ["ip", "port", "version", "proto", "motd", "is_modded",
               "players_online", "players_max", "favicon", "auth", "ping_ms",
-              "last_updated", "core_type", "mods", "forge_channels"]
+              "last_updated", "core_type", "mods", "forge_channels", "fingerprint"]
 
 
 def get_conn(db_path: str):
@@ -114,6 +116,9 @@ def _record_to_tuple(rec: dict) -> tuple:
     channels = rec.get("forge_channels")
     if channels is not None and not isinstance(channels, str):
         channels = json.dumps(channels, ensure_ascii=False)[:2000]
+    fp = rec.get("fingerprint")
+    if fp is not None and not isinstance(fp, str):
+        fp = json.dumps(fp, ensure_ascii=False)[:2000]
     return (
         rec.get('ip'), rec.get('port'),
         rec.get('version'), rec.get('proto'),
@@ -125,18 +130,19 @@ def _record_to_tuple(rec: dict) -> tuple:
         rec.get('core_type', 'unknown'),
         mods,
         channels,
+        fp,
     )
 
 
 def _row_to_dict(row, cols):
     d = dict(zip(cols, row))
-    for key in ("mods", "forge_channels"):
+    for key in ("mods", "forge_channels", "fingerprint"):
         val = d.get(key)
         if val and isinstance(val, str):
             try:
                 d[key] = json.loads(val)
             except (json.JSONDecodeError, TypeError):
-                d[key] = []
+                d[key] = [] if key != "fingerprint" else {}
     return d
 
 
