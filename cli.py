@@ -78,14 +78,14 @@ def cmd_portscan(args, cfg):
         config.set('scan_threads', args.workers)
     if args.timeout:
         config.set('scan_timeout', args.timeout)
-    if getattr(args, 'async_mode', False):
+    if not getattr(args, 'sync_mode', False):
         from scanner.async_portscan import scan_ports_async, get_open_ports_async, has_uvloop
         from scanner.targets import parse_targets
         print(f"[*] 异步端口扫描（uvloop: {'启用' if has_uvloop() else '未安装'}）")
-        targets = list(parse_targets(args.targets))
+        targets = list(parse_targets([args.targets], default_ports=cfg.get('ports', [25565])))
         results = scan_ports_async(
             targets,
-            concurrency=args.workers or 1000,
+            concurrency=args.workers or 2000,
             timeout=args.timeout or cfg['scan_timeout'],
             rate_limit=args.rate or cfg['rate'],
         )
@@ -119,23 +119,23 @@ def cmd_scan(args, cfg):
         config.set('scan_threads', args.workers)
     if args.timeout:
         config.set('scan_timeout', args.timeout)
-    if getattr(args, 'async_mode', False):
+    if not getattr(args, 'sync_mode', False):
         from scanner.async_engine import AsyncScanEngine
         from scanner.async_portscan import has_uvloop
         from scanner.async_probe import has_simdjson
         from scanner.targets import parse_targets
         print(f"[*] 异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}）")
-        targets = parse_targets(args.targets)
+        targets = parse_targets([args.targets], default_ports=cfg.get('ports', [25565]))
         engine = AsyncScanEngine(
             db_path=args.db or cfg['db_path'],
-            concurrency=args.workers or 1000,
-            slp_concurrency=200,
+            concurrency=args.workers or 2000,
+            slp_concurrency=400,
             timeout=args.timeout or cfg['timeout'],
             auth_check=not args.no_auth,
             rate_limit=args.rate or cfg['rate'],
         )
-        results = engine.scan(targets)
+        results = engine.scan_with_portscan(targets)
         up_results = [r for r in results if r.get('state') == 'up']
         print(f"\n[*] 发现 {len(up_results)} 个 Minecraft 服务器:")
         for s in sorted(up_results, key=lambda x: x.get('proto', 0)):
@@ -322,7 +322,7 @@ def cmd_random(args, cfg=None):
     port_ranges = parse_port_ranges(args.ports)
     exclude_file = None if args.no_exclude else (args.exclude or "exclude.conf")
     logger.info("[*] 随机暴力扫描模式")
-    mode = "异步高速" if getattr(args, 'async_mode', False) else "线程池"
+    mode = "异步高速" if not getattr(args, 'sync_mode', False) else "线程池"
     logger.info(f"[*] 目标数: {args.count} | 模式: {mode} | 超时: {args.timeout}s")
     logger.info(f"[*] 端口范围: {args.ports}")
     if exclude_file:
@@ -337,7 +337,7 @@ def cmd_random(args, cfg=None):
 
     import time
     start = time.time()
-    if getattr(args, 'async_mode', False):
+    if not getattr(args, 'sync_mode', False):
         import asyncio
         from scanner.async_portscan import has_uvloop
         if has_uvloop():
@@ -691,8 +691,8 @@ def main():
     p.add_argument("--rate", type=int, default=0)
     p.add_argument("--exclude")
     p.add_argument("-o", "--output")
-    p.add_argument("--async", dest="async_mode", action="store_true",
-                   help="使用异步引擎（快3-5倍，需uvloop可选）")
+    p.add_argument("--sync", dest="sync_mode", action="store_true",
+                   help="使用同步线程引擎（默认异步，更快）")
     p.set_defaults(func=cmd_portscan)
 
     # scan
@@ -705,8 +705,8 @@ def main():
     s.add_argument("--exclude")
     s.add_argument("-o", "--output")
     s.add_argument("--web", type=int, default=0, help="扫描后启动Web面板端口")
-    s.add_argument("--async", dest="async_mode", action="store_true",
-                   help="使用异步流水线引擎（快5-10倍）")
+    s.add_argument("--sync", dest="sync_mode", action="store_true",
+                   help="使用同步线程引擎（默认异步流水线，更快）")
     s.set_defaults(func=cmd_scan)
 
     # warn
@@ -793,7 +793,7 @@ def main():
     rnd.add_argument("-w", "--workers", type=int, default=200, help="线程数 (默认: 200)")
     rnd.add_argument("-t", "--timeout", type=float, default=2.0, help="超时秒数 (默认: 2.0)")
     rnd.add_argument("--probe", action="store_true", help="扫描后自动SLP探测")
-    rnd.add_argument("--async", dest="async_mode", action="store_true", help="异步高速模式（快3-5倍，需uvloop可选）")
+    rnd.add_argument("--sync", dest="sync_mode", action="store_true", help="使用同步线程模式（默认异步高速）")
     rnd.add_argument("--exclude", default="exclude.conf", help="排除列表文件（默认: exclude.conf）")
     rnd.add_argument("--no-exclude", action="store_true", help="不使用排除列表")
     rnd.add_argument("-o", "--output", help="结果输出文件")
