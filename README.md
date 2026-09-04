@@ -24,6 +24,8 @@ MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 
 **v3.3 新增：** 协议被动指纹识别（JSON字段顺序/空sample/空favicon推断服务端软件）、异步高速扫描模式（uvloop+pysimdjson，快5-10倍）、RCON远程命令执行、代理服(BungeeCord/Velocity)兼容、多机器人并发警告优化
 
+**v3.3.2 更新：** 聊天消息监听系统（支持全版本JSON组件解析）、插件抓取功能补完（/plugins /version 自动解析）、命令执行器条件命令可用、异步认证检测真并发（100线程全局池）、4版本聊天包格式修正、AuthMe自动注册、27个bug修复、依赖内置libs/开箱即用
+
 ---
 
 ## ✨ 功能特性
@@ -38,6 +40,9 @@ MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 🏷️ **12 种核心类型识别** — vanilla/paper/spigot/bukkit/purpur/forge/fabric/neoforge/quilt/catserver/arclight/unknown
 - 🧩 **模组列表提取** — 老版本 Forge 自动提取 modinfo.mods，新版本提取 forgeData.channels
 - 👆 **协议被动指纹识别**（v3.3 新增，参考 matscan）— 基于 SLP JSON 字段顺序、空 sample、空 favicon 等特征推断服务端软件（vanilla/paper/spigot/forge/fabric/neoforge/velocity/bungeecord/folia），带置信度评分
+- 💬 **聊天消息监听**（v3.3.2）— Bot 进入 play 阶段后自动监听聊天消息，支持 JSON 组件解析，用于插件抓取和命令响应
+- 🔌 **插件抓取**（v3.3.2）— 登录后自动发送 `/plugins` `/version`，解析插件列表、服务端版本、反作弊类型
+- 📜 **命令执行器**（v3.3.2）— 支持条件命令 `IF 关键词 THEN 命令`，自动捕获服务器响应
 
 ### 收藏管理（v3.2 新增）
 - ⭐ **一键收藏** — 结果页点击 ☆ 收藏服务器
@@ -128,12 +133,9 @@ MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - Windows / Linux / Mac 均可
 - 可选：masscan（全网高速扫描）
 
-### 安装依赖
-```bash
-pip install -r requirements.txt
-```
+### 开箱即用（推荐）
+项目已内置全部依赖到 `libs/` 目录（flask + uvloop + pysimdjson），**无需 pip install**，解压即可运行。
 
-### 一键启动（推荐）
 **Windows:**
 ```bash
 双击 run.bat
@@ -145,7 +147,16 @@ chmod +x run.sh
 ./run.sh
 ```
 
-然后浏览器打开 `http://127.0.0.1:8080`
+然后浏览器自动打开 `http://127.0.0.1:8080`
+
+> uvloop/pysimdjson 为 C 扩展，内置版本为 Linux x86_64 + Python 3.12 编译。其他平台启动时 `run.py` 会自动检测并 pip 安装对应版本。
+
+### 手动安装（如 libs/ 不可用）
+```bash
+pip install -r requirements.txt
+# 可选加速
+pip install uvloop pysimdjson
+```
 
 ---
 
