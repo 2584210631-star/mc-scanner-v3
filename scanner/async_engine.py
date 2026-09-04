@@ -195,10 +195,24 @@ class AsyncScanEngine:
     def scan_with_portscan(self, targets, scan_concurrency: int = 1000,
                            scan_timeout: float = 2.5) -> list:
         """两阶段扫描（端口扫描 + SLP探测），异步版本。"""
+        from scanner.async_portscan import scan_ports_async, get_open_ports_async
         print(f"[*] 异步流水线扫描（并发={self.concurrency}, SLP并发={self.slp_concurrency}）")
         print(f"[*] uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}")
-        return self.scan(targets)
+        # 阶段1: 异步端口扫描
+        print(f"[*] 阶段1: 异步端口扫描...")
+        port_results = scan_ports_async(
+            list(targets),
+            concurrency=scan_concurrency,
+            timeout=scan_timeout,
+        )
+        open_ports = get_open_ports_async(port_results)
+        print(f"[*] 发现 {len(open_ports)} 个开放端口")
+        if not open_ports:
+            return []
+        # 阶段2: 对开放端口做SLP+认证探测
+        print(f"[*] 阶段2: SLP探测 + 认证检测...")
+        return self.scan(iter(open_ports))
 
 
 def run_async_scan(targets, **kwargs) -> list:
