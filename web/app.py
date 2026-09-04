@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory, Response
 
@@ -26,6 +27,7 @@ from scanner.exclude import Excluder
 from scanner.masscan import has_masscan, run_masscan, parse_masscan_json, get_masscan_version
 from scanner.portscan import scan_ports, get_open_ports
 from core.bot import join_and_warn, DEFAULT_WARNING_MESSAGES, MCBot
+from core.protocol import get_version_name
 
 
 def parse_ports_spec(ports_spec):
@@ -314,6 +316,241 @@ def _scan_worker(targets_list, config):
         scan_stop_event.clear()
         with scan_lock:
             scan_state["running"] = False
+
+
+# ===== 观察者（Observer）会话管理 =====
+# 登录指定服务器并保持连接，实时记录聊天消息与玩家进出，支持观察中发消息/命令。
+class ObserverSession:
+    """单个服务器观察者会话"""
+    def __init__(self, host, port, username, authme_password=None, timeout=20.0, duration=0):
+        self.session_id = ""
+        self.duration = duration  # 观察时长（秒），0=一直观察
+        self.host = host
+        self.port = port
+        self.username = username
+        self.authme_password = authme_password
+        self.timeout = timeout
+        self.bot = None
+        self.thread = None
+        self.stop_event = threading.Event()
+        self.lock = threading.Lock()
+        self.status = "connecting"  # connecting / connected / disconnected / stopped / error
+        self.error = ""
+        self.auth_mode = "unknown"
+        self.version_name = ""
+        self.protocol_version = 0
+        self.start_time = time.time()
+        self.connect_time = None
+        self.disconnect_time = None
+        self.chat_log = deque(maxlen=1000)   # (seq, time_str, text)
+        self.events = deque(maxlen=2000)     # (seq, time_str, type, text)  type: chat/join/leave
+        self._seq = 0
+
+    def _next_seq(self):
+        self._seq += 1
+        return self._seq
+
+    @staticmethod
+    def _ts():
+        return datetime.now().strftime("%H:%M:%S")
+
+    def _on_chat(self, text):
+        try:
+            with self.lock:
+                self.events.append((self._next_seq(), self._ts(), "chat", text))
+                self.chat_log.append((self._seq, self._ts(), text))
+        except Exception:
+            pass
+
+    def _on_player(self, name, action):
+        try:
+            with self.lock:
+                self.events.append((self._next_seq(), self._ts(), action, name))
+        except Exception:
+            pass
+
+    def run(self):
+        try:
+            self.bot = MCBot(host=self.host, port=self.port,
+                             username=self.username, timeout=self.timeout)
+            self.bot.chat_callback = self._on_chat
+            self.bot.player_callback = self._on_player
+            self.bot.connect()
+            with self.lock:
+                self.status = "connected"
+                self.auth_mode = self.bot.auth_mode
+                self.version_name = get_version_name(self.bot.protocol_version)
+                self.protocol_version = self.bot.protocol_version
+                self.connect_time = time.time()
+            if self.authme_password:
+                try:
+                    self.bot.authme_login(self.authme_password, register=False)
+                except Exception:
+                    pass
+            # 保持连接：直到手动停止、观察时长到期或服务器断开
+            while not self.stop_event.is_set():
+                if not getattr(self.bot, "connected", True):
+                    with self.lock:
+                        self.status = "disconnected"
+                        self.disconnect_time = time.time()
+                    return
+                if self.duration > 0 and (time.time() - self.connect_time) >= self.duration:
+                    with self.lock:
+                        self.status = "stopped"
+                        self.disconnect_time = time.time()
+                    return
+                time.sleep(0.5)
+            with self.lock:
+                self.status = "stopped"
+                self.disconnect_time = time.time()
+        except Exception as e:
+            with self.lock:
+                self.status = "error"
+                self.error = str(e)[:300]
+        finally:
+            if self.bot:
+                try:
+                    self.bot.close()
+                except Exception:
+                    pass
+
+    def stop(self):
+        self.stop_event.set()
+
+    def _players(self):
+        if not self.bot:
+            return []
+        try:
+            return sorted(set(v for v in self.bot.player_list.values() if v))
+        except Exception:
+            return []
+
+    def brief(self):
+        with self.lock:
+            return {
+                "session_id": self.session_id,
+                "host": self.host,
+                "port": self.port,
+                "username": self.username,
+                "status": self.status,
+                "error": self.error,
+                "auth_mode": self.auth_mode,
+                "version_name": self.version_name,
+                "uptime": time.time() - self.start_time,
+                "players_online": len(self._players()),
+                "chat_count": len(self.chat_log),
+            }
+
+    def full(self, since=None):
+        with self.lock:
+            players = self._players()
+            all_events = list(self.events)
+            chat = [(c[0], c[1], c[2]) for c in self.chat_log]
+            last_seq = self._seq
+        if since is not None:
+            all_events = [e for e in all_events if e[0] > since]
+        return {
+            "session_id": self.session_id,
+            "host": self.host,
+            "port": self.port,
+            "username": self.username,
+            "status": self.status,
+            "error": self.error,
+            "auth_mode": self.auth_mode,
+            "version_name": self.version_name,
+            "protocol_version": self.protocol_version,
+            "start_time": self.start_time,
+            "connect_time": self.connect_time,
+            "uptime": time.time() - self.start_time,
+            "players_online": len(players),
+            "players": players,
+            "events": [{"seq": e[0], "time": e[1], "type": e[2], "text": e[3]} for e in all_events[-100:]],
+            "last_seq": last_seq,
+            "chat": [{"seq": c[0], "time": c[1], "text": c[2]} for c in chat[-200:]],
+        }
+
+
+observer_sessions = {}
+observer_lock = threading.Lock()
+
+
+@app.route('/api/observer/start', methods=['POST'])
+def observer_start():
+    data = request.json or {}
+    host = data.get("host")
+    port = int(data.get("port", 25565))
+    username = data.get("username", "Observer")
+    authme = data.get("authme_password") or None
+    timeout = float(data.get("timeout", 20.0))
+    duration = max(0, float(data.get("duration", 0) or 0))
+    if not host:
+        return jsonify({"error": "host 不能为空"}), 400
+    if not username:
+        return jsonify({"error": "用户名不能为空"}), 400
+    session = ObserverSession(host, port, username, authme_password=authme,
+                              timeout=timeout, duration=duration)
+    session.session_id = f"{int(time.time() * 1000)}-{os.getpid()}-{len(observer_sessions) + 1}"
+    session.thread = threading.Thread(target=session.run, daemon=True)
+    with observer_lock:
+        observer_sessions[session.session_id] = session
+    session.thread.start()
+    _log(f"观察者启动: {username} -> {host}:{port} [{session.session_id[-6:]}]")
+    return jsonify({"success": True, "session_id": session.session_id, "status": session.status})
+
+
+@app.route('/api/observer/list')
+def observer_list():
+    with observer_lock:
+        sessions = [s.brief() for s in observer_sessions.values()]
+    return jsonify({"total": len(sessions), "sessions": sessions})
+
+
+@app.route('/api/observer/status')
+def observer_status():
+    sid = request.args.get("session_id", "")
+    since = request.args.get("since", type=int)
+    with observer_lock:
+        session = observer_sessions.get(sid)
+    if not session:
+        return jsonify({"error": "会话不存在或已过期"}), 404
+    return jsonify(session.full(since=since))
+
+
+@app.route('/api/observer/stop', methods=['POST'])
+def observer_stop():
+    data = request.json or {}
+    sid = data.get("session_id", "")
+    with observer_lock:
+        session = observer_sessions.get(sid)
+    if not session:
+        return jsonify({"error": "会话不存在或已过期"}), 404
+    session.stop()
+    _log(f"观察者停止: {session.username} -> {session.host}:{session.port}")
+    return jsonify({"success": True, "session_id": sid, "status": session.status})
+
+
+@app.route('/api/observer/send', methods=['POST'])
+def observer_send():
+    data = request.json or {}
+    sid = data.get("session_id", "")
+    msg_type = data.get("type", "chat")  # chat / command
+    message = data.get("message", "")
+    with observer_lock:
+        session = observer_sessions.get(sid)
+    if not session:
+        return jsonify({"error": "会话不存在或已过期"}), 404
+    if session.status != "connected" or not session.bot:
+        return jsonify({"error": "观察者未连接"}), 400
+    if not message:
+        return jsonify({"error": "消息不能为空"}), 400
+    try:
+        if msg_type == "command":
+            session.bot.send_command(message)
+        else:
+            session.bot.send_chat(message)
+        return jsonify({"success": True, "type": msg_type, "message": message})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)[:200]})
 
 
 @app.route('/')
