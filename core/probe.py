@@ -24,7 +24,7 @@ STATE_ERROR = "error"          # 其它错误
 
 
 def slp_probe(host: str, port: int, timeout: float = 5.0,
-               protocol_version: int = -1, retries: int = 2) -> dict | None:
+               protocol_version: int = -1, retries: int = 2) -> dict:
     """
     Server List Ping：获取服务器信息（版本/玩家/MOTD/延迟）。
     protocol_version=-1 时使用特殊值请求服务器返回真实版本。

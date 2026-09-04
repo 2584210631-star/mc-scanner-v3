@@ -73,6 +73,9 @@ class MCBot:
         self.player_list = {}  # uuid -> name
         # 模组服握手期间观察到的插件频道（Forge/Fabric 等）
         self.modded_channels = set()
+        # 聊天消息监听（用于插件抓取等）
+        self.chat_messages: list[str] = []
+        self.chat_callback = None  # callable(text: str) -> None
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
@@ -413,6 +416,68 @@ class MCBot:
                             break
                 except Exception:
                     pass
+            elif packet_id == pkts.get("cb_chat_message") or packet_id == pkts.get("cb_system_chat"):
+                # 聊天消息 — 提取文本用于插件抓取/命令响应
+                try:
+                    text = self._extract_chat_text(data, packet_id == pkts.get("cb_system_chat"))
+                    if text:
+                        self.chat_messages.append(text)
+                        if self.chat_callback:
+                            try:
+                                self.chat_callback(text)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+    def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
+        """从聊天包 payload 中提取纯文本（简化版，尽力解析 JSON 组件）"""
+        import json
+        try:
+            stream = BytesStream(data)
+            if is_system:
+                # System Chat: JSON String + VarInt(type)
+                json_str = read_string_from_stream(stream)
+            else:
+                # Player Chat: UUID(16) + nickname(JSON String) + timestamp(8) + salt(8)
+                # + has_signature(Boolean) + signature(256 if true) + message(JSON String) + ...
+                stream.read(16)  # UUID
+                read_string_from_stream(stream)  # nickname
+                stream.read(8)  # timestamp
+                stream.read(8)  # salt
+                has_sig = read_boolean_from_stream(stream)
+                if has_sig:
+                    stream.read(256)  # signature
+                json_str = read_string_from_stream(stream)
+            # 解析 JSON 组件提取文本
+            try:
+                obj = json.loads(json_str)
+                return self._json_component_to_text(obj)
+            except (json.JSONDecodeError, TypeError):
+                return json_str  # 可能是纯文本
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _json_component_to_text(obj) -> str:
+        """将 Minecraft JSON 聊天组件转为纯文本"""
+        import json
+        if isinstance(obj, str):
+            return obj
+        if isinstance(obj, dict):
+            parts = []
+            if obj.get("text"):
+                parts.append(str(obj["text"]))
+            if obj.get("translate"):
+                parts.append(str(obj["translate"]))
+            extra = obj.get("extra")
+            if isinstance(extra, list):
+                for e in extra:
+                    parts.append(MCBot._json_component_to_text(e))
+            return "".join(parts)
+        if isinstance(obj, list):
+            return "".join(MCBot._json_component_to_text(e) for e in obj)
+        return str(obj) if obj else ""
 
     # ---- 各版本聊天消息格式 ----
     def _send_chat_new(self, message: str, chat_id: int):
