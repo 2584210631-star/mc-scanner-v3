@@ -8,6 +8,7 @@
 import asyncio
 import json
 import time
+import atexit
 import concurrent.futures
 
 from core.buffer import write_varint, read_varint
@@ -16,6 +17,17 @@ from core.probe import detect_core_type, extract_mods, extract_forge_channels, _
 
 # 全局认证检测线程池（避免每次调用创建/销毁）
 _AUTH_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=100, thread_name_prefix="auth-probe")
+
+
+def _shutdown_executor():
+    """程序退出时关闭全局线程池"""
+    try:
+        _AUTH_EXECUTOR.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+
+
+atexit.register(_shutdown_executor)
 
 try:
     import simdjson

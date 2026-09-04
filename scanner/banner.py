@@ -60,10 +60,10 @@ def _extract_info(info: dict) -> dict:
 
 
 def _looks_modded(version: str) -> int:
-    """判断服务器是否为模组服"""
+    """判断服务器是否为模组服（仅 Forge/Fabric/NeoForge/Quilt 等，不含插件服）"""
     v = version.lower()
-    keywords = ("forge", "fabric", "mod", "paper", "spigot",
-                "bukkit", "purpur", "fml", "arclight", "catserver")
+    keywords = ("forge", "fabric", "neoforge", "quilt", "fml", "modloader",
+                "arclight", "catserver", "mohist", "magma")
     return 1 if any(kw in v for kw in keywords) else 0
 
 

@@ -6,6 +6,7 @@ Minecraft 正版 Token 获取工具（Microsoft 设备码授权）
 流程: 设备码 -> 浏览器登录微软账号 -> 获取 access token -> Mojang 验证 -> 保存 token
 """
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -170,8 +171,14 @@ def main():
     out_path = "minecraft_token.json"
     with open(out_path, "w") as f:
         json.dump(result, f, indent=2)
+    # 限制文件权限为仅所有者可读写（Unix）
+    try:
+        os.chmod(out_path, 0o600)
+    except Exception:
+        pass
     print(f"\n已保存到: {out_path}")
     print("注意: token 有效期约24小时，refresh_token 可用于刷新")
+    print("安全提示: 此文件包含敏感凭证，请勿分享或提交到 git")
 
 
 if __name__ == "__main__":
