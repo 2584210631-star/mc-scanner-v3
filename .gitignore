@@ -46,3 +46,7 @@ Thumbs.db
 
 # 环境变量
 .env
+
+# 临时脚本
+warn_*.py
+stay_*.py
