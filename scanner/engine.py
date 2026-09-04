@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Optional
 
-from core.probe import slp_probe, auth_probe
+from core.probe import slp_probe, auth_probe, active_fingerprint
 from core.bot import join_and_warn
 from storage import db
 from .portscan import scan_ports, get_open_ports
@@ -101,6 +101,24 @@ class ScanEngine:
                 self._bump(result["auth"])
             else:
                 result["auth"] = "unknown"
+            # v3.3.2: 主动协议指纹（malformed login 探测服务端软件）
+            try:
+                proto = result.get("proto") or 0
+                af = active_fingerprint(ip, port, proto, timeout=self.timeout)
+                fp = result.get("fingerprint") or {}
+                fp["active_software"] = af.get("software", "unknown")
+                fp["active_confidence"] = af.get("confidence", 0)
+                fp["active_raw_error"] = af.get("raw_error", "")
+                # 主动指纹置信度更高时覆盖被动推断
+                if af.get("confidence", 0) > fp.get("confidence", 0):
+                    fp["likely_software"] = af.get("software", fp.get("likely_software"))
+                    fp["confidence"] = af.get("confidence", fp.get("confidence"))
+                    fp["fingerprint_source"] = "active"
+                else:
+                    fp["fingerprint_source"] = fp.get("fingerprint_source", "passive")
+                result["fingerprint"] = fp
+            except Exception:
+                pass
             # v3.2.1: 探测后钩子（玩家历史/重扫/重复检测/Discord通知）
             self._post_probe_hooks(result)
         except Exception as e:
