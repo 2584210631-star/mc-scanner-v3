@@ -15,6 +15,15 @@ build/
 *.db-wal
 *.db-shm
 
+# 扫描结果/临时数据
+*_servers.json
+*_loginable.json
+*_stats.json
+cracked_servers.json
+scan_stats.json
+*.xlsx
+*.csv
+
 # masscan 结果
 scan_results*.ndjson
 masscan_*.ndjson
