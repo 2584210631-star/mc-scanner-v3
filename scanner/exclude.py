@@ -16,7 +16,7 @@ class Excluder:
             self.load(exclude_file)
 
     def load(self, filepath: str):
-        """从文件加载排除列表"""
+        """从文件加载排除列表，文件不存在则跳过"""
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 for line in f:
@@ -28,6 +28,8 @@ class Excluder:
                     except ValueError:
                         continue
             print(f"[*] 已加载排除列表: {filepath} ({len(self.networks)} 条)")
+        except FileNotFoundError:
+            pass
         except FileNotFoundError:
             print(f"[!] 排除列表文件不存在: {filepath}，使用默认私有地址段")
             self._load_defaults()
