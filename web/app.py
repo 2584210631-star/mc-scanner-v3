@@ -257,7 +257,7 @@ def _scan_worker(targets_list, config):
                         rate_limit=config.get("rate", 0),
                         stop_event=scan_stop_event,
                     )
-                    results = async_engine.scan(iter(targets_list))
+                    results = async_engine.scan_with_portscan(iter(targets_list))
                 else:
                     engine = ScanEngine(stop_event=scan_stop_event, 
                         db_path=config.get("db_path", "mcscanner.db"),
@@ -319,10 +319,18 @@ def start_scan():
     targets_list = list(targets_str.split(','))
     continuous = data.get("continuous", False)
     ports = parse_ports_spec(data.get("ports", [25565]))
+    if not ports:
+        return jsonify({"error": "端口格式无效，请输入如 25565 或 25565-25575"}), 400
     excluder = Excluder(data.get("exclude_file", "exclude.conf"))
-    parsed = list(excluder.filter_targets(parse_targets(targets_list, ports)))
+    try:
+        parsed_raw = list(parse_targets(targets_list, ports))
+    except Exception as e:
+        return jsonify({"error": f"目标解析失败: {e}"}), 400
+    parsed = list(excluder.filter_targets(parsed_raw))
     if not parsed:
-        return jsonify({"error": "没有有效的目标"}), 400
+        if not parsed_raw:
+            return jsonify({"error": "没有有效的目标，请检查输入格式（如 1.2.3.4 或 1.2.3.0/24）"}), 400
+        return jsonify({"error": f"目标被排除列表全部过滤（原始{len(parsed_raw)}个，排除后0个）"}), 400
     config = {
         "workers": data.get("workers", 32),
         "timeout": data.get("timeout", 4.0),
