@@ -4,8 +4,8 @@
 支持 Minecraft 1.12.2 ~ 最新版本（协议 340+）。
 """
 
-# 最新协议版本（Minecraft 1.21.11）
-LATEST_PROTOCOL = 774
+# 最新协议版本（Minecraft 1.21.12+）
+LATEST_PROTOCOL = 775
 
 # 连接状态
 STATE_HANDSHAKE = 0
@@ -87,7 +87,7 @@ PROTOCOL_TO_VERSION = {
 }
 
 # 常见协议版本（用于协议回退）
-COMMON_PROTOCOLS = [774, 770, 767, 766, 765, 764, 763, 762, 761, 760, 759, 758, 757, 756, 755, 754, 340]
+COMMON_PROTOCOLS = [775, 774, 770, 767, 766, 765, 764, 763, 762, 761, 760, 759, 758, 757, 756, 755, 754, 340]
 
 
 def get_version_name(proto: int) -> str:

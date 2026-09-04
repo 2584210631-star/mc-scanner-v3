@@ -123,9 +123,10 @@ def _load_auto_tables():
         _auto_tables = auto_play
         print(f"[packets] 已加载自动生成协议表: {len(auto_play)} 个版本")
     except ImportError:
+        # packets_auto.py 不存在（可选扩展），使用手写表
         pass
     except Exception as e:
-        print(f"[packets] 自动协议表加载失败: {e}")
+        print(f"[packets] 自动协议表加载失败，回退手写表: {e}")
     return _auto_tables
 
 

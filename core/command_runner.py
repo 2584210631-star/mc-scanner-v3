@@ -80,11 +80,12 @@ class CommandRunner:
             if command.upper().startswith("IF "):
                 result = self._execute_conditional(command)
             else:
+                before = len(self.bot.chat_messages)
                 self.bot.send_command(command)
-                # 等待响应（简化版，实际需要聊天监听）
+                # 等待响应
                 time.sleep(self.delay)
                 result.success = True
-                result.response = self._get_recent_chat()
+                result.response = self._get_recent_chat(before)
         except Exception as e:
             result.error = str(e)
             result.success = False
@@ -100,7 +101,7 @@ class CommandRunner:
             return result
         condition, actual_cmd = match.group(1), match.group(2)
         # 检查最近聊天中是否包含条件关键词
-        recent = self._get_recent_chat().lower()
+        recent = self._get_recent_chat(0).lower()
         if condition.lower() in recent:
             result = self.execute(actual_cmd)
             result.command = command
@@ -109,10 +110,13 @@ class CommandRunner:
             result.response = f"条件不满足，跳过: {actual_cmd}"
         return result
 
-    def _get_recent_chat(self) -> str:
-        """获取最近聊天（需要 bot 层面的聊天监听支持）"""
-        # 简化版：返回空，实际需要 MCBot 集成聊天回调
-        return ""
+    def _get_recent_chat(self, since: int = 0) -> str:
+        """获取最近聊天（从 bot.chat_messages 的 since 索引开始）"""
+        try:
+            messages = self.bot.chat_messages[since:]
+            return "\n".join(messages) if messages else ""
+        except Exception:
+            return ""
 
     def get_summary(self) -> str:
         """获取执行摘要"""
