@@ -1,7 +1,7 @@
 <div align="center">
 
 # 🛡️ MC Scanner v3.3.2
-### Minecraft 服务器扫描与安全提醒机器人 · 超越版
+### Minecraft 服务器扫描与安全提醒机器人
 
 **自研协议栈 · 全版本支持 · Web 控制面板 · 多机器人警告 · 自动离线检测 · 收藏管理 · 智能重扫 · 分布式分片 · 玩家历史 · 协议指纹识别**
 
@@ -16,15 +16,15 @@
 
 ## 📖 简介
 
-MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版，v3.2 系列新增收藏管理、核心类型细分、智能重扫、分布式分片、玩家历史追踪；v3.3 系列新增协议被动指纹识别（参考 matscan）、异步高速扫描、RCON/命令执行、代理服支持。
+MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的版本，v3.2 系列新增收藏管理、核心类型细分、智能重扫、分布式分片、玩家历史追踪；v3.3 系列新增协议被动指纹识别（参考 matscan）、异步扫描、RCON/命令执行、代理服支持。
 
 **设计理念：** 保留 V1 的全部功能（自动警告、AuthMe、完整 Web 面板、配置文件），套用 V2 的模块化分层架构，持续吸收增强点（SLP 容错、masscan auto-import、完善测试体系、合规声明）。
 
 **v3.2 新增：** 收藏管理系统、12 种核心类型识别、模组列表提取、智能重扫队列、分布式任务分片、玩家历史追踪、Discord 通知、扫描去重
 
-**v3.3 新增：** 协议被动指纹识别（JSON字段顺序/空sample/空favicon推断服务端软件）、异步高速扫描模式（uvloop+pysimdjson，快5-10倍）、RCON远程命令执行、代理服(BungeeCord/Velocity)兼容、多机器人并发警告优化
+**v3.3 新增：** 协议被动指纹识别（JSON字段顺序/空sample/空favicon推断服务端软件）、异步扫描模式（uvloop+pysimdjson，端口扫描阶段有加速）、RCON远程命令执行、代理服(BungeeCord/Velocity)兼容、多机器人并发警告
 
-**v3.3.2 更新：** 聊天消息监听系统（支持全版本JSON组件解析）、插件抓取功能补完（/plugins /version 自动解析）、命令执行器条件命令可用、异步认证检测真并发（100线程全局池）、4版本聊天包格式修正、AuthMe自动注册、27个bug修复、依赖内置libs/开箱即用
+**v3.3.2 更新：** 聊天消息监听（支持JSON+NBT双格式，兼容1.20.5+高版本系统消息）、插件抓取、命令执行器条件命令、异步认证检测并发优化、多版本包ID修正、观察者模式（Web API实时监控聊天/玩家进出）、AuthMe自动注册、依赖内置libs/开箱即用、若干bug修复
 
 ---
 
@@ -40,9 +40,10 @@ MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 🏷️ **12 种核心类型识别** — vanilla/paper/spigot/bukkit/purpur/forge/fabric/neoforge/quilt/catserver/arclight/unknown
 - 🧩 **模组列表提取** — 老版本 Forge 自动提取 modinfo.mods，新版本提取 forgeData.channels
 - 👆 **协议被动指纹识别**（v3.3 新增，参考 matscan）— 基于 SLP JSON 字段顺序、空 sample、空 favicon 等特征推断服务端软件（vanilla/paper/spigot/forge/fabric/neoforge/velocity/bungeecord/folia），带置信度评分
-- 💬 **聊天消息监听**（v3.3.2）— Bot 进入 play 阶段后自动监听聊天消息，支持 JSON 组件解析，用于插件抓取和命令响应
-- 🔌 **插件抓取**（v3.3.2）— 登录后自动发送 `/plugins` `/version`，解析插件列表、服务端版本、反作弊类型
-- 📜 **命令执行器**（v3.3.2）— 支持条件命令 `IF 关键词 THEN 命令`，自动捕获服务器响应
+- 💬 **聊天消息监听**（v3.3.2）— Bot 进入 play 阶段后监听聊天消息，支持 JSON 和 NBT 双格式（兼容 1.20.5+ 高版本系统消息）
+- 👁️ **观察者模式**（v3.3.2）— Web API 挂观察者 bot，实时捕获服务器聊天和玩家进出
+- 🔌 **插件抓取**（v3.3.2）— 登录后自动发送 `/plugins` `/version`，解析插件列表、服务端版本
+- 📜 **命令执行器**（v3.3.2）— 支持条件命令 `IF 关键词 THEN 命令`，捕获服务器响应
 
 ### 收藏管理（v3.2 新增）
 - ⭐ **一键收藏** — 结果页点击 ☆ 收藏服务器
