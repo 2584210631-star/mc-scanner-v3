@@ -74,7 +74,7 @@ class ScanEngine:
             if up.get("state") == "up":
                 result.update({k: up.get(k) for k in
                                ("version", "proto", "motd", "ping_ms", "favicon",
-                                "core_type", "mods", "forge_channels")})
+                                "core_type", "mods", "forge_channels", "fingerprint")})
                 result["players_online"] = up.get("online", 0)
                 result["players_max"] = up.get("max", 0)
                 result["player_list"] = [p.get("name", "") for p in up.get("sample", [])]
