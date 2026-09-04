@@ -724,7 +724,7 @@ async function loadResults(page) {
       <td>${r.ip}:${r.port}</td>
       <td>${r.version || '-'}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
       <td><span class="badge badge-${r.core_type || 'unknown'}" style="text-transform:capitalize;">${r.core_type || '-'}</span></td>
-      <td>${r.fingerprint ? '<span title="字段顺序: ' + (r.fingerprint.field_order||'?') + (r.fingerprint.incorrect_order?' (异常)':'') + '">' + (r.fingerprint.likely_software||'-') + ' (' + (r.fingerprint.confidence||0) + '%)</span>' : '-'}</td>
+      <td>${r.fingerprint ? '<span title="被动: ' + (r.fingerprint.likely_software||'-') + '(' + (r.fingerprint.confidence||0) + '%)' + (r.fingerprint.active_software && r.fingerprint.active_software!='unknown' ? ' | 主动: ' + r.fingerprint.active_software + '(' + (r.fingerprint.active_confidence||0) + '%)' : '') + (r.fingerprint.field_order ? ' | 字段顺序: ' + r.fingerprint.field_order : '') + '">' + (r.fingerprint.likely_software||'-') + ' (' + (r.fingerprint.confidence||0) + '%)' + (r.fingerprint.active_software && r.fingerprint.active_software!='unknown' && r.fingerprint.active_software!=r.fingerprint.likely_software ? ' / ' + r.fingerprint.active_software : '') + '</span>' : '-'}</td>
       <td>${r.proto || '-'}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.motd||''}">${r.motd || '-'}</td>
       <td>${r.players_online || 0}/${r.players_max || 0}</td>

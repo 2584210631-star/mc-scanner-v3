@@ -78,6 +78,12 @@ MC Scanner v3.3.2 是在 mc-scanner V1 和 V2 基础上整合优化的超越版�
 - 📊 **置信度评分** — 0-100%，字段顺序异常+30%，版本名匹配+40%，Forge数据+90%
 - 🌐 **Web 展示** — 结果表格新增指纹列，hover 显示字段顺序详情
 
+### 协议主动指纹（v3.3.2 新增，参考 matscan）
+- 📡 **Malformed Login 探测** — 发送用户名长度为0的畸形登录包，触发服务器错误
+- 🔤 **包名识别** — 从错误消息提取包名：PacketLoginInStart=Paper、ServerboundHelloPacket=Forge、class_开头=Fabric、2-3字母混淆名=Vanilla
+- 🔧 **Netty 错误识别** — 高版本 Bukkit 系(Paper/Spigot)返回 netty DecoderException，识别为 bukkit_based
+- 🔄 **被动+主动融合** — 主动指纹置信度更高时覆盖被动推断，Web 同时显示两者结果
+
 ### 全版本兼容
 - 📦 支持 **Minecraft 1.12.2 ~ 最新版本**（协议 340+）
 - 📝 5 种聊天消息格式自动适配（1.12 ~ 1.21.11+）
