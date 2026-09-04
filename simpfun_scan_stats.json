@@ -1,9 +1,0 @@
-{
-  "total_ports_scanned": 65535,
-  "open_ports": 919,
-  "mc_servers_found": 524,
-  "login_tested": 524,
-  "loginable": 140,
-  "failed": 384,
-  "last_update": "2026-09-04T12:06:45.688325"
-}
