@@ -63,7 +63,7 @@ SERVER_TYPE_PATTERNS = {
         r"magma",
     ],
     "node-minecraft-protocol": [
-        r"node",
+        r"node-minecraft-protocol",
         r"minecraft-protocol",
         r"nodemc",
     ],

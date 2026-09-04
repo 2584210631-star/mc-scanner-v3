@@ -125,27 +125,20 @@ def capture_plugins(bot: MCBot, wait_time: float = 2.0) -> ServerIntel:
 
 
 def _send_and_capture(bot: MCBot, command: str, wait_time: float) -> str:
-    """发送命令并捕获聊天响应（通过临时监听）"""
-    messages = []
-    original_handler = None
-
-    def capture_handler(packet_id, data):
-        # 尝试从聊天包中提取文本（简化版，只收集原始字节长度）
-        messages.append(len(data))
-
-    # 直接发命令，然后等待
+    """发送命令并捕获聊天响应（通过 bot 的聊天消息监听）"""
+    # 记录发送前的消息数量，只捕获新消息
+    before = len(bot.chat_messages)
     try:
         bot.send_command(command)
     except Exception:
         pass
-
     time.sleep(wait_time)
-
-    # 由于 bot 的 _handle_play_packets 在后台线程运行，
-    # 我们无法直接获取聊天内容。这里返回空字符串，
-    # 实际插件列表解析依赖于 bot 层面的聊天监听扩展。
-    # 完整实现需要在 MCBot 中添加聊天回调机制。
-    return ""
+    # 收集发送后收到的新消息
+    new_messages = bot.chat_messages[before:]
+    if not new_messages:
+        return ""
+    # 合并多条消息（插件列表可能分多条发送）
+    return "\n".join(new_messages)
 
 
 def _parse_plugins(text: str) -> list[PluginInfo]:
