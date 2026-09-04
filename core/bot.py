@@ -75,6 +75,7 @@ class MCBot:
         self.modded_channels = set()
         # 聊天消息监听（用于插件抓取等）
         self.chat_messages: list[str] = []
+        self._chat_lock = threading.Lock()
         self.chat_callback = None  # callable(text: str) -> None
 
     def connect(self) -> bool:
@@ -421,7 +422,8 @@ class MCBot:
                 try:
                     text = self._extract_chat_text(data, packet_id == pkts.get("cb_system_chat"))
                     if text:
-                        self.chat_messages.append(text)
+                        with self._chat_lock:
+                            self.chat_messages.append(text)
                         if self.chat_callback:
                             try:
                                 self.chat_callback(text)
@@ -481,48 +483,60 @@ class MCBot:
 
     # ---- 各版本聊天消息格式 ----
     def _send_chat_new(self, message: str, chat_id: int):
-        """1.20.5+ 新格式（协议 766+）"""
-        proto = self.protocol_version
+        """1.20.5+ 新格式（协议 766+）
+        格式: String message + Long timestamp + Long salt
+        + Optional(ByteArray) signature (Boolean=false)
+        + VarInt message_count (0)
+        + ByteArray acknowledgment (VarInt(0))
+        """
         timestamp = int(time.time() * 1000)
         salt = 0
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", salt)
-                   + write_varint(0)
-                   + b'\x00\x00\x00'
-                   + b'\x00')  # checksum (所有版本都需要)
+                   + b'\x00'       # signature present: Boolean(false)
+                   + write_varint(0)  # message_count: VarInt(0)
+                   + write_varint(0))  # acknowledgment length: VarInt(0)
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_761(self, message: str, chat_id: int):
-        """1.19.3-1.20.4（协议 761-765）"""
+        """1.19.3-1.20.4（协议 761-765）
+        格式: String message + Long timestamp + Long salt
+        + Optional(ByteArray) signature (Boolean=false)
+        + Boolean signed_preview (false)
+        """
         timestamp = int(time.time() * 1000)
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", 0)
-                   + b'\x00'
-                   + write_varint(0)
-                   + b'\x00\x00\x00')
+                   + b'\x00'  # signature present: Boolean(false)
+                   + b'\x00')  # signed_preview: Boolean(false)
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_760(self, message: str, chat_id: int):
-        """1.19.1/1.19.2（协议 760）"""
+        """1.19.1/1.19.2（协议 760）
+        格式同 761: signature(Optional) + signed_preview(Boolean)
+        """
         timestamp = int(time.time() * 1000)
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", 0)
-                   + b'\x00'
-                   + write_varint(0)
-                   + b'\x00')
+                   + b'\x00'  # signature present: Boolean(false)
+                   + b'\x00')  # signed_preview: Boolean(false)
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_759(self, message: str, chat_id: int):
-        """1.19（协议 759）"""
+        """1.19（协议 759）
+        格式: String message + Long timestamp + Long salt
+        + ByteArray(256) signature (固定256字节)
+        + Boolean signed_preview (false)
+        """
         timestamp = int(time.time() * 1000)
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", 0)
-                   + b'\x00'
-                   + b'\x00')
+                   + b'\x00' * 256  # signature: 256字节空签名
+                   + b'\x00')       # signed_preview: Boolean(false)
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_simple(self, message: str, chat_id: int):
