@@ -300,8 +300,10 @@ def cmd_bot(args, cfg):
             print(f"[+] AuthMe: {'/register' if args.register else '/login'}")
             bot.authme_login(args.authme, register=args.register)
         if args.message:
-            bot.send_chat(args.message)
-            print(f"[+] 已发送: {args.message}")
+            messages = args.message if isinstance(args.message, list) else [args.message]
+            for msg in messages:
+                bot.send_chat(msg)
+                print(f"[+] 已发送: {msg}")
         bot.keep_alive(args.hold or 4.0)
         print("[+] 保持连接结束")
     except Exception as e:
@@ -772,7 +774,7 @@ def main():
     b.add_argument("target", help="host:port")
     b.add_argument("--proto", type=int, default=None)
     b.add_argument("-u", "--username")
-    b.add_argument("-m", "--message")
+    b.add_argument("-m", "--message", action="append", help="警告消息（可多次）")
     b.add_argument("--authme")
     b.add_argument("--register", action="store_true")
     b.add_argument("--timeout", type=float, default=15.0)
