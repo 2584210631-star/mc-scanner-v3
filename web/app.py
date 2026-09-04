@@ -706,17 +706,18 @@ def bot_command():
         if authme_password:
             bot.authme_login(authme_password, register=False)
             time.sleep(1.0)
+        before = len(bot.chat_messages)
         bot.send_command(command)
         time.sleep(1.5)  # 等服务器处理命令
         bot.keep_alive(hold)
         auth_mode = getattr(bot, 'auth_mode', 'unknown')
         state = getattr(bot, 'state', 'unknown')
-        # 收集收到的聊天消息作为命令响应
-        chat_log = getattr(bot, 'chat_log', [])
+        # 收集命令发送后收到的新聊天消息作为响应
+        chat_responses = bot.chat_messages[before:]
         bot.close()
         cmd = command if command.startswith('/') else '/' + command
         return jsonify({"success": True, "command": cmd, "auth_mode": auth_mode,
-                        "state": state, "hold": hold, "chat": chat_log[-5:]})
+                        "state": state, "hold": hold, "chat": chat_responses[-10:]})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
