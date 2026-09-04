@@ -69,17 +69,16 @@ def scan_ports(targets, max_workers: int = 200, timeout: float = 3.0,
         futures = {}
         target_iter = iter(target_list)
         last_submit = time.time()
-        submitted = 0
 
         def _submit_one(ip, port):
-            nonlocal submitted, last_submit
+            nonlocal last_submit
             if rate > 0:
-                submitted += 1
-                if submitted % rate == 0:
-                    elapsed = time.time() - last_submit
-                    if elapsed < 1.0:
-                        time.sleep(1.0 - elapsed)
-                    last_submit = time.time()
+                # 令牌桶限速：每次提交间隔至少 1/rate 秒
+                min_interval = 1.0 / rate
+                elapsed = time.time() - last_submit
+                if elapsed < min_interval:
+                    time.sleep(min_interval - elapsed)
+                last_submit = time.time()
             futures[executor.submit(check_port, ip, port, timeout)] = (ip, port)
 
         # 初始填充一批

@@ -46,7 +46,7 @@ def run_masscan(targets: str, ports: str = "25565", rate: int = 1000,
         "-p", ports,
         "--rate", str(rate),
         "-oJ", output_file,
-        "--wait", "0",
+        "--wait", "3",
     ]
     if exclude_file and os.path.exists(exclude_file):
         cmd.extend(["--excludefile", exclude_file])
