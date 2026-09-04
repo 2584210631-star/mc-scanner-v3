@@ -1018,10 +1018,10 @@ def plugins_capture():
         return jsonify({
             "success": True,
             "server_software": intel.server_software,
-            "version": intel.version,
+            "version": intel.server_version,
             "plugins": [{"name": p.name, "version": p.version} for p in intel.plugins],
             "anti_cheat": intel.anti_cheat,
-            "raw_text": intel.raw_text[:500],
+            "raw_text": str(intel.raw_responses)[:500],
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)[:200]})

@@ -427,5 +427,6 @@ def get_proxy_manager(proxy_file: str = "proxies.txt", auto_fetch: bool = False,
             return None
         _global_manager = ProxyManager(proxy_file=proxy_file, auto_fetch=auto_fetch, **kwargs)
         if len(_global_manager) == 0:
+            _global_manager = None  # 空管理器不缓存，允许后续重新创建
             return None
     return _global_manager
