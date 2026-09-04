@@ -14,7 +14,8 @@ from typing import Optional
 
 from .buffer import (write_varint, write_string, write_uuid,
                      read_varint_from_stream, read_string_from_stream,
-                     read_uuid_from_stream, offline_uuid, BytesStream)
+                     read_uuid_from_stream, read_boolean_from_stream,
+                     offline_uuid, BytesStream)
 from .conn import MCConnection, PROTO_STATE_LOGIN, PROTO_STATE_CONFIGURATION, PROTO_STATE_PLAY
 from .packets import get_play_packets, get_config_packets, get_login_packets
 from .protocol import get_version_name, COMMON_PROTOCOLS
@@ -333,13 +334,16 @@ class MCBot:
             # 旧版本用聊天消息发命令
             self._send_chat_simple("/" + command, pkts["sb_chat"])
 
-    def authme_login(self, password: str, register: bool = False):
-        """AuthMe 登录：已注册用 /login，未注册用 /register"""
+    def authme_login(self, password: str, register: bool = False, auto_register: bool = True):
+        """AuthMe 登录：已注册用 /login，未注册自动 /register"""
         if register:
             self.send_command(f"register {password} {password}")
         else:
             self.send_command(f"login {password}")
-        time.sleep(2.5)
+            if auto_register:
+                time.sleep(1.5)
+                self.send_command(f"register {password} {password}")
+        time.sleep(2.0)
 
     def keep_alive(self, duration: float = 3.0):
         """保持连接指定秒数"""
@@ -395,16 +399,16 @@ class MCBot:
                         try:
                             uid = str(read_uuid(stream))
                             if actions & 0x01:  # ADD_PLAYER
-                                name = read_string(stream)
+                                name = read_string_from_stream(stream)
                                 self.player_list[uid] = name
-                                props = read_varint(stream)
+                                props = read_varint_from_stream(stream)
                                 for _ in range(props):
-                                    read_string(stream); read_string(stream)
-                                    if read_boolean(stream): read_string(stream)
-                            if actions & 0x02: read_varint(stream)  # gamemode
-                            if actions & 0x04: read_varint(stream)  # ping
+                                    read_string_from_stream(stream); read_string_from_stream(stream)
+                                    if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                            if actions & 0x02: read_varint_from_stream(stream)  # gamemode
+                            if actions & 0x04: read_varint_from_stream(stream)  # ping
                             if actions & 0x08:
-                                if read_boolean(stream): read_string(stream)  # display name
+                                if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
                         except Exception:
                             break
                 except Exception:

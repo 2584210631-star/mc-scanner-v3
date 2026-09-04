@@ -154,9 +154,8 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 try:
                     resp_id, resp_payload = _recv_login_response(conn, login_pkts)
                 except ConnectionError:
-                    last_detail = "连接被关闭"
-                    return {"state": STATE_WHITELIST, "detected_proto": proto,
-                            "detail": "login disconnect"}
+                    last_detail = "连接被关闭（可能白名单/超时/崩溃）"
+                    continue
 
                 if resp_id == login_pkts["cb_success"]:
                     return {"state": STATE_CRACKED, "detected_proto": proto,
