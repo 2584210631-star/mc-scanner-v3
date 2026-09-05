@@ -232,49 +232,108 @@ tbody tr:last-child td { border-bottom: none; }
 .obs-session-card .obs-status { font-size:11px;margin-top:2px; }
 .obs-status-online { color:#4ade80; }
 .obs-status-offline { color:#f87171; }
-/* 开场动画 */
+/* 开场动画 - 终端黑客风格 */
 #intro-overlay {
   position: fixed; inset: 0; z-index: 9999;
-  background: var(--bg);
+  background: #050810;
   display: flex; align-items: center; justify-content: center;
-  flex-direction: column;
+  overflow: hidden;
 }
-.intro-content { text-align: center; }
-.intro-name {
-  font-size: clamp(48px, 10vw, 96px);
-  font-weight: 800; letter-spacing: 4px;
-  font-family: var(--mono);
-  display: flex; gap: 2px; justify-content: center;
+#intro-overlay::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    linear-gradient(rgba(34,211,238,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: gridMove 8s linear infinite;
 }
-.intro-letter {
-  display: inline-block;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
-  opacity: 0; transform: translateY(40px) scale(0.5);
-  filter: blur(8px);
+@keyframes gridMove { from { background-position: 0 0; } to { background-position: 40px 40px; } }
+#intro-overlay::after {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px);
+  pointer-events: none;
 }
-.intro-sub {
-  margin-top: 18px; font-size: 14px; color: var(--text-2);
-  letter-spacing: 6px; opacity: 0;
-  font-family: var(--mono);
+.intro-scanline {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(34,211,238,0.8), transparent);
+  box-shadow: 0 0 20px rgba(34,211,238,0.6);
+  top: 0;
 }
-.intro-line {
-  width: 0; height: 2px; margin: 22px auto 0;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  border-radius: 2px;
-  box-shadow: 0 0 12px rgba(34,211,238,0.5);
+.intro-terminal {
+  position: relative; z-index: 2;
+  width: min(560px, 90vw);
+  background: rgba(8,12,24,0.9);
+  border: 1px solid rgba(34,211,238,0.3);
+  border-radius: 10px;
+  box-shadow: 0 0 60px rgba(34,211,238,0.15), inset 0 0 30px rgba(34,211,238,0.03);
+  overflow: hidden;
+}
+.intro-term-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  background: rgba(34,211,238,0.06);
+  border-bottom: 1px solid rgba(34,211,238,0.2);
+}
+.intro-dot { width: 11px; height: 11px; border-radius: 50%; }
+.intro-dot.r { background: #f43f5e; }
+.intro-dot.y { background: #f59e0b; }
+.intro-dot.g { background: #22c55e; }
+.intro-term-title {
+  margin-left: 10px; font-size: 12px; color: rgba(34,211,238,0.6);
+  font-family: var(--mono); letter-spacing: 1px;
+}
+.intro-term-body {
+  padding: 28px 24px 24px;
+  font-family: var(--mono); font-size: 14px;
+  min-height: 200px;
+}
+.intro-line-text {
+  color: rgba(34,211,238,0.7); line-height: 1.9;
+  white-space: nowrap; overflow: hidden;
+}
+.intro-line-text .prompt { color: #22c55e; }
+.intro-line-text .ok { color: #22c55e; }
+.intro-line-text .warn { color: #f59e0b; }
+.intro-big-name {
+  font-size: clamp(36px, 7vw, 56px);
+  font-weight: 800; letter-spacing: 6px;
+  color: #22d3ee;
+  text-shadow: 0 0 10px rgba(34,211,238,0.8), 0 0 30px rgba(34,211,238,0.4), 0 0 60px rgba(34,211,238,0.2);
+  margin: 14px 0 6px;
+  opacity: 0;
+}
+.intro-big-name .glitch { position: relative; display: inline-block; }
+.intro-sub-text {
+  font-size: 12px; color: rgba(148,163,184,0.6);
+  letter-spacing: 3px; opacity: 0;
+}
+.intro-progress {
+  margin-top: 20px; height: 3px;
+  background: rgba(34,211,238,0.1); border-radius: 2px;
+  overflow: hidden;
+}
+.intro-progress-bar {
+  height: 100%; width: 0;
+  background: linear-gradient(90deg, #22d3ee, #6366f1);
+  box-shadow: 0 0 10px rgba(34,211,238,0.6);
 }
 </style>
 </head>
 <body>
 <div id="intro-overlay">
-  <div class="intro-content">
-    <div class="intro-name">
-      <span class="intro-letter">I</span><span class="intro-letter">R</span><span class="intro-letter">m</span><span class="intro-letter">k</span><span class="intro-letter">s</span>
+  <div class="intro-scanline"></div>
+  <div class="intro-terminal">
+    <div class="intro-term-header">
+      <span class="intro-dot r"></span><span class="intro-dot y"></span><span class="intro-dot g"></span>
+      <span class="intro-term-title">irmks@mc-scanner: ~/boot</span>
     </div>
-    <div class="intro-sub">MC Scanner v3</div>
-    <div class="intro-line"></div>
+    <div class="intro-term-body">
+      <div class="intro-line-text" id="introLine1"></div>
+      <div class="intro-line-text" id="introLine2"></div>
+      <div class="intro-big-name" id="introName">IRmks</div>
+      <div class="intro-sub-text" id="introSub">MC SCANNER v3 — SECURITY TOOLKIT</div>
+      <div class="intro-progress"><div class="intro-progress-bar" id="introBar"></div></div>
+    </div>
   </div>
 </div>
 <header class="topbar">
@@ -658,20 +717,61 @@ Protect your server NOW!</textarea></div>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// 开场动画
+// 开场动画 - 终端黑客风格
 (function() {
   const overlay = document.getElementById('intro-overlay');
   if (!overlay || typeof gsap === 'undefined') { overlay.remove(); return; }
-  const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-  tl.to(".intro-letter", {
-    opacity: 1, y: 0, scale: 1, filter: "blur(0px)",
-    duration: 0.7, stagger: 0.12, ease: "back.out(1.8)"
-  })
-  .to(".intro-sub", { opacity: 1, y: 0, duration: 0.5 }, "-=0.3")
-  .to(".intro-line", { width: 180, duration: 0.6, ease: "power2.inOut" }, "-=0.2")
-  .to({}, { duration: 0.5 })
-  .to(".intro-content", { opacity: 0, scale: 1.1, duration: 0.4, ease: "power2.in" })
-  .to(overlay, { autoAlpha: 0, duration: 0.4, onComplete: () => overlay.remove() }, "-=0.2");
+
+  const line1 = document.getElementById('introLine1');
+  const line2 = document.getElementById('introLine2');
+  const nameEl = document.getElementById('introName');
+  const subEl = document.getElementById('introSub');
+  const bar = document.getElementById('introBar');
+
+  // 打字机效果
+  function typeText(el, text, speed, callback) {
+    let i = 0;
+    el.innerHTML = '<span class="prompt">$ </span>';
+    const timer = setInterval(() => {
+      if (i < text.length) {
+        el.innerHTML = '<span class="prompt">$ </span>' + text.substring(0, i + 1) + '<span style="opacity:1">▋</span>';
+        i++;
+      } else {
+        el.innerHTML = '<span class="prompt">$ </span>' + text;
+        clearInterval(timer);
+        if (callback) callback();
+      }
+    }, speed);
+  }
+
+  // 扫描线动画
+  gsap.to(".intro-scanline", { top: "100%", duration: 2, ease: "none", repeat: -1 });
+
+  const tl = gsap.timeline();
+  tl.call(() => typeText(line1, "initializing mc-scanner-v3...", 40))
+    .to({}, { duration: 1.2 })
+    .call(() => typeText(line2, 'loading protocol tables... <span class="ok">[OK]</span>', 35))
+    .to({}, { duration: 1.0 })
+    .to(nameEl, { opacity: 1, duration: 0.1, onStart: () => {
+        // glitch 效果
+        let glitchCount = 0;
+        const glitchTimer = setInterval(() => {
+          if (glitchCount < 6) {
+            nameEl.style.transform = `translate(${(Math.random()-0.5)*6}px, ${(Math.random()-0.5)*3}px)`;
+            nameEl.style.textShadow = `0 0 10px rgba(34,211,238,0.8), ${(Math.random()-0.5)*10}px 0 rgba(244,63,94,0.6), ${(Math.random()-0.5)*10}px 0 rgba(99,102,241,0.6)`;
+            glitchCount++;
+          } else {
+            clearInterval(glitchTimer);
+            nameEl.style.transform = '';
+            nameEl.style.textShadow = '';
+          }
+        }, 60);
+      }})
+    .to(subEl, { opacity: 1, duration: 0.5 }, "-=0.3")
+    .to(bar, { width: "100%", duration: 0.8, ease: "power2.inOut" }, "-=0.2")
+    .to({}, { duration: 0.4 })
+    .to(".intro-terminal", { scale: 1.05, opacity: 0, duration: 0.4, ease: "power2.in" })
+    .to(overlay, { autoAlpha: 0, duration: 0.3, onComplete: () => overlay.remove() }, "-=0.2");
 })();
 
 let currentPage = 1, totalResults = 0, dbCurrentPage = 1, dbTotal = 0;
