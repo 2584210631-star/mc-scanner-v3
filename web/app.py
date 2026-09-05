@@ -413,6 +413,12 @@ class ObserverSession:
                     self.bot.close()
                 except Exception:
                     pass
+            # 会话结束后从全局字典移除，防止内存泄漏
+            try:
+                with observer_lock:
+                    observer_sessions.pop(self.session_id, None)
+            except Exception:
+                pass
 
     def stop(self):
         self.stop_event.set()
