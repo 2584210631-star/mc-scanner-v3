@@ -776,7 +776,7 @@ class MCBot:
                    + struct.pack(">q", 0)
                    + b'\x00'
                    + write_varint(0)
-                   + write_varint(0))
+                   + b"\x00\x00\x00")
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_760(self, message: str, chat_id: int):
