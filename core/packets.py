@@ -156,14 +156,17 @@ def get_config_packets(proto: int) -> dict | None:
     if proto < 764:
         return None
     from .protocol import (
-        CONFIG_CB_PLUGIN_MESSAGE, CONFIG_CB_FINISH_CONFIGURATION,
+        CONFIG_CB_COOKIE_REQUEST, CONFIG_CB_PLUGIN_MESSAGE,
+        CONFIG_CB_FINISH_CONFIGURATION,
         CONFIG_CB_KEEP_ALIVE, CONFIG_CB_PING,
         CONFIG_CB_DISCONNECT, CONFIG_CB_KNOWN_PACKS,
-        CONFIG_SB_CLIENT_INFORMATION, CONFIG_SB_PLUGIN_MESSAGE,
+        CONFIG_SB_CLIENT_INFORMATION, CONFIG_SB_COOKIE_RESPONSE,
+        CONFIG_SB_PLUGIN_MESSAGE,
         CONFIG_SB_FINISH_CONFIGURATION,
         CONFIG_SB_KEEP_ALIVE, CONFIG_SB_PONG, CONFIG_SB_KNOWN_PACKS,
     )
     return {
+        "cb_cookie_request": CONFIG_CB_COOKIE_REQUEST,
         "cb_plugin_message": CONFIG_CB_PLUGIN_MESSAGE,
         "cb_finish": CONFIG_CB_FINISH_CONFIGURATION,
         "cb_keep_alive": CONFIG_CB_KEEP_ALIVE,
@@ -171,6 +174,7 @@ def get_config_packets(proto: int) -> dict | None:
         "cb_disconnect": CONFIG_CB_DISCONNECT,
         "cb_known_packs": CONFIG_CB_KNOWN_PACKS,
         "sb_client_info": CONFIG_SB_CLIENT_INFORMATION,
+        "sb_cookie_response": CONFIG_SB_COOKIE_RESPONSE,
         "sb_plugin_message": CONFIG_SB_PLUGIN_MESSAGE,
         "sb_finish": CONFIG_SB_FINISH_CONFIGURATION,
         "sb_keep_alive": CONFIG_SB_KEEP_ALIVE,
