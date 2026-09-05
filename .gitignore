@@ -52,3 +52,5 @@ stay_*.py
 verified_*.json
 cracked_*.json
 rescan*.py
+*.json
+*.txt
