@@ -354,11 +354,11 @@ class ObserverSession:
     def _ts():
         return datetime.now().strftime("%H:%M:%S")
 
-    def _on_chat(self, text):
+    def _on_chat(self, text, sender="未知"):
         try:
             with self.lock:
-                self.events.append((self._next_seq(), self._ts(), "chat", text))
-                self.chat_log.append((self._seq, self._ts(), text))
+                self.events.append((self._next_seq(), self._ts(), "chat", sender, text))
+                self.chat_log.append((self._seq, self._ts(), sender, text))
         except Exception:
             pass
 
@@ -451,10 +451,16 @@ class ObserverSession:
         with self.lock:
             players = self._players()
             all_events = list(self.events)
-            chat = [(c[0], c[1], c[2]) for c in self.chat_log]
             last_seq = self._seq
         if since is not None:
             all_events = [e for e in all_events if e[0] > since]
+        # events: chat=(seq,time,type,sender,text)  join/leave=(seq,time,type,name)
+        events_out = []
+        for e in all_events[-100:]:
+            if e[2] == "chat":
+                events_out.append({"seq": e[0], "time": e[1], "type": e[2], "sender": e[3], "text": e[4]})
+            else:
+                events_out.append({"seq": e[0], "time": e[1], "type": e[2], "name": e[3]})
         return {
             "session_id": self.session_id,
             "host": self.host,
@@ -470,9 +476,8 @@ class ObserverSession:
             "uptime": time.time() - self.start_time,
             "players_online": len(players),
             "players": players,
-            "events": [{"seq": e[0], "time": e[1], "type": e[2], "text": e[3]} for e in all_events[-100:]],
+            "events": events_out,
             "last_seq": last_seq,
-            "chat": [{"seq": c[0], "time": c[1], "text": c[2]} for c in chat[-200:]],
         }
 
 

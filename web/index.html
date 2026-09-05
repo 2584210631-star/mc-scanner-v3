@@ -1206,6 +1206,7 @@ function startObserver() {
     if (d.error) { alert('启动失败: '+d.error); return; }
     currentObsSid = d.session_id;
     obsLastSeq = 0;
+    document.getElementById('obsTerminalBody').innerHTML='';
     loadObserverSessions();
     startObsPolling();
   }).catch(e=>alert('错误: '+e));
@@ -1225,7 +1226,7 @@ function loadObserverSessions() {
       const statusCls = s.status==='connected'?'obs-status-online':'obs-status-offline';
       card.innerHTML = `<div class="obs-name">${s.username} @ ${s.host}:${s.port}</div>
         <div class="obs-status ${statusCls}">${s.status} | 消息${s.chat_count||0}</div>`;
-      card.onclick = ()=>{ currentObsSid=s.session_id; obsLastSeq=0; loadObserverSessions(); startObsPolling(); };
+      card.onclick = ()=>{ currentObsSid=s.session_id; obsLastSeq=0; document.getElementById('obsTerminalBody').innerHTML=''; loadObserverSessions(); startObsPolling(); };
       box.appendChild(card);
     });
   });
@@ -1247,11 +1248,13 @@ function pollObserverMessages() {
       d.events.forEach(m=>{
         const div = document.createElement('div');
         let cls = 'obs-chat';
-        if (m.type==='join') cls='obs-join';
-        else if (m.type==='leave') cls='obs-leave';
-        else if (m.type==='system') cls='obs-system';
+        let text = '';
+        if (m.type==='join') { cls='obs-join'; text = `>>> ${m.name} 加入了游戏`; }
+        else if (m.type==='leave') { cls='obs-leave'; text = `<<< ${m.name} 离开了游戏`; }
+        else if (m.type==='system') { cls='obs-system'; text = m.text; }
+        else { cls='obs-chat'; text = `<${m.sender||'未知'}> ${m.text}`; }
         div.className = 'obs-msg '+cls;
-        div.textContent = m.text;
+        div.textContent = text;
         body.appendChild(div);
         obsLastSeq = m.seq;
       });
