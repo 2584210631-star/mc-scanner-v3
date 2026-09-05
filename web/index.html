@@ -232,9 +232,51 @@ tbody tr:last-child td { border-bottom: none; }
 .obs-session-card .obs-status { font-size:11px;margin-top:2px; }
 .obs-status-online { color:#4ade80; }
 .obs-status-offline { color:#f87171; }
+/* 开场动画 */
+#intro-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+}
+.intro-content { text-align: center; }
+.intro-name {
+  font-size: clamp(48px, 10vw, 96px);
+  font-weight: 800; letter-spacing: 4px;
+  font-family: var(--mono);
+  display: flex; gap: 2px; justify-content: center;
+}
+.intro-letter {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  opacity: 0; transform: translateY(40px) scale(0.5);
+  filter: blur(8px);
+}
+.intro-sub {
+  margin-top: 18px; font-size: 14px; color: var(--text-2);
+  letter-spacing: 6px; opacity: 0;
+  font-family: var(--mono);
+}
+.intro-line {
+  width: 0; height: 2px; margin: 22px auto 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: 2px;
+  box-shadow: 0 0 12px rgba(34,211,238,0.5);
+}
 </style>
 </head>
 <body>
+<div id="intro-overlay">
+  <div class="intro-content">
+    <div class="intro-name">
+      <span class="intro-letter">I</span><span class="intro-letter">R</span><span class="intro-letter">m</span><span class="intro-letter">k</span><span class="intro-letter">s</span>
+    </div>
+    <div class="intro-sub">MC Scanner v3</div>
+    <div class="intro-line"></div>
+  </div>
+</div>
 <header class="topbar">
   <div class="brand">
     <div class="logo">◈</div>
@@ -613,8 +655,25 @@ Protect your server NOW!</textarea></div>
 </div>
 
 </body>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+// 开场动画
+(function() {
+  const overlay = document.getElementById('intro-overlay');
+  if (!overlay || typeof gsap === 'undefined') { overlay.remove(); return; }
+  const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+  tl.to(".intro-letter", {
+    opacity: 1, y: 0, scale: 1, filter: "blur(0px)",
+    duration: 0.7, stagger: 0.12, ease: "back.out(1.8)"
+  })
+  .to(".intro-sub", { opacity: 1, y: 0, duration: 0.5 }, "-=0.3")
+  .to(".intro-line", { width: 180, duration: 0.6, ease: "power2.inOut" }, "-=0.2")
+  .to({}, { duration: 0.5 })
+  .to(".intro-content", { opacity: 0, scale: 1.1, duration: 0.4, ease: "power2.in" })
+  .to(overlay, { autoAlpha: 0, duration: 0.4, onComplete: () => overlay.remove() }, "-=0.2");
+})();
+
 let currentPage = 1, totalResults = 0, dbCurrentPage = 1, dbTotal = 0;
 let statusTimer = null, warnIp = null, warnPort = null, versionChart = null;
 let cmdIp = null, cmdPort = null;
