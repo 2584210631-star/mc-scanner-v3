@@ -77,18 +77,18 @@ _PLAY_TABLES = [
      "cb_login": 0x23, "cb_teleport": 0x36, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17,
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0A, "cb_player_info": 0x32,
      "cb_chat_message": 0x30, "cb_system_chat": 0x5D},
-    # 754: 1.16.5 (准确包ID，来自minecraft-data)
-    {"min_proto": 754, "max_proto": 754, "sb_chat": 0x03, "sb_chat_command": None,
+    # 753-754: 1.16.4-1.16.5 (准确包ID，来自minecraft-data)
+    {"min_proto": 753, "max_proto": 754, "sb_chat": 0x03, "sb_chat_command": None,
      "cb_keep_alive": 0x1F, "sb_keep_alive": 0x10, "cb_ping": None, "sb_pong": None,
      "cb_login": 0x24, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19,
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0B, "cb_player_info": 0x32,
      "cb_chat_message": 0x0E, "cb_system_chat": None},
-    # 340-753: 旧版本
+    # 340-753: 旧版本（包ID各版本不同，由自动表补全）
     {"min_proto": 340, "max_proto": 753, "sb_chat": 0x03, "sb_chat_command": None,
-     "cb_keep_alive": 0x1F, "sb_keep_alive": 0x0E, "cb_ping": 0x2F, "sb_pong": 0x1D,
-     "cb_login": 0x23, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A,
-     "cb_plugin_message": 0x19, "sb_plugin_message": 0x0A, "cb_player_info": 0x30,
-     "cb_chat_message": 0x0F, "cb_system_chat": None},
+     "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
+     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": 0x00, "cb_disconnect": None,
+     "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
+     "cb_chat_message": None, "cb_system_chat": None},
 ]
 
 _auto_tables = None
@@ -121,13 +121,16 @@ def _load_auto_tables():
                 "cb_ping": cb.get("ping", cb.get("ping_pong")),
                 "sb_pong": sb.get("pong", sb.get("ping_pong")),
                 "cb_login": cb.get("login", cb.get("join_game")),
+                "cb_disconnect": cb.get("kick_disconnect", cb.get("disconnect")),
                 "cb_plugin_message": cb.get("custom_payload", cb.get("plugin_message")),
                 "sb_plugin_message": sb.get("custom_payload", sb.get("plugin_message")),
                 "cb_player_info": cb.get("player_info_update", cb.get("player_info")),
                 "cb_player_remove": cb.get("player_info_remove", cb.get("player_remove")),
                 "cb_profileless_chat": cb.get("profileless_chat"),
-                "cb_chat_message": cb.get("player_chat", cb.get("chat_message")),
+                "cb_chat_message": cb.get("player_chat", cb.get("chat_message", cb.get("chat"))),
                 "cb_system_chat": cb.get("system_chat"),
+                "cb_teleport": cb.get("position", cb.get("player_position", cb.get("synchronize_player_position"))),
+                "sb_confirm_teleport": sb.get("teleport_confirm", sb.get("confirm_teleport", sb.get("confirm_synchronization"))),
                 "chat_format": get_chat_format(proto),
                 "has_configuration": proto >= 764,
                 "login_start_uuid": proto >= 764,
@@ -143,17 +146,34 @@ def _load_auto_tables():
 
 
 def get_play_packets(proto: int) -> dict | None:
-    """获取指定协议版本的 Play 包 ID 表"""
-    auto = _load_auto_tables()
-    if auto and proto in auto:
-        return auto[proto]
+    """获取指定协议版本的 Play 包 ID 表（手写表优先，自动表补全）"""
+    # 先找手写表
+    handwritten = None
     for table in _PLAY_TABLES:
         if table["min_proto"] <= proto <= table["max_proto"]:
-            result = dict(table)
-            result["chat_format"] = get_chat_format(proto)
-            result["has_configuration"] = proto >= 764
-            result["login_start_uuid"] = proto >= 764
-            return result
+            handwritten = dict(table)
+            break
+    # 再找自动表
+    auto = _load_auto_tables()
+    auto_entry = auto.get(proto) if auto else None
+    # 合并：手写表非None值优先，自动表补全None
+    if handwritten and auto_entry:
+        result = dict(auto_entry)
+        for k, v in handwritten.items():
+            if v is not None:
+                result[k] = v
+        result["chat_format"] = get_chat_format(proto)
+        result["has_configuration"] = proto >= 764
+        result["login_start_uuid"] = proto >= 764
+        return result
+    if handwritten:
+        result = handwritten
+        result["chat_format"] = get_chat_format(proto)
+        result["has_configuration"] = proto >= 764
+        result["login_start_uuid"] = proto >= 764
+        return result
+    if auto_entry:
+        return auto_entry
     return None
 
 
