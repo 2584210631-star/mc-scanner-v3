@@ -50,3 +50,7 @@ Thumbs.db
 # 临时脚本
 warn_*.py
 stay_*.py
+*.log
+verified_*.json
+cracked_*.json
+rescan*.py
