@@ -78,7 +78,7 @@ class MCBot:
         # 聊天消息监听（用于插件抓取等）
         self.chat_messages: list[str] = []
         self._chat_lock = threading.Lock()
-        self.chat_callback = None  # callable(text: str) -> None
+        self.chat_callback = None  # callable(text: str, sender: str) -> None
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
@@ -474,13 +474,13 @@ class MCBot:
                     # 聊天消息 — 提取文本用于插件抓取/命令响应
                     try:
                         is_system = (packet_id == pkts.get("cb_system_chat")) or (packet_id == pkts.get("cb_profileless_chat"))
-                        text = self._extract_chat_text(data, is_system)
+                        text, sender = self._extract_chat_with_sender(data, is_system)
                         if text:
                             with self._chat_lock:
                                 self.chat_messages.append(text)
                             if self.chat_callback:
                                 try:
-                                    self.chat_callback(text)
+                                    self.chat_callback(text, sender)
                                 except Exception:
                                     pass
                     except Exception:
@@ -488,6 +488,32 @@ class MCBot:
         finally:
             # 循环退出（掉线/被断开/停止）即视为连接结束，观察者据此判断
             self.connected = False
+
+    def _extract_chat_with_sender(self, data: bytes, is_system: bool):
+        """从聊天包提取 (text, sender)，sender 为玩家名或'系统'"""
+        import json
+        sender = "系统"
+        try:
+            stream = BytesStream(data)
+            if not is_system:
+                if self.protocol_version >= 761:
+                    # 1.19.3+: senderUuid(16) + index + signature + message
+                    uuid_bytes = stream.read(16)
+                    import uuid as _uuid
+                    uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
+                    sender = self.player_list.get(uuid_str, "未知玩家")
+                else:
+                    # 旧版: UUID(16) + nickname(JSON String) + ...
+                    stream.read(16)
+                    nick_json = read_string_from_stream(stream)
+                    try:
+                        sender = self._json_component_to_text(json.loads(nick_json))
+                    except Exception:
+                        sender = nick_json
+        except Exception:
+            pass
+        text = self._extract_chat_text(data, is_system)
+        return text, sender
 
     def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
         """从聊天包 payload 中提取纯文本（简化版，尽力解析 JSON 组件）"""
