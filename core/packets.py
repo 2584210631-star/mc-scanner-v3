@@ -96,13 +96,12 @@ def _load_auto_tables():
         return _auto_tables
     _auto_loaded = True
     try:
-        from packets_auto import PACKET_TABLES_AUTO
-        from .protocol import PROTOCOL_TO_VERSION
-        ver_to_proto = {v: k for k, v in PROTOCOL_TO_VERSION.items()}
+        from .packets_auto import PACKET_TABLES_AUTO
         auto_play = {}
-        for ver_name, stages in PACKET_TABLES_AUTO.items():
-            proto = ver_to_proto.get(ver_name)
-            if proto is None:
+        for proto_str, stages in PACKET_TABLES_AUTO.items():
+            try:
+                proto = int(proto_str)
+            except (ValueError, TypeError):
                 continue
             play = stages.get("play", {})
             sb = play.get("toServer", {})

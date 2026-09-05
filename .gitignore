@@ -30,8 +30,6 @@ scan_stats.json
 scan_results*.ndjson
 masscan_*.ndjson
 
-# 自动生成的协议表
-packets_auto.py
 
 # IDE
 .vscode/
