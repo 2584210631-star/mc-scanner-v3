@@ -232,107 +232,82 @@ tbody tr:last-child td { border-bottom: none; }
 .obs-session-card .obs-status { font-size:11px;margin-top:2px; }
 .obs-status-online { color:#4ade80; }
 .obs-status-offline { color:#f87171; }
-/* 开场动画 - 终端黑客风格 */
+/* 开场动画 - 粒子流体风格 */
 #intro-overlay {
   position: fixed; inset: 0; z-index: 9999;
   background: #050810;
-  display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
-#intro-overlay::before {
-  content: ''; position: absolute; inset: 0;
-  background:
-    linear-gradient(rgba(34,211,238,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34,211,238,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  animation: gridMove 8s linear infinite;
+#intro-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
 }
-@keyframes gridMove { from { background-position: 0 0; } to { background-position: 40px 40px; } }
-#intro-overlay::after {
-  content: ''; position: absolute; inset: 0;
-  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px);
+.intro-fluid-bg {
+  position: absolute; inset: -50%;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(34,211,238,0.25), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(99,102,241,0.25), transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(168,85,247,0.15), transparent 50%);
+  filter: blur(60px);
+  animation: fluidMove 12s ease-in-out infinite alternate;
+}
+@keyframes fluidMove {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  33% { transform: translate(5%, -5%) rotate(120deg) scale(1.1); }
+  66% { transform: translate(-5%, 5%) rotate(240deg) scale(0.95); }
+  100% { transform: translate(0, 0) rotate(360deg) scale(1); }
+}
+.intro-center-text {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; z-index: 2;
   pointer-events: none;
 }
-.intro-scanline {
-  position: absolute; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(34,211,238,0.8), transparent);
-  box-shadow: 0 0 20px rgba(34,211,238,0.6);
-  top: 0;
+.intro-main-title {
+  font-size: clamp(32px, 6vw, 56px);
+  font-weight: 800; letter-spacing: 8px;
+  font-family: var(--mono);
+  background: linear-gradient(135deg, #22d3ee, #6366f1, #a855f7);
+  background-size: 200% 200%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 3s ease infinite;
+  opacity: 0;
+  filter: blur(10px);
 }
-.intro-terminal {
-  position: relative; z-index: 2;
-  width: min(560px, 90vw);
-  background: rgba(8,12,24,0.9);
-  border: 1px solid rgba(34,211,238,0.3);
-  border-radius: 10px;
-  box-shadow: 0 0 60px rgba(34,211,238,0.15), inset 0 0 30px rgba(34,211,238,0.03);
-  overflow: hidden;
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
-.intro-term-header {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
-  background: rgba(34,211,238,0.06);
-  border-bottom: 1px solid rgba(34,211,238,0.2);
-}
-.intro-dot { width: 11px; height: 11px; border-radius: 50%; }
-.intro-dot.r { background: #f43f5e; }
-.intro-dot.y { background: #f59e0b; }
-.intro-dot.g { background: #22c55e; }
-.intro-term-title {
-  margin-left: 10px; font-size: 12px; color: rgba(34,211,238,0.6);
-  font-family: var(--mono); letter-spacing: 1px;
-}
-.intro-term-body {
-  padding: 28px 24px 24px;
-  font-family: var(--mono); font-size: 14px;
-  min-height: 200px;
-}
-.intro-line-text {
-  color: rgba(34,211,238,0.7); line-height: 1.9;
-  white-space: nowrap; overflow: hidden;
-}
-.intro-line-text .prompt { color: #22c55e; }
-.intro-line-text .ok { color: #22c55e; }
-.intro-line-text .warn { color: #f59e0b; }
-.intro-big-name {
-  font-size: clamp(36px, 7vw, 56px);
-  font-weight: 800; letter-spacing: 6px;
-  color: #22d3ee;
-  text-shadow: 0 0 10px rgba(34,211,238,0.8), 0 0 30px rgba(34,211,238,0.4), 0 0 60px rgba(34,211,238,0.2);
-  margin: 14px 0 6px;
+.intro-sub-title {
+  margin-top: 14px;
+  font-size: 12px; color: rgba(148,163,184,0.7);
+  letter-spacing: 5px; font-family: var(--mono);
   opacity: 0;
 }
-.intro-big-name .glitch { position: relative; display: inline-block; }
-.intro-sub-text {
-  font-size: 12px; color: rgba(148,163,184,0.6);
-  letter-spacing: 3px; opacity: 0;
+.intro-loading {
+  margin-top: 28px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  opacity: 0;
 }
-.intro-progress {
-  margin-top: 20px; height: 3px;
-  background: rgba(34,211,238,0.1); border-radius: 2px;
-  overflow: hidden;
-}
-.intro-progress-bar {
-  height: 100%; width: 0;
-  background: linear-gradient(90deg, #22d3ee, #6366f1);
-  box-shadow: 0 0 10px rgba(34,211,238,0.6);
+.intro-dot-load {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22d3ee;
+  box-shadow: 0 0 8px rgba(34,211,238,0.8);
 }
 </style>
 </head>
 <body>
 <div id="intro-overlay">
-  <div class="intro-scanline"></div>
-  <div class="intro-terminal">
-    <div class="intro-term-header">
-      <span class="intro-dot r"></span><span class="intro-dot y"></span><span class="intro-dot g"></span>
-      <span class="intro-term-title">irmks@mc-scanner: ~/boot</span>
-    </div>
-    <div class="intro-term-body">
-      <div class="intro-line-text" id="introLine1"></div>
-      <div class="intro-line-text" id="introLine2"></div>
-      <div class="intro-big-name" id="introName">IRmks</div>
-      <div class="intro-sub-text" id="introSub">MC SCANNER v3 — SECURITY TOOLKIT</div>
-      <div class="intro-progress"><div class="intro-progress-bar" id="introBar"></div></div>
+  <div class="intro-fluid-bg"></div>
+  <canvas id="intro-canvas"></canvas>
+  <div class="intro-center-text">
+    <div class="intro-main-title" id="introTitle">MC SCANNER</div>
+    <div class="intro-sub-title" id="introSub">SERVER SECURITY TOOLKIT</div>
+    <div class="intro-loading" id="introLoading">
+      <span class="intro-dot-load"></span>
+      <span class="intro-dot-load"></span>
+      <span class="intro-dot-load"></span>
     </div>
   </div>
 </div>
@@ -717,61 +692,110 @@ Protect your server NOW!</textarea></div>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// 开场动画 - 终端黑客风格
+// 开场动画 - Canvas粒子流体效果
 (function() {
   const overlay = document.getElementById('intro-overlay');
-  if (!overlay || typeof gsap === 'undefined') { overlay.remove(); return; }
+  const canvas = document.getElementById('intro-canvas');
+  if (!overlay || !canvas || typeof gsap === 'undefined') { overlay.remove(); return; }
 
-  const line1 = document.getElementById('introLine1');
-  const line2 = document.getElementById('introLine2');
-  const nameEl = document.getElementById('introName');
-  const subEl = document.getElementById('introSub');
-  const bar = document.getElementById('introBar');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], mouse = { x: -9999, y: -9999 };
+  let animId = null, disperse = false;
 
-  // 打字机效果
-  function typeText(el, text, speed, callback) {
-    let i = 0;
-    el.innerHTML = '<span class="prompt">$ </span>';
-    const timer = setInterval(() => {
-      if (i < text.length) {
-        el.innerHTML = '<span class="prompt">$ </span>' + text.substring(0, i + 1) + '<span style="opacity:1">▋</span>';
-        i++;
-      } else {
-        el.innerHTML = '<span class="prompt">$ </span>' + text;
-        clearInterval(timer);
-        if (callback) callback();
-      }
-    }, speed);
+  function resize() {
+    W = canvas.width = overlay.offsetWidth * devicePixelRatio;
+    H = canvas.height = overlay.offsetHeight * devicePixelRatio;
+    canvas.style.width = overlay.offsetWidth + 'px';
+    canvas.style.height = overlay.offsetHeight + 'px';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  overlay.addEventListener('mousemove', e => {
+    mouse.x = e.clientX * devicePixelRatio;
+    mouse.y = e.clientY * devicePixelRatio;
+  });
+
+  const colors = ['#22d3ee', '#6366f1', '#a855f7', '#38bdf8', '#818cf8'];
+  const COUNT = Math.min(120, Math.floor((W * H) / 15000));
+
+  for (let i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.6 * devicePixelRatio,
+      vy: (Math.random() - 0.5) * 0.6 * devicePixelRatio,
+      r: (Math.random() * 2 + 1) * devicePixelRatio,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      alpha: Math.random() * 0.5 + 0.3
+    });
   }
 
-  // 扫描线动画
-  gsap.to(".intro-scanline", { top: "100%", duration: 2, ease: "none", repeat: -1 });
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      // 鼠标交互
+      const dx = p.x - mouse.x, dy = p.y - mouse.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120 * devicePixelRatio) {
+        const force = (120 * devicePixelRatio - dist) / (120 * devicePixelRatio);
+        p.vx += (dx / dist) * force * 0.3;
+        p.vy += (dy / dist) * force * 0.3;
+      }
+      // 散开模式
+      if (disperse) {
+        p.vx *= 1.05; p.vy *= 1.05;
+      } else {
+        p.vx *= 0.99; p.vy *= 0.99;
+      }
+      p.x += p.vx; p.y += p.vy;
+      // 边界
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+      // 画粒子
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.alpha;
+      ctx.fill();
+    }
+    // 连线
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 100 * devicePixelRatio) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(34,211,238,${(1 - dist / (100 * devicePixelRatio)) * 0.15})`;
+          ctx.lineWidth = 0.5 * devicePixelRatio;
+          ctx.stroke();
+        }
+      }
+    }
+    animId = requestAnimationFrame(draw);
+  }
+  draw();
 
-  const tl = gsap.timeline();
-  tl.call(() => typeText(line1, "initializing mc-scanner-v3...", 40))
-    .to({}, { duration: 1.2 })
-    .call(() => typeText(line2, 'loading protocol tables... <span class="ok">[OK]</span>', 35))
-    .to({}, { duration: 1.0 })
-    .to(nameEl, { opacity: 1, duration: 0.1, onStart: () => {
-        // glitch 效果
-        let glitchCount = 0;
-        const glitchTimer = setInterval(() => {
-          if (glitchCount < 6) {
-            nameEl.style.transform = `translate(${(Math.random()-0.5)*6}px, ${(Math.random()-0.5)*3}px)`;
-            nameEl.style.textShadow = `0 0 10px rgba(34,211,238,0.8), ${(Math.random()-0.5)*10}px 0 rgba(244,63,94,0.6), ${(Math.random()-0.5)*10}px 0 rgba(99,102,241,0.6)`;
-            glitchCount++;
-          } else {
-            clearInterval(glitchTimer);
-            nameEl.style.transform = '';
-            nameEl.style.textShadow = '';
-          }
-        }, 60);
-      }})
-    .to(subEl, { opacity: 1, duration: 0.5 }, "-=0.3")
-    .to(bar, { width: "100%", duration: 0.8, ease: "power2.inOut" }, "-=0.2")
-    .to({}, { duration: 0.4 })
-    .to(".intro-terminal", { scale: 1.05, opacity: 0, duration: 0.4, ease: "power2.in" })
-    .to(overlay, { autoAlpha: 0, duration: 0.3, onComplete: () => overlay.remove() }, "-=0.2");
+  // GSAP 时间线
+  const tl = gsap.timeline({
+    onComplete: () => {
+      cancelAnimationFrame(animId);
+      overlay.remove();
+    }
+  });
+  tl.to("#introTitle", { opacity: 1, filter: "blur(0px)", duration: 1, ease: "power3.out" }, 0.5)
+    .to("#introSub", { opacity: 1, duration: 0.6 }, "-=0.4")
+    .to("#introLoading", { opacity: 1, duration: 0.4 }, "-=0.2")
+    .to(".intro-dot-load", {
+      y: -8, duration: 0.4, stagger: 0.15, repeat: 3, yoyo: true, ease: "power2.inOut"
+    }, "-=0.1")
+    .call(() => { disperse = true; })
+    .to("#introTitle, #introSub, #introLoading", { opacity: 0, scale: 1.2, duration: 0.5, ease: "power2.in" }, "-=0.1")
+    .to(overlay, { autoAlpha: 0, duration: 0.6 }, "-=0.3");
 })();
 
 let currentPage = 1, totalResults = 0, dbCurrentPage = 1, dbTotal = 0;
