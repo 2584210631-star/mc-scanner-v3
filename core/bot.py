@@ -150,12 +150,10 @@ class MCBot:
                     if resp_id == self.login_packets["cb_success"]:
                         break
 
-                # Login Acknowledged → Configuration
-                self.conn.send_packet(self.login_packets["sb_acknowledged"], b"")
-                self.conn.state = PROTO_STATE_CONFIGURATION
-
-                # Configuration 阶段
+                # Configuration 阶段（仅 1.20.2+ 需要 Login Acknowledged）
                 if self.play_packets.get("has_configuration", False):
+                    self.conn.send_packet(self.login_packets["sb_acknowledged"], b"")
+                    self.conn.state = PROTO_STATE_CONFIGURATION
                     self._do_configuration()
                 else:
                     self.conn.state = PROTO_STATE_PLAY
