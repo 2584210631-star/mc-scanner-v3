@@ -77,8 +77,14 @@ _PLAY_TABLES = [
      "cb_login": 0x23, "cb_teleport": 0x36, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17,
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0A, "cb_player_info": 0x32,
      "cb_chat_message": 0x30, "cb_system_chat": 0x5D},
-    # 340-758: 旧版本
-    {"min_proto": 340, "max_proto": 758, "sb_chat": 0x03, "sb_chat_command": None,
+    # 754: 1.16.5 (准确包ID，来自minecraft-data)
+    {"min_proto": 754, "max_proto": 754, "sb_chat": 0x03, "sb_chat_command": None,
+     "cb_keep_alive": 0x1F, "sb_keep_alive": 0x10, "cb_ping": None, "sb_pong": None,
+     "cb_login": 0x24, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19,
+     "cb_plugin_message": 0x17, "sb_plugin_message": 0x0B, "cb_player_info": 0x32,
+     "cb_chat_message": 0x0E, "cb_system_chat": None},
+    # 340-753: 旧版本
+    {"min_proto": 340, "max_proto": 753, "sb_chat": 0x03, "sb_chat_command": None,
      "cb_keep_alive": 0x1F, "sb_keep_alive": 0x0E, "cb_ping": 0x2F, "sb_pong": 0x1D,
      "cb_login": 0x23, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1A,
      "cb_plugin_message": 0x19, "sb_plugin_message": 0x0A, "cb_player_info": 0x30,

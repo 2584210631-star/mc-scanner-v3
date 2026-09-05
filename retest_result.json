@@ -1,0 +1,234 @@
+[
+  {
+    "ip": "103.85.86.51",
+    "port": 13500,
+    "status": "ok",
+    "version": "1.21.11",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "SFE4-SERVER"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 11436,
+    "status": "ok",
+    "version": "Purpur 26.1.2",
+    "online": 1,
+    "max": 20,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 14418,
+    "status": "ok",
+    "version": "Paper 26.2",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "SFE4-SERVER"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 18620,
+    "status": "ok",
+    "version": "forge arclight 1.18.2",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 19025,
+    "status": "ok",
+    "version": "Paper 1.21.11",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "A Minecraft Server"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 23759,
+    "status": "ok",
+    "version": "1.21.11",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "§dzakozako~"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 19901,
+    "status": "ok",
+    "version": "Paper 1.21",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "SFE4-SERVER"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 21629,
+    "status": "ok",
+    "version": "Paper 1.21.11",
+    "online": 0,
+    "max": 50,
+    "players": [],
+    "motd": "Unstable Aevum SMP | 动荡纪元SMP"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 30029,
+    "status": "ok",
+    "version": "1.21.11",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "SFE4-SERVER"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 26972,
+    "status": "ok",
+    "version": "Paper 1.21.11",
+    "online": 1,
+    "max": 20,
+    "players": [
+      "yixuangao"
+    ],
+    "motd": "A Minecraft Server"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 27994,
+    "status": "ok",
+    "version": "Spigot 1.21",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 15879,
+    "status": "ok",
+    "version": "Paper 26.2",
+    "online": 0,
+    "max": 2026,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 32611,
+    "status": "ok",
+    "version": "Leaves 1.21.11",
+    "online": 0,
+    "max": 15,
+    "players": [],
+    "motd": "我的世界生电"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 23577,
+    "status": "ok",
+    "version": "Purpur 1.21.11",
+    "online": 0,
+    "max": 2026,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 36849,
+    "status": "ok",
+    "version": "26.1",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "26.1纯原版"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 38871,
+    "status": "ok",
+    "version": "1.21.11",
+    "online": 0,
+    "max": 20,
+    "players": [],
+    "motd": "SFE4-SERVER"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 33337,
+    "status": "ok",
+    "version": "1.21.1",
+    "online": 0,
+    "max": 100,
+    "players": [],
+    "motd": "§eTDSI\n§dNeko 猫娘服务器"
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 32715,
+    "status": "ok",
+    "version": "Purpur 1.21.11",
+    "online": 1,
+    "max": 7891,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 21328,
+    "status": "ok",
+    "version": "Kosuzu66 26.1.2",
+    "online": 1,
+    "max": 25565,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 12593,
+    "status": "ok",
+    "version": "Paper 1.21.1",
+    "online": 0,
+    "max": 100,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 43028,
+    "status": "ok",
+    "version": "Paper 1.21.11",
+    "online": 0,
+    "max": 40,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 35286,
+    "status": "ok",
+    "version": "Xim0l 1.21.11",
+    "online": 0,
+    "max": 2026,
+    "players": [],
+    "motd": ""
+  },
+  {
+    "ip": "103.85.86.51",
+    "port": 37481,
+    "status": "ok",
+    "version": "Paper 1.21.11",
+    "online": 0,
+    "max": 40,
+    "players": [],
+    "motd": ""
+  }
+]
