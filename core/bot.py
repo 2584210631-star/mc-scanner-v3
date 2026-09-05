@@ -383,8 +383,12 @@ class MCBot:
                             break
                 elif packet_id == pkts.get("cb_teleport"):
                     try:
-                        teleport_id = read_varint_from_stream(BytesStream(data))
-                        self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
+                        # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1)+teleportId(varint)
+                        stream = BytesStream(data)
+                        stream.read(33)  # 跳过 x,y,z,yaw,pitch,flags
+                        teleport_id = read_varint_from_stream(stream)
+                        if pkts.get("sb_confirm_teleport") is not None:
+                            self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
                     except Exception:
                         pass
                 elif packet_id == pkts.get("cb_ping"):
@@ -404,22 +408,22 @@ class MCBot:
                         for _ in range(count):
                             try:
                                 uid = str(read_uuid_from_stream(stream))
-                                if actions & 0x01:  # ADD_PLAYER
-                                    name = read_string_from_stream(stream)
-                                    is_new = uid not in self.player_list
-                                    self.player_list[uid] = name
-                                    props = read_varint_from_stream(stream)
-                                    for _ in range(props):
-                                        read_string_from_stream(stream); read_string_from_stream(stream)
-                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                                    if is_new and self.player_callback:
-                                        try:
-                                            self.player_callback(name, "join")
-                                        except Exception:
-                                            pass
                                 if self.protocol_version >= 761:
                                     # 1.19.3+ 动作位：add(0x01) init_chat(0x02) gamemode(0x04)
                                     # listed(0x08) latency(0x10) display(0x20)；移除走独立 cb_player_remove 包
+                                    if actions & 0x01:  # ADD_PLAYER
+                                        name = read_string_from_stream(stream)
+                                        is_new = uid not in self.player_list
+                                        self.player_list[uid] = name
+                                        props = read_varint_from_stream(stream)
+                                        for _ in range(props):
+                                            read_string_from_stream(stream); read_string_from_stream(stream)
+                                            if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                                        if is_new and self.player_callback:
+                                            try:
+                                                self.player_callback(name, "join")
+                                            except Exception:
+                                                pass
                                     if actions & 0x02:  # initialize_chat — chat session
                                         if read_boolean_from_stream(stream):
                                             stream.read(16)  # uuid
@@ -431,9 +435,54 @@ class MCBot:
                                     if actions & 0x10: read_varint_from_stream(stream)  # update_latency
                                     if actions & 0x20:
                                         if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
+                                elif self.protocol_version >= 751:
+                                    # 1.16.2-1.19.2 (751-760): action 是枚举值，不是位掩码
+                                    # 0=Add 1=GameMode 2=Latency 3=DisplayName 4=Remove
+                                    if actions == 0:  # Add Player
+                                        name = read_string_from_stream(stream)
+                                        is_new = uid not in self.player_list
+                                        self.player_list[uid] = name
+                                        props = read_varint_from_stream(stream)
+                                        for _ in range(props):
+                                            read_string_from_stream(stream); read_string_from_stream(stream)
+                                            if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                                        read_varint_from_stream(stream)  # gamemode
+                                        read_varint_from_stream(stream)  # ping
+                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)  # displayName
+                                        if is_new and self.player_callback:
+                                            try:
+                                                self.player_callback(name, "join")
+                                            except Exception:
+                                                pass
+                                    elif actions == 1:  # Update Game Mode
+                                        read_varint_from_stream(stream)
+                                    elif actions == 2:  # Update Latency
+                                        read_varint_from_stream(stream)
+                                    elif actions == 3:  # Update Display Name
+                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                                    elif actions == 4:  # Remove Player
+                                        old = self.player_list.pop(uid, None)
+                                        if old is not None and self.player_callback:
+                                            try:
+                                                self.player_callback(old, "leave")
+                                            except Exception:
+                                                pass
                                 else:
-                                    # 旧版(<761, 1.19.2前) 动作位：add(0x01) gamemode(0x02)
+                                    # 旧版(<751, 1.16.1前) 动作位：add(0x01) gamemode(0x02)
                                     # latency(0x04) display(0x08) remove(0x10)
+                                    if actions & 0x01:  # ADD_PLAYER
+                                        name = read_string_from_stream(stream)
+                                        is_new = uid not in self.player_list
+                                        self.player_list[uid] = name
+                                        props = read_varint_from_stream(stream)
+                                        for _ in range(props):
+                                            read_string_from_stream(stream); read_string_from_stream(stream)
+                                            if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                                        if is_new and self.player_callback:
+                                            try:
+                                                self.player_callback(name, "join")
+                                            except Exception:
+                                                pass
                                     if actions & 0x02: read_varint_from_stream(stream)  # gamemode
                                     if actions & 0x04: read_varint_from_stream(stream)  # latency
                                     if actions & 0x08:
@@ -499,14 +548,22 @@ class MCBot:
                     import uuid as _uuid
                     uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
                     sender = self.player_list.get(uuid_str, "未知玩家")
-                else:
-                    # 旧版: UUID(16) + nickname(JSON String) + ...
+                elif self.protocol_version >= 759:
+                    # 1.19-1.19.2: UUID(16) + nickname(JSON String) + ...
                     stream.read(16)
                     nick_json = read_string_from_stream(stream)
                     try:
                         sender = self._json_component_to_text(json.loads(nick_json))
                     except Exception:
                         sender = nick_json
+                else:
+                    # <1.19 (758及更早): message(String) + position(Byte) + sender(UUID)
+                    msg_str = read_string_from_stream(stream)
+                    stream.read(1)  # position
+                    uuid_bytes = stream.read(16)
+                    import uuid as _uuid
+                    uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
+                    sender = self.player_list.get(uuid_str, "未知玩家")
         except Exception:
             pass
         text = self._extract_chat_text(data, is_system)
@@ -537,8 +594,8 @@ class MCBot:
                 if read_boolean_from_stream(stream):  # signature option
                     stream.read(256)  # signature
                 json_str = read_string_from_stream(stream)  # plainMessage
-            else:
-                # Player Chat (旧版 1.19.2 前): UUID(16) + nickname(JSON String)
+            elif self.protocol_version >= 759:
+                # Player Chat (1.19-1.19.2): UUID(16) + nickname(JSON String)
                 # + timestamp(8) + salt(8) + has_signature(Boolean)
                 # + signature(256 if true) + message(JSON String) + ...
                 stream.read(16)  # UUID
@@ -548,6 +605,9 @@ class MCBot:
                 has_sig = read_boolean_from_stream(stream)
                 if has_sig:
                     stream.read(256)  # signature
+                json_str = read_string_from_stream(stream)
+            else:
+                # <1.19 (758及更早): message(JSON String) + position(Byte) + sender(UUID)
                 json_str = read_string_from_stream(stream)
             # 解析 JSON 组件提取文本
             try:
@@ -569,7 +629,22 @@ class MCBot:
             if obj.get("text"):
                 parts.append(str(obj["text"]))
             if obj.get("translate"):
-                parts.append(str(obj["translate"]))
+                trans = str(obj["translate"])
+                with_args = obj.get("with", [])
+                # 常见翻译键的简单格式化
+                arg_texts = [MCBot._json_component_to_text(a) for a in with_args] if isinstance(with_args, list) else []
+                if trans == "chat.type.text" and len(arg_texts) >= 2:
+                    parts.append(f"<{arg_texts[0]}> {arg_texts[1]}")
+                elif trans == "chat.type.emote" and len(arg_texts) >= 2:
+                    parts.append(f"* {arg_texts[0]} {arg_texts[1]}")
+                elif trans == "multiplayer.player.joined" and arg_texts:
+                    parts.append(f"{arg_texts[0]} 加入了游戏")
+                elif trans == "multiplayer.player.left" and arg_texts:
+                    parts.append(f"{arg_texts[0]} 离开了游戏")
+                else:
+                    parts.append(trans)
+                    if arg_texts:
+                        parts.append(" " + " ".join(arg_texts))
             extra = obj.get("extra")
             if isinstance(extra, list):
                 for e in extra:
