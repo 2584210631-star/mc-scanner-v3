@@ -121,8 +121,12 @@ class MCBot:
                 player_uuid = offline_uuid(self.username)
                 login_data = write_string(self.username)
                 if self.play_packets.get("login_start_uuid", False):
-                    # 1.19.1+ 格式: hasPlayerUUID(Boolean=true) + UUID
-                    login_data += b'\x01' + write_uuid(player_uuid)
+                    if proto >= 766:
+                        # 1.20.5+ 格式: 直接 UUID（无 hasPlayerUUID 字段）
+                        login_data += write_uuid(player_uuid)
+                    else:
+                        # 1.19.1-1.20.4 格式: hasPlayerUUID(Boolean=true) + UUID
+                        login_data += b'\x01' + write_uuid(player_uuid)
                 self.conn.send_packet(self.login_packets["sb_start"], login_data)
 
                 # Login 阶段循环
