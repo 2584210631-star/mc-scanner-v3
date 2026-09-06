@@ -133,7 +133,7 @@ def _load_auto_tables():
                 "sb_confirm_teleport": sb.get("teleport_confirm", sb.get("confirm_teleport", sb.get("confirm_synchronization"))),
                 "chat_format": get_chat_format(proto),
                 "has_configuration": proto >= 764,
-                "login_start_uuid": proto >= 764,
+                "login_start_uuid": proto >= 760,
             }
         _auto_tables = auto_play
         print(f"[packets] 已加载自动生成协议表: {len(auto_play)} 个版本")
@@ -164,13 +164,13 @@ def get_play_packets(proto: int) -> dict | None:
                 result[k] = v
         result["chat_format"] = get_chat_format(proto)
         result["has_configuration"] = proto >= 764
-        result["login_start_uuid"] = proto >= 764
+        result["login_start_uuid"] = proto >= 760
         return result
     if handwritten:
         result = handwritten
         result["chat_format"] = get_chat_format(proto)
         result["has_configuration"] = proto >= 764
-        result["login_start_uuid"] = proto >= 764
+        result["login_start_uuid"] = proto >= 760
         return result
     if auto_entry:
         return auto_entry
