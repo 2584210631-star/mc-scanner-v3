@@ -147,7 +147,11 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 play_pkts = get_play_packets(proto)
                 pid = login_pkts["sb_start"]
                 payload = write_string(username)
-                if proto >= 760:  # 1.19.1+ 格式: hasPlayerUUID(true) + UUID
+                if proto >= 766:
+                    # 1.20.5+ 格式: 直接 UUID（无 hasPlayerUUID）
+                    payload += write_uuid(offline_uuid(username))
+                elif proto >= 760:
+                    # 1.19.1-1.20.4 格式: hasPlayerUUID(true) + UUID
                     payload += b'\x01' + write_uuid(offline_uuid(username))
                 conn.send_packet(pid, payload)
 
