@@ -5,6 +5,7 @@ MC TCP 连接：收发包、长度前缀、可选压缩、状态管理。
 """
 import io
 import socket
+import threading
 import zlib
 from .buffer import write_varint, read_varint_from_stream, write_string
 
@@ -23,6 +24,7 @@ class MCConnection:
         self.sock: socket.socket | None = None
         self.compression_threshold = -1
         self.state = PROTO_STATE_HANDSHAKE
+        self._send_lock = threading.Lock()
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -77,30 +79,41 @@ class MCConnection:
         else:
             packet_data = uncompressed
         frame = write_varint(len(packet_data)) + packet_data
-        self.sock.sendall(frame)
+        with self._send_lock:
+            # 发送期间临时设为阻塞模式，避免 recv 线程设置的短 timeout 导致 sendall 超时
+            old_timeout = self.sock.gettimeout()
+            self.sock.settimeout(None)
+            try:
+                self.sock.sendall(frame)
+            finally:
+                self.sock.settimeout(old_timeout)
 
     def recv_packet(self, timeout: float | None = None) -> tuple:
         """接收一个数据包，返回 (packet_id, payload_bytes)
         读包数据中途失败（半包）时关闭连接，避免后续流错位；
-        仅等待数据时的正常超时不关闭连接（调用方用于轮询）
-        """
+        仅等待数据时的正常超时不关闭连接（调用方用于轮询）。
+        用 select 实现超时，不修改 socket.timeout，避免影响并发 send。"""
         if self.sock is None:
             raise ConnectionError("未连接")
-        if timeout is not None:
-            self.sock.settimeout(timeout)
+        import selectors
+        sel = selectors.DefaultSelector()
+        sel.register(self.sock, selectors.EVENT_READ)
         try:
+            if timeout is not None:
+                events = sel.select(timeout=timeout)
+                if not events:
+                    raise socket.timeout("recv 超时")
             packet_length = self._recv_varint()
             try:
                 raw = self._recv_exact(packet_length)
+            except socket.timeout:
+                raise  # 超时不关闭连接，只是数据未到齐
             except Exception:
                 self.close()
                 raise
         finally:
-            if timeout is not None and self.sock is not None:
-                try:
-                    self.sock.settimeout(self.timeout)
-                except Exception:
-                    pass
+            sel.unregister(self.sock)
+            sel.close()
 
         if self.compression_threshold >= 0:
             buf = io.BytesIO(raw)
@@ -136,7 +149,10 @@ class MCConnection:
     def _recv_exact(self, n: int) -> bytes:
         buf = bytearray()
         while len(buf) < n:
-            chunk = self.sock.recv(n - len(buf))
+            try:
+                chunk = self.sock.recv(n - len(buf))
+            except socket.timeout:
+                continue  # 读包中途超时继续等，避免半包导致流错位
             if not chunk:
                 raise ConnectionError("连接在读取中关闭")
             buf.extend(chunk)
