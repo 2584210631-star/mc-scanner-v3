@@ -845,14 +845,14 @@ class MCBot:
 
     def _send_chat_761(self, message: str, chat_id: int):
         """1.19.3-1.20.4（协议 761-765）
-        acknowledgment 是 ByteArray(VarInt长度+数据)，空=VarInt(0)=1字节"""
+        实测1.20.1服务器期望acknowledgment占3字节"""
         timestamp = int(time.time() * 1000)
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", 0)
                    + b'\x00'
                    + write_varint(0)
-                   + write_varint(0))
+                   + b"\x00\x00\x00")
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_760(self, message: str, chat_id: int):
