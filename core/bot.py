@@ -921,8 +921,15 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
             except Exception:
                 pass
 
+        # 等待服务器完成Play阶段初始化（区块加载、玩家列表等）
+        # 1.18.x等版本连接后立即发消息会导致服务器解码异常（Index out of bounds）
+        time.sleep(1.5)
+
         # 发送警告消息
         for msg in messages:
+            if not bot.connected:
+                result.error = "发消息前连接已断开"
+                break
             try:
                 bot.send_chat(msg)
                 result.messages_sent += 1
