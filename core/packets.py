@@ -71,12 +71,12 @@ _PLAY_TABLES = [
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0D, "cb_player_info": 0x3A,
      "cb_player_remove": 0x39, "cb_chat_message": 0x35, "cb_system_chat": 0x64,
      "cb_profileless_chat": 0x1B},
-    # 759-760: 1.19
-    {"min_proto": 759, "max_proto": 760, "sb_chat": 0x04, "sb_chat_command": None,
-     "cb_keep_alive": 0x21, "sb_keep_alive": 0x10, "cb_ping": 0x33, "sb_pong": 0x1F,
-     "cb_login": 0x23, "cb_teleport": 0x36, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x17,
-     "cb_plugin_message": 0x17, "sb_plugin_message": 0x0A, "cb_player_info": 0x32,
-     "cb_chat_message": 0x30, "cb_system_chat": 0x5D},
+    # 759-760: 1.19/1.19.1/1.19.2 — 手写表历史包ID错误，全部交由自动表(minecraft-data)提供
+    {"min_proto": 759, "max_proto": 760, "sb_chat": None, "sb_chat_command": None,
+     "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
+     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": None, "cb_disconnect": None,
+     "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
+     "cb_chat_message": None, "cb_system_chat": None, "cb_profileless_chat": None},
     # 753-754: 1.16.4-1.16.5 (准确包ID，来自minecraft-data)
     {"min_proto": 753, "max_proto": 754, "sb_chat": 0x03, "sb_chat_command": None,
      "cb_keep_alive": 0x1F, "sb_keep_alive": 0x10, "cb_ping": None, "sb_pong": None,
