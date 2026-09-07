@@ -124,11 +124,11 @@ class MCBot:
                     if proto == 760:
                         # 1.19.1/1.19.2 格式: hasProfileKey(Boolean=false) + hasPlayerUUID(true) + UUID
                         login_data += b'\x00' + b'\x01' + write_uuid(player_uuid)
-                    elif proto >= 766:
-                        # 1.20.5+ 格式: 直接 UUID（无 hasPlayerUUID 字段）
+                    elif proto >= 764:
+                        # 1.20.2+ (764+) 格式: 直接 UUID（无 hasPlayerUUID 字段）
                         login_data += write_uuid(player_uuid)
                     else:
-                        # 1.19.3-1.20.4 (761-765) 格式: hasPlayerUUID(Boolean=true) + UUID
+                        # 1.19.3-1.20.1 (761-763) 格式: hasPlayerUUID(Boolean=true) + UUID
                         login_data += b'\x01' + write_uuid(player_uuid)
                 self.conn.send_packet(self.login_packets["sb_start"], login_data)
 
@@ -218,11 +218,10 @@ class MCBot:
         self._send_brand()
         sent_known = False
         first = time.time()
-        self.conn.sock.settimeout(0.3)
 
         while time.time() < deadline:
             try:
-                resp_id, resp_payload = self.conn.recv_packet()
+                resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
             except Exception:
                 continue
 
@@ -250,9 +249,8 @@ class MCBot:
                     sent_known = True
             elif cfg.get("cb_cookie_request") is not None and resp_id == cfg["cb_cookie_request"]:
                 try:
-                    from .buffer import read_string as _read_str
                     _stream = BytesStream(resp_payload)
-                    _key = _read_str(_stream)
+                    _key = read_string_from_stream(_stream)
                     if cfg.get("sb_cookie_response") is not None:
                         self.conn.send_packet(cfg["sb_cookie_response"],
                                               write_string(_key) + b"\x00")
