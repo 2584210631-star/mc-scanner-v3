@@ -173,9 +173,13 @@ class MCBot:
                 return True
 
             except Exception as e:
-                last_error = str(e)
+                last_error = f"proto={proto}: {e}"
                 if self.conn:
                     self.conn.close()
+                # 如果用户指定了协议号或SLP探测到了协议号，该协议失败后不继续尝试其他协议
+                # 避免用错误的协议登录成功但发消息被踢
+                if self.protocol_version is not None or (info and (info.get("_used_protocol") or info.get("proto"))):
+                    break
                 continue
 
         raise ConnectionError(f"所有协议版本尝试失败: {last_error}")
