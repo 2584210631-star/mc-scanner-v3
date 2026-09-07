@@ -516,7 +516,7 @@ class MCBot:
                                             except Exception:
                                                 pass
                             except Exception:
-                                break
+                                pass
                     except Exception:
                         pass
                 elif packet_id == pkts.get("cb_player_remove"):
@@ -534,7 +534,7 @@ class MCBot:
                                     except Exception:
                                         pass
                             except Exception:
-                                break
+                                pass
                     except Exception:
                         pass
                 elif packet_id == pkts.get("cb_chat_message") or packet_id == pkts.get("cb_system_chat") or packet_id == pkts.get("cb_profileless_chat"):
@@ -569,8 +569,14 @@ class MCBot:
                     import uuid as _uuid
                     uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
                     sender = self.player_list.get(uuid_str, "未知玩家")
+                elif self.protocol_version >= 760:
+                    # 1.19.1/1.19.2 (760): UUID(16) + index(VarInt) + hasSig(Boolean) + sig + message...
+                    uuid_bytes = stream.read(16)
+                    import uuid as _uuid
+                    uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
+                    sender = self.player_list.get(uuid_str, "未知玩家")
                 elif self.protocol_version >= 759:
-                    # 1.19-1.19.2: UUID(16) + nickname(JSON String) + ...
+                    # 1.19 (759): UUID(16) + nickname(JSON String) + ...
                     stream.read(16)
                     nick_json = read_string_from_stream(stream)
                     try:
@@ -615,8 +621,19 @@ class MCBot:
                 if read_boolean_from_stream(stream):  # signature option
                     stream.read(256)  # signature
                 json_str = read_string_from_stream(stream)  # plainMessage
+            elif self.protocol_version >= 760:
+                # Player Chat (1.19.1/1.19.2, 760): UUID(16) + index(VarInt)
+                # + hasSignature(Boolean) + signature(ByteArray if true)
+                # + message(String) + timestamp(8) + salt(8)
+                # + hasAdditionalContent(Boolean) + filterType(VarInt) + ...
+                stream.read(16)  # senderUuid
+                read_varint_from_stream(stream)  # index
+                if read_boolean_from_stream(stream):  # hasSignature
+                    slen = read_varint_from_stream(stream)
+                    stream.read(slen)  # signature
+                json_str = read_string_from_stream(stream)  # message
             elif self.protocol_version >= 759:
-                # Player Chat (1.19-1.19.2): UUID(16) + nickname(JSON String)
+                # Player Chat (1.19, 759): UUID(16) + nickname(JSON String)
                 # + timestamp(8) + salt(8) + has_signature(Boolean)
                 # + signature(256 if true) + message(JSON String) + ...
                 stream.read(16)  # UUID
@@ -876,14 +893,16 @@ class MCBot:
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_760(self, message: str, chat_id: int):
-        """1.19.1/1.19.2（协议 760）"""
+        """1.19.1/1.19.2（协议 760）
+        格式：message + timestamp + salt + hasSignature + signedPreview + hasChatSession + acknowledgment"""
         timestamp = int(time.time() * 1000)
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", 0)
-                   + b'\x00'
-                   + write_varint(0)
-                   + b'\x00')
+                   + b'\x00'  # hasSignature = false
+                   + b'\x00'  # signedPreview = false
+                   + b'\x00'  # hasChatSession = false
+                   + write_varint(0))  # acknowledgment = 0
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_759(self, message: str, chat_id: int):
