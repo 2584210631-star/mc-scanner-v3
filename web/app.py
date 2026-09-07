@@ -844,15 +844,22 @@ def warn_single():
 @app.route('/api/warn/batch', methods=['POST'])
 def warn_batch():
     data = request.json or {}
-    auth = data.get("auth", "cracked")
+    targets_raw = data.get("targets", [])
     username = data.get("username", "SecurityBot")
     messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
-    workers = data.get("workers", 5)
-    with scan_lock:
-        targets = [(r["ip"], r["port"]) for r in scan_state["results"]
-                   if r.get("auth") == auth]
+    workers = int(data.get("workers", 5))
+
+    # 解析目标列表，支持 [{"ip":...,"port":...}] 或 ["ip:port", ...]
+    targets = []
+    for t in targets_raw:
+        if isinstance(t, dict):
+            targets.append((t["ip"], int(t.get("port", 25565))))
+        elif isinstance(t, str) and ":" in t:
+            ip, port = t.rsplit(":", 1)
+            targets.append((ip, int(port)))
     if not targets:
-        return jsonify({"error": f"没有认证模式为 {auth} 的服务器"}), 400
+        return jsonify({"error": "请先选择要警告的服务器"}), 400
+
     _log(f"批量警告开始，目标 {len(targets)} 个服务器")
     from concurrent.futures import ThreadPoolExecutor, as_completed
     results = []
