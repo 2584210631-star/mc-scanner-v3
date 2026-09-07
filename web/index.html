@@ -549,7 +549,7 @@ tbody tr:last-child td { border-bottom: none; }
       <h2>扫描进度</h2>
       <div class="stats-grid">
         <div class="stat-card"><div class="value" id="statTotal">0</div><div class="label">总目标</div></div>
-        <div class="stat-card"><div class="value" id="statUp">0</div><div class="label">在线</div></div>
+        <div class="stat-card"><div class="value" id="statUp">0</div><div class="label">开放端口</div></div>
         <div class="stat-card"><div class="value" id="statCracked">0</div><div class="label">离线/破解</div></div>
         <div class="stat-card"><div class="value" id="statOnline">0</div><div class="label">正版</div></div>
         <div class="stat-card"><div class="value" id="statElapsed">0s</div><div class="label">已用时间</div></div>
@@ -1151,9 +1151,10 @@ async function pollStatus() {
     document.getElementById('headerStatus').textContent = '错误: ' + data.error;
     document.getElementById('headerStatus').style.color = '#ef4444';
   }
-  document.getElementById('statTotal').textContent = data.total || data.results_count;
+  document.getElementById('statTotal').textContent = (data.scanned || 0) + ' / ' + (data.total || 0);
+  document.getElementById('statUp').textContent = data.open_count || 0;
   document.getElementById('statElapsed').textContent = Math.floor(data.elapsed) + 's';
-  const pct = data.total > 0 ? Math.round(data.progress / data.total * 100) : 0;
+  const pct = data.progress || 0;
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('progressFill').textContent = pct + '%';
   const logBox = document.getElementById('logBox');
