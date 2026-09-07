@@ -461,6 +461,15 @@ class MCBot:
                                         read_varint_from_stream(stream)  # gamemode
                                         read_varint_from_stream(stream)  # ping
                                         if read_boolean_from_stream(stream): read_string_from_stream(stream)  # displayName
+                                        if self.protocol_version >= 760:
+                                            # 1.19.1/1.19.2 新增: Optional RemoteChatSession
+                                            if read_boolean_from_stream(stream):
+                                                stream.read(16)  # sessionId UUID
+                                                stream.read(8)   # expiresAt Long
+                                                klen = read_varint_from_stream(stream)
+                                                stream.read(klen)  # publicKey
+                                                slen = read_varint_from_stream(stream)
+                                                stream.read(slen)  # signature
                                         if is_new and self.player_callback:
                                             try:
                                                 self.player_callback(name, "join")
