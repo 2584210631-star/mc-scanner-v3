@@ -54,3 +54,4 @@ cracked_*.json
 rescan*.py
 *.json
 *.txt
+libs/bin/
