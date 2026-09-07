@@ -20,11 +20,8 @@ class Handler(ProtocolHandler):
                 + b'\x00' * 6)  # 尾部6字节
 
     def send_command_payload(self, command: str) -> bytes:
-        timestamp = int(time.time() * 1000)
-        return (write_string(command[:256])
-                + struct.pack(">q", timestamp)
-                + struct.pack(">q", 0)
-                + b'\x00' * 6)
+        # 用聊天消息发命令（最兼容）
+        return self.send_chat_payload("/" + command[:255])
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         import json
