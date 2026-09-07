@@ -184,35 +184,57 @@ def get_play_packets(proto: int) -> dict | None:
 
 
 def get_config_packets(proto: int) -> dict | None:
-    """获取 Configuration 阶段包 ID（1.20.2+ 通用）"""
+    """获取 Configuration 阶段包 ID（1.20.2+，从自动表获取以兼容各版本差异）"""
     if proto < 764:
         return None
-    from .protocol import (
-        CONFIG_CB_COOKIE_REQUEST, CONFIG_CB_PLUGIN_MESSAGE,
-        CONFIG_CB_FINISH_CONFIGURATION,
-        CONFIG_CB_KEEP_ALIVE, CONFIG_CB_PING,
-        CONFIG_CB_DISCONNECT, CONFIG_CB_KNOWN_PACKS,
-        CONFIG_SB_CLIENT_INFORMATION, CONFIG_SB_COOKIE_RESPONSE,
-        CONFIG_SB_PLUGIN_MESSAGE,
-        CONFIG_SB_FINISH_CONFIGURATION,
-        CONFIG_SB_KEEP_ALIVE, CONFIG_SB_PONG, CONFIG_SB_KNOWN_PACKS,
-    )
-    return {
-        "cb_cookie_request": CONFIG_CB_COOKIE_REQUEST,
-        "cb_plugin_message": CONFIG_CB_PLUGIN_MESSAGE,
-        "cb_finish": CONFIG_CB_FINISH_CONFIGURATION,
-        "cb_keep_alive": CONFIG_CB_KEEP_ALIVE,
-        "cb_ping": CONFIG_CB_PING,
-        "cb_disconnect": CONFIG_CB_DISCONNECT,
-        "cb_known_packs": CONFIG_CB_KNOWN_PACKS,
-        "sb_client_info": CONFIG_SB_CLIENT_INFORMATION,
-        "sb_cookie_response": CONFIG_SB_COOKIE_RESPONSE,
-        "sb_plugin_message": CONFIG_SB_PLUGIN_MESSAGE,
-        "sb_finish": CONFIG_SB_FINISH_CONFIGURATION,
-        "sb_keep_alive": CONFIG_SB_KEEP_ALIVE,
-        "sb_pong": CONFIG_SB_PONG,
-        "sb_known_packs": CONFIG_SB_KNOWN_PACKS,
-    }
+    try:
+        from .packets_auto import PACKET_TABLES_AUTO
+        table = PACKET_TABLES_AUTO.get(str(proto), {})
+        cfg = table.get("configuration", {})
+        cb = cfg.get("toClient", {})
+        sb = cfg.get("toServer", {})
+        result = {
+            "cb_plugin_message": cb.get("custom_payload"),
+            "cb_disconnect": cb.get("disconnect"),
+            "cb_finish": cb.get("finish_configuration"),
+            "cb_keep_alive": cb.get("keep_alive"),
+            "cb_ping": cb.get("ping"),
+            "cb_registry_data": cb.get("registry_data"),
+            "cb_known_packs": cb.get("known_packs", cb.get("select_known_packs")),
+            "cb_cookie_request": cb.get("cookie_request"),
+            "sb_client_info": sb.get("settings", sb.get("client_information")),
+            "sb_plugin_message": sb.get("custom_payload"),
+            "sb_finish": sb.get("finish_configuration"),
+            "sb_keep_alive": sb.get("keep_alive"),
+            "sb_pong": sb.get("pong"),
+            "sb_known_packs": sb.get("known_packs", sb.get("select_known_packs")),
+            "sb_cookie_response": sb.get("cookie_response"),
+        }
+        # 过滤掉None值
+        return {k: v for k, v in result.items() if v is not None}
+    except Exception:
+        # 回退到手写常量（高版本）
+        from .protocol import (
+            CONFIG_CB_PLUGIN_MESSAGE, CONFIG_CB_FINISH_CONFIGURATION,
+            CONFIG_CB_KEEP_ALIVE, CONFIG_CB_PING, CONFIG_CB_DISCONNECT,
+            CONFIG_CB_KNOWN_PACKS, CONFIG_SB_CLIENT_INFORMATION,
+            CONFIG_SB_PLUGIN_MESSAGE, CONFIG_SB_FINISH_CONFIGURATION,
+            CONFIG_SB_KEEP_ALIVE, CONFIG_SB_PONG, CONFIG_SB_KNOWN_PACKS,
+        )
+        return {
+            "cb_plugin_message": CONFIG_CB_PLUGIN_MESSAGE,
+            "cb_finish": CONFIG_CB_FINISH_CONFIGURATION,
+            "cb_keep_alive": CONFIG_CB_KEEP_ALIVE,
+            "cb_ping": CONFIG_CB_PING,
+            "cb_disconnect": CONFIG_CB_DISCONNECT,
+            "cb_known_packs": CONFIG_CB_KNOWN_PACKS,
+            "sb_client_info": CONFIG_SB_CLIENT_INFORMATION,
+            "sb_plugin_message": CONFIG_SB_PLUGIN_MESSAGE,
+            "sb_finish": CONFIG_SB_FINISH_CONFIGURATION,
+            "sb_keep_alive": CONFIG_SB_KEEP_ALIVE,
+            "sb_pong": CONFIG_SB_PONG,
+            "sb_known_packs": CONFIG_SB_KNOWN_PACKS,
+        }
 
 
 def get_login_packets() -> dict:
