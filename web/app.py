@@ -104,6 +104,8 @@ scan_state = {
     "running": False,
     "progress": 0,
     "total": 0,
+    "scanned": 0,
+    "open_count": 0,
     "results": [],
     "logs": [],
     "start_time": None,
@@ -134,8 +136,19 @@ def _scan_worker(targets_list, config):
             scan_state["results"] = []
             scan_state["logs"] = []
             scan_state["progress"] = 0
+            scan_state["scanned"] = 0
+            scan_state["open_count"] = 0
             scan_state["start_time"] = time.time()
         _log(f"任务 #{task_counter} 开始，目标数: {len(targets_list)}")
+
+        # 进度回调：实时更新扫描状态
+        total_targets = len(targets_list)
+        def _on_progress(done, total, open_count):
+            with scan_lock:
+                scan_state["scanned"] = done
+                scan_state["total"] = total
+                scan_state["progress"] = int(done * 100 / total) if total else 0
+                scan_state["open_count"] = open_count
 
         # 连续扫描模式：大网段拆成 /24 逐个扫描
         if config.get("continuous"):
@@ -173,11 +186,12 @@ def _scan_worker(targets_list, config):
                         iter(sub_targets),
                         scan_threads=config.get("scan_threads", 200),
                         scan_timeout=config.get("scan_timeout", 2.5),
+                        progress_callback=_on_progress,
                     )
                     all_results.extend(sub_results)
                     with scan_lock:
                         scan_state["results"] = all_results
-                        scan_state["progress"] = len(all_results)
+                        scan_state["progress"] = int((i + 1) * 100 / len(subnets)) if subnets else 100
                     _log(f"  网段 {subnet} 完成，累计 {len(all_results)} 个服务器")
                 except Exception as e:
                     _log(f"  网段 {subnet} 出错: {e}")
@@ -248,6 +262,7 @@ def _scan_worker(targets_list, config):
                     targets_list,
                     max_workers=config.get("scan_threads", 200),
                     timeout=config.get("scan_timeout", 2.5),
+                    progress_callback=_on_progress,
                 )
                 open_ports = get_open_ports(raw_results)
                 results = [{"ip": ip, "port": port, "auth": "unknown",
@@ -285,11 +300,12 @@ def _scan_worker(targets_list, config):
                         iter(targets_list),
                         scan_threads=config.get("scan_threads", 200),
                         scan_timeout=config.get("scan_timeout", 2.5),
+                        progress_callback=_on_progress,
                     )
 
         with scan_lock:
             scan_state["results"] = results
-            scan_state["progress"] = len(results)
+            scan_state["progress"] = 100
             scan_state["total"] = len(results)
         _log(f"扫描完成，共发现 {len(results)} 个服务器")
 
@@ -688,6 +704,8 @@ def scan_status():
             "running": scan_state["running"],
             "progress": scan_state["progress"],
             "total": scan_state["total"],
+            "scanned": scan_state.get("scanned", 0),
+            "open_count": scan_state.get("open_count", 0),
             "results_count": len(scan_state["results"]),
             "logs": scan_state["logs"][-100:],
             "start_time": scan_state["start_time"],
@@ -969,7 +987,7 @@ def import_masscan_results():
                        for ip, port, _ in raw]
         with scan_lock:
             scan_state["results"] = results
-            scan_state["progress"] = len(results)
+            scan_state["progress"] = 100
             scan_state["total"] = len(results)
         _log(f"导入完成，共 {len(results)} 个服务器")
         return jsonify({"status": "ok", "count": len(results)})

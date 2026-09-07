@@ -187,12 +187,14 @@ class ScanEngine:
         return results
 
     def scan_with_portscan(self, targets, scan_threads: int = 200,
-                            scan_timeout: float = 2.5) -> list:
+                            scan_timeout: float = 2.5,
+                            progress_callback=None) -> list:
         """两阶段扫描：先端口扫描，再对开放端口做 SLP+认证检测"""
         print(f"[*] 阶段1: 端口扫描（线程={scan_threads}, 超时={scan_timeout}s）")
         port_results = scan_ports(targets, max_workers=scan_threads,
                                    timeout=scan_timeout, show_progress=True,
-                                   rate=self.rate_limit)
+                                   rate=self.rate_limit,
+                                   progress_callback=progress_callback)
         open_ports = get_open_ports(port_results)
         print(f"[*] 阶段1完成，开放 {len(open_ports)} 个端口")
         if not open_ports:
