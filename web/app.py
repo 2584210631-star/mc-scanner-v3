@@ -819,14 +819,25 @@ def warn_single():
     authme_password = data.get("authme_password")
     if not ip:
         return jsonify({"error": "请指定 IP"}), 400
+    # 从扫描结果中获取已知协议号，避免自动探测失败时遍历错误协议
+    proto = None
+    with scan_lock:
+        for r in scan_state.get("results", []):
+            if r.get("ip") == ip and int(r.get("port", 25565)) == port:
+                p = r.get("proto") or 0
+                if p and p > 0:
+                    proto = p
+                break
     result = join_and_warn(ip, port, username, messages, timeout=15.0,
-                            message_delay=0.8, authme_password=authme_password)
+                            message_delay=0.8, protocol_version=proto,
+                            authme_password=authme_password)
     return jsonify({
         "success": result.success,
         "auth_mode": result.auth_mode,
         "messages_sent": result.messages_sent,
         "error": result.error,
         "version": result.version_name,
+        "protocol_used": result.protocol_version,
     })
 
 
