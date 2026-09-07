@@ -469,7 +469,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
         <button class="btn btn-success" onclick="exportResults('html')">HTML报告</button>
         <button class="btn btn-danger" onclick="openBatchWarnModal()">批量警告选中</button>
-        <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告</button>
+        <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
       </div>
@@ -669,19 +669,19 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="modal-overlay hidden" id="multiWarnModal">
   <div class="modal" style="max-width:560px;">
     <h3>多机器人同时警告</h3>
-    <div class="form-row">
-      <div class="form-group"><label>服务器 IP</label><input type="text" id="multiWarnIp" placeholder="例如: 136.243.0.33"></div>
-      <div class="form-group"><label>端口</label><input type="number" id="multiWarnPort" value="25565"></div>
+    <div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">
+      已选择 <span id="multiWarnCount" style="color:var(--accent);font-weight:600;">0</span> 台服务器，每台投入指定数量的机器人
     </div>
     <div class="form-row">
-      <div class="form-group"><label>机器人数量 (1-50)</label><input type="number" id="multiWarnCount" value="10" min="1" max="50"></div>
+      <div class="form-group"><label>每台机器人数量 (1-50)</label><input type="number" id="multiWarnBotCount" value="10" min="1" max="50"></div>
       <div class="form-group"><label>名称前缀</label><input type="text" id="multiWarnPrefix" value="SecurityBot"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>消息间隔(秒)</label><input type="number" id="multiWarnDelay" value="0.5" step="0.1" min="0.1"></div>
-      <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="multiWarnAuthme" placeholder="留空不启用"></div>
+      <div class="form-group"><label>总并发上限</label><input type="number" id="multiWarnWorkers" value="20" min="1" max="50"></div>
     </div>
-    <div class="form-group"><label>警告消息（每行一条）</label><textarea id="multiWarnMessages" rows="5">WARNING: OFFLINE MODE DETECTED!
+    <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="multiWarnAuthme" placeholder="留空不启用"></div>
+    <div class="form-group"><label>警告消息（每行一条，每个机器人都会发）</label><textarea id="multiWarnMessages" rows="5">WARNING: OFFLINE MODE DETECTED!
 Anyone can join with ANY username!
 Please enable online-mode=true!
 Or setup a WHITELIST!
@@ -690,7 +690,7 @@ Protect your server NOW!</textarea></div>
       <button class="btn btn-secondary" onclick="closeMultiWarnModal()">取消</button>
       <button class="btn btn-danger" onclick="confirmMultiWarn()">开始警告</button>
     </div>
-    <div id="multiWarnResult" style="margin-top:12px;"></div>
+    <div id="multiWarnResult" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -1066,6 +1066,9 @@ function openWarnModal(ip, port) {
 function closeWarnModal() { document.getElementById('warnModal').classList.add('hidden'); }
 
 function openMultiWarnModal() {
+  const selected = getSelectedServers();
+  if (selected.length === 0) { alert('请先在表格中勾选要警告的服务器'); return; }
+  document.getElementById('multiWarnCount').textContent = selected.length;
   document.getElementById('multiWarnResult').innerHTML = '';
   document.getElementById('multiWarnModal').classList.remove('hidden');
 }
@@ -1073,25 +1076,24 @@ function closeMultiWarnModal() {
   document.getElementById('multiWarnModal').classList.add('hidden');
 }
 async function confirmMultiWarn() {
-  const ip = document.getElementById('multiWarnIp').value.trim();
-  const port = parseInt(document.getElementById('multiWarnPort').value) || 25565;
-  const botCount = parseInt(document.getElementById('multiWarnCount').value) || 5;
+  const selected = getSelectedServers();
+  const botCount = parseInt(document.getElementById('multiWarnBotCount').value) || 5;
   const namePrefix = document.getElementById('multiWarnPrefix').value || 'SecurityBot';
   const messageDelay = parseFloat(document.getElementById('multiWarnDelay').value) || 0.5;
+  const workers = parseInt(document.getElementById('multiWarnWorkers').value) || 20;
   const authme = document.getElementById('multiWarnAuthme').value.trim();
   const messages = document.getElementById('multiWarnMessages').value.split('\n').filter(m => m.trim());
-  if (!ip) { alert('请输入服务器 IP'); return; }
   if (!messages.length) { alert('请输入至少一条警告消息'); return; }
   const resultDiv = document.getElementById('multiWarnResult');
-  resultDiv.innerHTML = '<div style="color:#f59e0b">正在启动 ' + botCount + ' 个机器人...</div>';
+  resultDiv.innerHTML = '<div style="color:#f59e0b">正在启动 ' + selected.length + ' 台 x ' + botCount + ' 个机器人...</div>';
   try {
     const resp = await fetch('/api/warn/multi', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        ip, port, bot_count: botCount, name_prefix: namePrefix,
+        targets: selected, bot_count: botCount, name_prefix: namePrefix,
         messages, message_delay: messageDelay,
-        authme_password: authme || null
+        authme_password: authme || null, workers: workers
       })
     });
     const data = await resp.json();
@@ -1100,12 +1102,23 @@ async function confirmMultiWarn() {
       return;
     }
     let html = '<div style="color:#22c55e;font-weight:bold;margin-bottom:8px;">';
-    html += '完成: ' + data.success + '/' + data.total + ' 个机器人成功，共发送 ' + data.messages_sent + ' 条消息';
+    html += '完成: ' + data.servers + ' 台服务器 x ' + data.bot_per_server + ' 机器人，' + data.success + '/' + data.total + ' 成功，共 ' + data.messages_sent + ' 条消息';
     html += '</div><div style="max-height:200px;overflow-y:auto;font-size:12px;">';
+    // 按服务器分组显示
+    const byServer = {};
     data.results.forEach(r => {
-      const color = r.success ? '#22c55e' : '#ef4444';
-      html += '<div style="color:' + color + '">[' + (r.success ? 'OK' : 'FAIL') + '] ' + r.name;
-      html += ' (' + r.messages_sent + '条)' + (r.error ? ' - ' + r.error : '') + '</div>';
+      const key = r.ip + ':' + r.port;
+      if (!byServer[key]) byServer[key] = [];
+      byServer[key].push(r);
+    });
+    Object.entries(byServer).forEach(([server, bots]) => {
+      const ok = bots.filter(b => b.success).length;
+      html += '<div style="margin-top:6px;font-weight:600;">' + server + ' (' + ok + '/' + bots.length + '成功)</div>';
+      bots.forEach(r => {
+        const color = r.success ? '#22c55e' : '#ef4444';
+        html += '<div style="color:' + color + ';padding-left:12px;">[' + (r.success ? 'OK' : 'FAIL') + '] ' + r.name;
+        html += ' (' + r.messages_sent + '条)' + (r.error ? ' - ' + r.error.substring(0, 40) : '') + '</div>';
+      });
     });
     html += '</div>';
     resultDiv.innerHTML = html;
