@@ -622,12 +622,12 @@ class MCBot:
                     stream.read(256)  # signature
                 json_str = read_string_from_stream(stream)  # plainMessage
             elif self.protocol_version >= 760:
-                # Player Chat (1.19.1/1.19.2, 760): UUID(16) + index(VarInt)
+                # Player Chat (1.19.1/1.19.2, 760): UUID(16) + index(Byte)
                 # + hasSignature(Boolean) + signature(ByteArray if true)
                 # + message(String) + timestamp(8) + salt(8)
                 # + hasAdditionalContent(Boolean) + filterType(VarInt) + ...
                 stream.read(16)  # senderUuid
-                read_varint_from_stream(stream)  # index
+                stream.read(1)   # index (Byte, 不是VarInt!)
                 if read_boolean_from_stream(stream):  # hasSignature
                     slen = read_varint_from_stream(stream)
                     stream.read(slen)  # signature
