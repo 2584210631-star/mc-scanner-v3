@@ -31,8 +31,15 @@ class Handler(ProtocolHandler):
                 + b"\x00\x00\x00")  # acknowledgment 3字节
 
     def send_command_payload(self, command: str) -> bytes:
-        # 1.19.3-1.20.4 用聊天消息发命令（最兼容，命令包格式复杂易出错）
-        return self.send_chat_payload("/" + command[:255])
+        # 1.19.3-1.20.4 Chat Command包（无messageCount，1.20.5才加）
+        # command + timestamp + salt + hasSignature + argumentSignatures(Array) + acknowledgment(3字节)
+        timestamp = int(time.time() * 1000)
+        return (write_string(command[:256])
+                + struct.pack(">q", timestamp)
+                + struct.pack(">q", 0)
+                + b'\x00'               # hasSignature=false
+                + write_varint(0)       # argumentSignatures 空数组
+                + b'\x00\x00\x00')     # acknowledgment 3字节
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         import json
