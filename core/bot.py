@@ -622,13 +622,23 @@ class MCBot:
                     except Exception:
                         pass
                 json_str = read_string_from_stream(stream)
+            elif self.protocol_version >= 774:
+                # Player Chat (1.21.11+, 774+): senderUuid(16) + index(VarInt)
+                # + hasSignature(Boolean) + signature(ByteArray, 空表示无签名) + message(String) + ...
+                stream.read(16)  # senderUuid
+                read_varint_from_stream(stream)  # index
+                read_boolean_from_stream(stream)  # hasSignature
+                sig_len = read_varint_from_stream(stream)  # signature长度
+                stream.read(sig_len)  # signature
+                json_str = read_string_from_stream(stream)  # message
             elif self.protocol_version >= 761:
-                # Player Chat (1.19.3+): senderUuid(16) + index(VarInt)
-                # + has_signature(Boolean) + signature(256 if true) + message(JSON String) + ...
+                # Player Chat (1.19.3-1.21.10, 761-773): senderUuid(16) + index(VarInt)
+                # + has_signature(Boolean) + signature(ByteArray if true) + message(String) + ...
                 stream.read(16)  # senderUuid
                 read_varint_from_stream(stream)  # index
                 if read_boolean_from_stream(stream):  # signature option
-                    stream.read(256)  # signature
+                    sig_len = read_varint_from_stream(stream)
+                    stream.read(sig_len)  # signature
                 json_str = read_string_from_stream(stream)  # plainMessage
             elif self.protocol_version >= 760:
                 # Player Chat (1.19.1/1.19.2, 760): UUID(16) + index(Byte)
