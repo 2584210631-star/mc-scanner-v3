@@ -113,6 +113,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
 .btn-success:hover { background: rgba(34,197,94,0.24); }
 .btn-warning { background: rgba(245,158,11,0.14); color: var(--amber); border: 1px solid rgba(245,158,11,0.35); }
 .btn-warning:hover { background: rgba(245,158,11,0.24); }
+.btn-info { background: rgba(56,189,248,0.14); color: #38bdf8; border: 1px solid rgba(56,189,248,0.35); }
+.btn-info:hover { background: rgba(56,189,248,0.24); }
 .btn-secondary { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border-2); }
 .btn-secondary:hover { color: var(--text); background: rgba(255,255,255,0.1); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
@@ -469,6 +471,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
         <button class="btn btn-success" onclick="exportResults('html')">HTML报告</button>
         <button class="btn btn-danger" onclick="openBatchWarnModal()">批量警告选中</button>
+        <button class="btn btn-info" onclick="openBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
@@ -691,6 +694,25 @@ Protect your server NOW!</textarea></div>
       <button class="btn btn-danger" onclick="confirmMultiWarn()">开始警告</button>
     </div>
     <div id="multiWarnResult" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- 批量观察弹窗 -->
+<div class="modal-overlay hidden" id="batchObserverModal">
+  <div class="modal" style="max-width:480px;">
+    <h3>批量挂入观察者</h3>
+    <div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">
+      已选择 <span id="batchObsCount" style="color:var(--accent);font-weight:600;">0</span> 台服务器，将同时挂入观察者
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>用户名前缀</label><input type="text" id="batchObsPrefix" value="WatchDog"></div>
+      <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="batchObsAuthme" placeholder="留空不启用"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeBatchObserverModal()">取消</button>
+      <button class="btn btn-info" onclick="confirmBatchObserver()">开始观察</button>
+    </div>
+    <div id="batchObserverResult" style="margin-top:12px;max-height:150px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -1470,6 +1492,55 @@ function startObserver() {
     loadObserverSessions();
     startObsPolling();
   }).catch(e=>alert('错误: '+e));
+}
+
+function openBatchObserverModal() {
+  const selected = getSelectedServers();
+  if (selected.length === 0) { alert('请先在表格中勾选要观察的服务器'); return; }
+  document.getElementById('batchObsCount').textContent = selected.length;
+  document.getElementById('batchObserverResult').innerHTML = '';
+  document.getElementById('batchObserverModal').classList.remove('hidden');
+}
+function closeBatchObserverModal() { document.getElementById('batchObserverModal').classList.add('hidden'); }
+
+async function confirmBatchObserver() {
+  const selected = getSelectedServers();
+  const prefix = document.getElementById('batchObsPrefix').value.trim() || 'WatchDog';
+  const authme = document.getElementById('batchObsAuthme').value.trim();
+  const resultDiv = document.getElementById('batchObserverResult');
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary);">正在挂入...</div>';
+  let ok = 0, fail = 0;
+  let html = '';
+  for (let i = 0; i < selected.length; i++) {
+    const s = selected[i];
+    const name = prefix + '_' + (i + 1).toString().padStart(2, '0');
+    try {
+      const resp = await fetch('/api/observer/start', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({host: s.ip, port: s.port, username: name, authme_password: authme || undefined})
+      });
+      const d = await resp.json();
+      if (d.error) {
+        fail++;
+        html += '<div style="color:#f56565;font-size:12px;">[FAIL] ' + s.ip + ':' + s.port + ' - ' + d.error.substring(0, 40) + '</div>';
+      } else {
+        ok++;
+        html += '<div style="color:#48bb78;font-size:12px;">[OK] ' + s.ip + ':' + s.port + ' (' + name + ')</div>';
+      }
+    } catch (e) {
+      fail++;
+      html += '<div style="color:#f56565;font-size:12px;">[FAIL] ' + s.ip + ':' + s.port + ' - ' + e.message + '</div>';
+    }
+    resultDiv.innerHTML = html;
+  }
+  resultDiv.innerHTML = '<div style="margin-bottom:8px;font-weight:600;">完成: ' + ok + ' 成功, ' + fail + ' 失败</div>' + html;
+  if (ok > 0) {
+    setTimeout(() => {
+      closeBatchObserverModal();
+      document.querySelector('.tab[data-tab="observer"]').click();
+      loadObserverSessions();
+    }, 1000);
+  }
 }
 
 function loadObserverSessions() {
