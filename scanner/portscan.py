@@ -49,10 +49,12 @@ def check_port(ip: str, port: int, timeout: float = 3.0) -> ScanResult:
 
 def scan_ports(targets, max_workers: int = 200, timeout: float = 3.0,
                show_progress: bool = True, rate: int = 0,
-               stop_event: Optional[threading.Event] = None) -> list:
+               stop_event: Optional[threading.Event] = None,
+               progress_callback=None) -> list:
     """
     多线程扫描端口（分批提交，大网段不OOM）。
     rate: 每秒最大连接数，0=不限速
+    progress_callback: 回调函数(done, total, open_count)，每500个或完成时调用
     """
     BATCH_SIZE = max(max_workers * 4, 200)
     target_list = list(targets)
@@ -110,6 +112,11 @@ def scan_ports(targets, max_workers: int = 200, timeout: float = 3.0,
                     if show_progress and (done % 500 == 0 or done == total):
                         pct = done * 100 // total if total else 0
                         print(f"[*] 进度: {done}/{total} ({pct}%) 开放: {open_count}")
+                    if progress_callback and (done % 500 == 0 or done == total):
+                        try:
+                            progress_callback(done, total, open_count)
+                        except Exception:
+                            pass
             # 补充新任务
             for ip, port in target_iter:
                 if stop_event and stop_event.is_set():
