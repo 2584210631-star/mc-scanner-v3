@@ -319,19 +319,12 @@ class MCBot:
         self.conn.send_packet(chat_id, payload)
 
     def send_command(self, command: str):
-        """发送聊天命令（不含前导 /）"""
+        """发送聊天命令（不含前导 /）。统一用聊天消息发送，最兼容。"""
         if self.state != "play":
             raise RuntimeError("尚未进入 play 阶段")
-        pkts = self.play_packets
         if command.startswith('/'):
             command = command[1:]
-        command_id = pkts.get("sb_chat_command")
-        if command_id is not None:
-            payload = self.protocol_handler.send_command_payload(command)
-            self.conn.send_packet(command_id, payload)
-        else:
-            # 旧版本用聊天消息发命令
-            self.conn.send_packet(pkts["sb_chat"], write_string("/" + command[:255]))
+        self.send_chat("/" + command[:255])
 
     def authme_login(self, password: str, register: bool = False, auto_register: bool = True):
         """AuthMe 登录：已注册用 /login，未注册自动 /register"""
