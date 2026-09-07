@@ -835,16 +835,16 @@ class MCBot:
 
     # ---- 各版本聊天消息格式 ----
     def _send_chat_new(self, message: str, chat_id: int):
-        """1.20.5+ 新格式（协议 766+）"""
-        proto = self.protocol_version
+        """1.20.5+ 新格式（协议 766+）
+        766-773: 尾部5字节（实测1.21.1=767）
+        774+: 尾部6字节（实测1.21.11=774，多1字节acknowledgment）"""
         timestamp = int(time.time() * 1000)
         salt = 0
+        tail_len = 6 if self.protocol_version >= 774 else 5
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", salt)
-                   + write_varint(0)
-                   + b'\x00\x00\x00'
-                   + b'\x00')  # checksum (所有版本都需要)
+                   + b'\x00' * tail_len)
         self.conn.send_packet(chat_id, payload)
 
     def _send_chat_761(self, message: str, chat_id: int):
