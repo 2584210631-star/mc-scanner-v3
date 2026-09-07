@@ -343,7 +343,18 @@ class MCBot:
             command = command[1:]
         command_id = pkts.get("sb_chat_command")
         if command_id is not None:
-            self.conn.send_packet(command_id, write_string(command[:256]))
+            chat_format = pkts.get("chat_format", "simple")
+            if chat_format == "new":
+                # 1.20.5+ 完整格式: command + timestamp + salt + hasSignature(false) + messageCount(0) + acknowledgment(3字节)
+                timestamp = int(time.time() * 1000)
+                tail_len = 6 if self.protocol_version >= 774 else 5
+                payload = (write_string(command[:256])
+                           + struct.pack(">q", timestamp)
+                           + struct.pack(">q", 0)
+                           + b'\x00' * tail_len)
+                self.conn.send_packet(command_id, payload)
+            else:
+                self.conn.send_packet(command_id, write_string(command[:256]))
         else:
             # 旧版本用聊天消息发命令
             self._send_chat_simple("/" + command, pkts["sb_chat"])
@@ -867,8 +878,8 @@ class MCBot:
     # ---- 各版本聊天消息格式 ----
     def _send_chat_new(self, message: str, chat_id: int):
         """1.20.5+ 新格式（协议 766+）
-        766-773: 尾部5字节（实测1.21.1=767）
-        774+: 尾部6字节（实测1.21.11=774，多1字节acknowledgment）"""
+        766-773: 尾部5字节（hasSignature false + messageCount 0 + 3字节acknowledgment位集合）
+        774+: 尾部6字节（多1字节）"""
         timestamp = int(time.time() * 1000)
         salt = 0
         tail_len = 6 if self.protocol_version >= 774 else 5
