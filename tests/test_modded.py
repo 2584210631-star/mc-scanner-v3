@@ -50,7 +50,7 @@ class TestModded(unittest.TestCase):
         """在 Forge 模组服上执行 join_and_warn 应能发消息"""
         result = join_and_warn("127.0.0.1", self.forge.port,
                                username="SecurityBot", messages=["Test warn"],
-                               timeout=5.0, message_delay=0.1)
+                               timeout=5.0, message_delay=0.1, connect_delay=0)
         self.assertTrue(result.success, f"失败: {result.error}")
         self.assertEqual(result.auth_mode, "offline")
         self.assertGreaterEqual(result.messages_sent, 1)

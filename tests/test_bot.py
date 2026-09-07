@@ -53,7 +53,7 @@ class TestBot(unittest.TestCase):
         """测试 join_and_warn 完整流程"""
         result = join_and_warn("127.0.0.1", self.server.port,
                                username="TestBot", messages=["Test message"],
-                               timeout=5.0, message_delay=0.1)
+                               timeout=5.0, message_delay=0.1, connect_delay=0)
         self.assertTrue(result.success)
         self.assertTrue(result.is_offline)
         self.assertEqual(result.auth_mode, "offline")

@@ -894,7 +894,8 @@ class MCBot:
 def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
                   messages: list | None = None, timeout: float = 20.0,
                   message_delay: float = 0.6, protocol_version: int | None = None,
-                  authme_password: str | None = None) -> BotResult:
+                  authme_password: str | None = None,
+                  connect_delay: float = 1.5) -> BotResult:
     """
     完整流程：连接 → 登录 → 发警告 → 退出
     保留 V1 的全部功能。
@@ -923,7 +924,8 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
 
         # 等待服务器完成Play阶段初始化（区块加载、玩家列表等）
         # 1.18.x等版本连接后立即发消息会导致服务器解码异常（Index out of bounds）
-        time.sleep(1.5)
+        if connect_delay > 0:
+            time.sleep(connect_delay)
 
         # 发送警告消息
         for msg in messages:
