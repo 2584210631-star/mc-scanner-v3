@@ -79,6 +79,7 @@ class MCBot:
         self.chat_messages: list[str] = []
         self._chat_lock = threading.Lock()
         self.chat_callback = None  # callable(text: str, sender: str) -> None
+        self.protocol_handler = None  # 版本协议处理器，按版本模块化
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
@@ -111,25 +112,17 @@ class MCBot:
             self.protocol_version = proto
             self.play_packets = get_play_packets(proto)
             self.config_packets = get_config_packets(proto)
+            from .protocols import get_protocol_handler
+            self.protocol_handler = get_protocol_handler(self)
             last_error = ""
             self.conn = MCConnection(self.host, self.port, self.timeout)
             try:
                 self.conn.connect()
                 # 握手
                 self.conn.handshake(protocol=proto, next_state=PROTO_STATE_LOGIN)
-                # Login Start
+                # Login Start — 由版本协议处理器构造
                 player_uuid = offline_uuid(self.username)
-                login_data = write_string(self.username)
-                if self.play_packets.get("login_start_uuid", False):
-                    if proto == 760:
-                        # 1.19.1/1.19.2 格式: hasProfileKey(Boolean=false) + hasPlayerUUID(true) + UUID
-                        login_data += b'\x00' + b'\x01' + write_uuid(player_uuid)
-                    elif proto >= 764:
-                        # 1.20.2+ (764+) 格式: 直接 UUID（无 hasPlayerUUID 字段）
-                        login_data += write_uuid(player_uuid)
-                    else:
-                        # 1.19.3-1.20.1 (761-763) 格式: hasPlayerUUID(Boolean=true) + UUID
-                        login_data += b'\x01' + write_uuid(player_uuid)
+                login_data = self.protocol_handler.login_start_payload(self.username, player_uuid)
                 self.conn.send_packet(self.login_packets["sb_start"], login_data)
 
                 # Login 阶段循环
@@ -321,18 +314,9 @@ class MCBot:
         if self.state != "play":
             raise RuntimeError("尚未进入 play 阶段")
         pkts = self.play_packets
-        chat_format = pkts.get("chat_format", "new")
-
-        if chat_format == "new":
-            self._send_chat_new(message, pkts["sb_chat"])
-        elif chat_format == "old_signed_761":
-            self._send_chat_761(message, pkts["sb_chat"])
-        elif chat_format == "old_signed_760":
-            self._send_chat_760(message, pkts["sb_chat"])
-        elif chat_format == "old_signed_759":
-            self._send_chat_759(message, pkts["sb_chat"])
-        else:
-            self._send_chat_simple(message, pkts["sb_chat"])
+        chat_id = pkts["sb_chat"]
+        payload = self.protocol_handler.send_chat_payload(message)
+        self.conn.send_packet(chat_id, payload)
 
     def send_command(self, command: str):
         """发送聊天命令（不含前导 /）"""
@@ -343,21 +327,11 @@ class MCBot:
             command = command[1:]
         command_id = pkts.get("sb_chat_command")
         if command_id is not None:
-            chat_format = pkts.get("chat_format", "simple")
-            if chat_format == "new":
-                # 1.20.5+ 完整格式: command + timestamp + salt + hasSignature(false) + messageCount(0) + acknowledgment(3字节)
-                timestamp = int(time.time() * 1000)
-                tail_len = 6 if self.protocol_version >= 774 else 5
-                payload = (write_string(command[:256])
-                           + struct.pack(">q", timestamp)
-                           + struct.pack(">q", 0)
-                           + b'\x00' * tail_len)
-                self.conn.send_packet(command_id, payload)
-            else:
-                self.conn.send_packet(command_id, write_string(command[:256]))
+            payload = self.protocol_handler.send_command_payload(command)
+            self.conn.send_packet(command_id, payload)
         else:
             # 旧版本用聊天消息发命令
-            self._send_chat_simple("/" + command, pkts["sb_chat"])
+            self.conn.send_packet(pkts["sb_chat"], write_string("/" + command[:255]))
 
     def authme_login(self, password: str, register: bool = False, auto_register: bool = True):
         """AuthMe 登录：已注册用 /login，未注册自动 /register"""
@@ -567,111 +541,19 @@ class MCBot:
 
     def _extract_chat_with_sender(self, data: bytes, is_system: bool):
         """从聊天包提取 (text, sender)，sender 为玩家名或'系统'"""
-        import json
         sender = "系统"
         try:
-            stream = BytesStream(data)
             if not is_system:
-                if self.protocol_version >= 761:
-                    # 1.19.3+: senderUuid(16) + index + signature + message
-                    uuid_bytes = stream.read(16)
-                    import uuid as _uuid
-                    uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-                    sender = self.player_list.get(uuid_str, "未知玩家")
-                elif self.protocol_version >= 760:
-                    # 1.19.1/1.19.2 (760): UUID(16) + index(VarInt) + hasSig(Boolean) + sig + message...
-                    uuid_bytes = stream.read(16)
-                    import uuid as _uuid
-                    uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-                    sender = self.player_list.get(uuid_str, "未知玩家")
-                elif self.protocol_version >= 759:
-                    # 1.19 (759): UUID(16) + nickname(JSON String) + ...
-                    stream.read(16)
-                    nick_json = read_string_from_stream(stream)
-                    try:
-                        sender = self._json_component_to_text(json.loads(nick_json))
-                    except Exception:
-                        sender = nick_json
-                else:
-                    # <1.19 (758及更早): message(String) + position(Byte) + sender(UUID)
-                    msg_str = read_string_from_stream(stream)
-                    stream.read(1)  # position
-                    uuid_bytes = stream.read(16)
-                    import uuid as _uuid
-                    uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-                    sender = self.player_list.get(uuid_str, "未知玩家")
+                sender = self.protocol_handler.extract_chat_sender(data)
         except Exception:
             pass
         text = self._extract_chat_text(data, is_system)
         return text, sender
 
     def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
-        """从聊天包 payload 中提取纯文本（简化版，尽力解析 JSON 组件）"""
-        import json
+        """从聊天包 payload 中提取纯文本（委托给版本协议处理器）"""
         try:
-            stream = BytesStream(data)
-            if is_system:
-                # System Chat: 1.20.5+ 内容为 network NBT 聊天组件；
-                # 旧版本为 JSON String + VarInt(type)
-                if self.protocol_version >= 766:
-                    # 用 NBT 解析（content 为匿名 NBT 文本组件）
-                    try:
-                        txt = self._nbt_component_to_text(stream)
-                        if txt:
-                            return txt
-                    except Exception:
-                        pass
-                json_str = read_string_from_stream(stream)
-            elif self.protocol_version >= 774:
-                # Player Chat (1.21.11+, 774+): senderUuid(16) + index(VarInt)
-                # + hasSignature(Boolean) + signature(ByteArray, 空表示无签名) + message(String) + ...
-                stream.read(16)  # senderUuid
-                read_varint_from_stream(stream)  # index
-                read_boolean_from_stream(stream)  # hasSignature
-                sig_len = read_varint_from_stream(stream)  # signature长度
-                stream.read(sig_len)  # signature
-                json_str = read_string_from_stream(stream)  # message
-            elif self.protocol_version >= 761:
-                # Player Chat (1.19.3-1.21.10, 761-773): senderUuid(16) + index(VarInt)
-                # + has_signature(Boolean) + signature(ByteArray if true) + message(String) + ...
-                stream.read(16)  # senderUuid
-                read_varint_from_stream(stream)  # index
-                if read_boolean_from_stream(stream):  # signature option
-                    sig_len = read_varint_from_stream(stream)
-                    stream.read(sig_len)  # signature
-                json_str = read_string_from_stream(stream)  # plainMessage
-            elif self.protocol_version >= 760:
-                # Player Chat (1.19.1/1.19.2, 760): UUID(16) + index(Byte)
-                # + hasSignature(Boolean) + signature(ByteArray if true)
-                # + message(String) + timestamp(8) + salt(8)
-                # + hasAdditionalContent(Boolean) + filterType(VarInt) + ...
-                stream.read(16)  # senderUuid
-                stream.read(1)   # index (Byte, 不是VarInt!)
-                if read_boolean_from_stream(stream):  # hasSignature
-                    slen = read_varint_from_stream(stream)
-                    stream.read(slen)  # signature
-                json_str = read_string_from_stream(stream)  # message
-            elif self.protocol_version >= 759:
-                # Player Chat (1.19, 759): UUID(16) + nickname(JSON String)
-                # + timestamp(8) + salt(8) + has_signature(Boolean)
-                # + signature(256 if true) + message(JSON String) + ...
-                stream.read(16)  # UUID
-                read_string_from_stream(stream)  # nickname
-                stream.read(8)  # timestamp
-                stream.read(8)  # salt
-                has_sig = read_boolean_from_stream(stream)
-                if has_sig:
-                    stream.read(256)  # signature
-                json_str = read_string_from_stream(stream)
-            else:
-                # <1.19 (758及更早): message(JSON String) + position(Byte) + sender(UUID)
-                json_str = read_string_from_stream(stream)
-            # 解析 JSON 组件提取文本
-            try:
-                obj = json.loads(json_str)
-                return self._json_component_to_text(obj)
-            except (json.JSONDecodeError, TypeError):
-                return json_str  # 可能是纯文本
+            return self.protocol_handler.extract_chat_text(data, is_system)
         except Exception:
             return ""
 
@@ -884,61 +766,6 @@ class MCBot:
             return ""
         MCBot._nbt_skip_value(stream, tag)
         return ""
-
-    # ---- 各版本聊天消息格式 ----
-    def _send_chat_new(self, message: str, chat_id: int):
-        """1.20.5+ 新格式（协议 766+）
-        766-773: 尾部5字节（hasSignature false + messageCount 0 + 3字节acknowledgment位集合）
-        774+: 尾部6字节（多1字节）"""
-        timestamp = int(time.time() * 1000)
-        salt = 0
-        tail_len = 6 if self.protocol_version >= 774 else 5
-        payload = (write_string(message[:256])
-                   + struct.pack(">q", timestamp)
-                   + struct.pack(">q", salt)
-                   + b'\x00' * tail_len)
-        self.conn.send_packet(chat_id, payload)
-
-    def _send_chat_761(self, message: str, chat_id: int):
-        """1.19.3-1.20.4（协议 761-765）
-        实测1.20.1服务器期望acknowledgment占3字节"""
-        timestamp = int(time.time() * 1000)
-        payload = (write_string(message[:256])
-                   + struct.pack(">q", timestamp)
-                   + struct.pack(">q", 0)
-                   + b'\x00'
-                   + write_varint(0)
-                   + b"\x00\x00\x00")
-        self.conn.send_packet(chat_id, payload)
-
-    def _send_chat_760(self, message: str, chat_id: int):
-        """1.19.1/1.19.2（协议 760）
-        格式：message + timestamp + salt + hasSignature + signedPreview + hasChatSession + acknowledgment"""
-        timestamp = int(time.time() * 1000)
-        payload = (write_string(message[:256])
-                   + struct.pack(">q", timestamp)
-                   + struct.pack(">q", 0)
-                   + b'\x00'  # hasSignature = false
-                   + b'\x00'  # signedPreview = false
-                   + b'\x00'  # hasChatSession = false
-                   + write_varint(0))  # acknowledgment = 0
-        self.conn.send_packet(chat_id, payload)
-
-    def _send_chat_759(self, message: str, chat_id: int):
-        """1.19（协议 759）"""
-        timestamp = int(time.time() * 1000)
-        payload = (write_string(message[:256])
-                   + struct.pack(">q", timestamp)
-                   + struct.pack(">q", 0)
-                   + b'\x00'
-                   + b'\x00')
-        self.conn.send_packet(chat_id, payload)
-
-    def _send_chat_simple(self, message: str, chat_id: int):
-        """1.18及以下纯 String 格式（协议 < 759）"""
-        self.conn.send_packet(chat_id, write_string(message[:256]))
-
-
 
 
 def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
