@@ -1,27 +1,20 @@
-"""1.21.11+（协议 774+）协议处理器"""
+"""1.21.11+（协议 774+）协议处理器，继承 766 仅覆盖差异"""
 from __future__ import annotations
 import struct, time
-from .base import ProtocolHandler
-from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream
+from .v766 import Handler as V766Handler
+from ..buffer import write_string, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream
 
 
-class Handler(ProtocolHandler):
+class Handler(V766Handler):
     protocol_version = 774
     version_name = "1.21.11+"
-
-    def login_start_payload(self, username: str, uuid=None) -> bytes:
-        return write_string(username) + write_uuid(uuid)
 
     def send_chat_payload(self, message: str) -> bytes:
         timestamp = int(time.time() * 1000)
         return (write_string(message[:256])
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
-                + b'\x00' * 6)  # 尾部6字节
-
-    def send_command_payload(self, command: str) -> bytes:
-        # 1.21.11+ Chat Command包：只有command字段
-        return write_string(command[:256])
+                + b'\x00' * 6)  # 尾部6字节（比766多1字节messageCount）
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         import json
@@ -50,13 +43,3 @@ class Handler(ProtocolHandler):
                 return json_str
         except Exception:
             return ""
-
-    def extract_chat_sender(self, data: bytes) -> str:
-        try:
-            stream = BytesStream(data)
-            uuid_bytes = stream.read(16)
-            import uuid as _uuid
-            uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-            return self.bot.player_list.get(uuid_str, "未知玩家")
-        except Exception:
-            return "未知玩家"
