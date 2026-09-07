@@ -468,7 +468,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-success" onclick="exportResults('json')">导出JSON</button>
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
         <button class="btn btn-success" onclick="exportResults('html')">HTML报告</button>
-        <button class="btn btn-danger" onclick="batchWarn()">批量警告离线服</button>
+        <button class="btn btn-danger" onclick="openBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
@@ -477,7 +477,7 @@ tbody tr:last-child td { border-bottom: none; }
         <table>
           <thead>
             <tr>
-              <th>IP:端口</th><th>版本</th><th>核心</th><th>指纹</th><th>协议</th><th>MOTD</th><th>玩家</th><th>在线玩家</th><th>认证</th><th>延迟</th><th>操作</th>
+              <th style="width:30px;"><input type="checkbox" id="selectAllServers" onchange="toggleSelectAll(this)"></th><th>IP:端口</th><th>版本</th><th>核心</th><th>指纹</th><th>协议</th><th>MOTD</th><th>玩家</th><th>在线玩家</th><th>认证</th><th>延迟</th><th>操作</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
@@ -639,6 +639,29 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="btn btn-primary" onclick="confirmWarn()">发送</button>
     </div>
     <div id="warnResult" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- 批量警告弹窗 -->
+<div class="modal-overlay hidden" id="batchWarnModal">
+  <div class="modal" style="max-width:560px;">
+    <h3>批量警告选中服务器</h3>
+    <div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">
+      已选择 <span id="batchWarnCount" style="color:var(--accent);font-weight:600;">0</span> 台服务器
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>机器人用户名</label><input type="text" id="batchWarnUsername" value="SecurityBot"></div>
+      <div class="form-group"><label>并发数</label><input type="number" id="batchWarnWorkers" value="5" min="1" max="20"></div>
+    </div>
+    <div class="form-group"><label>警告消息（每行一条，会同时发给所有选中服务器）</label>
+      <textarea id="batchWarnMessages" rows="5">您好，我是安全扫描机器人
+检测到您的服务器处于离线模式
+建议设置 online-mode=true 以保护玩家账号</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeBatchWarnModal()">取消</button>
+      <button class="btn btn-danger" onclick="confirmBatchWarn()">开始警告</button>
+    </div>
+    <div id="batchWarnResult" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -964,6 +987,7 @@ async function loadResults(page) {
   totalResults = data.total;
   document.getElementById('resultsBody').innerHTML = data.results.map(r => `
     <tr>
+      <td><input type="checkbox" class="server-check" data-ip="${r.ip}" data-port="${r.port}"></td>
       <td>${r.ip}:${r.port}</td>
       <td>${r.version || '-'}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
       <td><span class="badge badge-${r.core_type || 'unknown'}" style="text-transform:capitalize;">${r.core_type || '-'}</span></td>
@@ -1107,14 +1131,54 @@ async function confirmWarn() {
     : `<div style="color:#f56565;">失败: ${data.error}</div>`;
 }
 
-async function batchWarn() {
-  if (!confirm('确定要对所有离线/破解服发送警告吗？')) return;
-  const res = await fetch('/api/warn/batch', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ auth: 'cracked', workers: 5 })
-  });
-  const data = await res.json();
-  alert(`批量警告完成：共 ${data.total} 台，发送 ${data.messages_sent} 条消息`);
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.server-check').forEach(c => c.checked = cb.checked);
+}
+
+function getSelectedServers() {
+  return Array.from(document.querySelectorAll('.server-check:checked')).map(c => ({
+    ip: c.dataset.ip, port: parseInt(c.dataset.port)
+  }));
+}
+
+function openBatchWarnModal() {
+  const selected = getSelectedServers();
+  if (selected.length === 0) { alert('请先在表格中勾选要警告的服务器'); return; }
+  document.getElementById('batchWarnCount').textContent = selected.length;
+  document.getElementById('batchWarnResult').innerHTML = '';
+  document.getElementById('batchWarnModal').classList.remove('hidden');
+}
+function closeBatchWarnModal() { document.getElementById('batchWarnModal').classList.add('hidden'); }
+
+async function confirmBatchWarn() {
+  const selected = getSelectedServers();
+  const messages = document.getElementById('batchWarnMessages').value.split('\n').filter(m => m.trim());
+  if (!messages.length) { alert('请输入至少一条警告消息'); return; }
+  const resultDiv = document.getElementById('batchWarnResult');
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary);">正在发送...</div>';
+  try {
+    const res = await fetch('/api/warn/batch', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        targets: selected,
+        username: document.getElementById('batchWarnUsername').value,
+        messages: messages,
+        workers: parseInt(document.getElementById('batchWarnWorkers').value)
+      })
+    });
+    const data = await res.json();
+    if (data.error) { resultDiv.innerHTML = '<div style="color:#f56565;">失败: ' + data.error + '</div>'; return; }
+    let html = `<div style="color:#48bb78;margin-bottom:8px;">完成：共 ${data.total} 台，成功发送 ${data.messages_sent} 条消息</div>`;
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+    html += '<tr><th style="text-align:left;padding:4px;">服务器</th><th style="text-align:left;padding:4px;">状态</th><th style="text-align:left;padding:4px;">消息数</th></tr>';
+    data.results.forEach(r => {
+      const status = r.success ? '<span style="color:#48bb78;">成功</span>' : '<span style="color:#f56565;">失败</span>';
+      const err = r.error ? ' (' + r.error.substring(0, 40) + ')' : '';
+      html += `<tr><td style="padding:4px;border-top:1px solid var(--border);">${r.ip}:${r.port}</td><td style="padding:4px;border-top:1px solid var(--border);">${status}${err}</td><td style="padding:4px;border-top:1px solid var(--border);">${r.messages_sent}</td></tr>`;
+    });
+    html += '</table>';
+    resultDiv.innerHTML = html;
+  } catch(e) { resultDiv.innerHTML = '<div style="color:#f56565;">请求失败: ' + e.message + '</div>'; }
 }
 
 function openCmdModal(ip, port) {
