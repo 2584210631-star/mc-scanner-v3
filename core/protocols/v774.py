@@ -20,16 +20,8 @@ class Handler(ProtocolHandler):
                 + b'\x00' * 6)  # 尾部6字节
 
     def send_command_payload(self, command: str) -> bytes:
-        # 1.21.11+ Chat Command包
-        # command + timestamp + salt + hasSignature + argumentSignatures(Array) + messageCount + acknowledgment(ByteArray)
-        timestamp = int(time.time() * 1000)
-        return (write_string(command[:256])
-                + struct.pack(">q", timestamp)
-                + struct.pack(">q", 0)
-                + b'\x00'               # hasSignature=false
-                + write_varint(0)       # argumentSignatures 空数组
-                + write_varint(0)       # messageCount=0
-                + write_varint(0))      # acknowledgment 空ByteArray
+        # 1.21.11+ Chat Command包：只有command字段
+        return write_string(command[:256])
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         import json
