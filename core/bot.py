@@ -155,17 +155,18 @@ class MCBot:
 
         # 构建候选协议版本列表
         if self.protocol_version is not None:
-            candidates = [self.protocol_version]
+            candidates = [int(self.protocol_version)]
         elif info and info.get("_used_protocol"):
-            candidates = [info["_used_protocol"]]
+            candidates = [int(info["_used_protocol"])]
         elif info and info.get("proto"):
-            candidates = [info["proto"]]
+            candidates = [int(info["proto"])]
         else:
             candidates = []
         for p in COMMON_PROTOCOLS:
             if p not in candidates and get_play_packets(p) is not None:
                 candidates.append(p)
         candidates = [p for p in candidates if get_play_packets(p) is not None]
+        print(f"[DEBUG connect] candidates={candidates[:5]}... (共{len(candidates)}个)")
 
         if not candidates:
             raise RuntimeError("没有支持的协议版本")
