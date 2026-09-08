@@ -369,6 +369,10 @@ class MCBot:
                 except Exception:
                     break
 
+                # 先让版本协议处理器接管，返回True表示已处理，子类可选择性覆盖
+                if self.protocol_handler.handle_play_packet(packet_id, data):
+                    continue
+
                 if packet_id == pkts["cb_keep_alive"]:
                     if len(data) >= 8:
                         try:

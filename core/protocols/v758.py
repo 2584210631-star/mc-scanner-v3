@@ -27,8 +27,11 @@ class Handler(ProtocolHandler):
                 json_str = read_string_from_stream(stream)
             else:
                 json_str = read_string_from_stream(stream)  # message
-                stream.read(1)  # position
-                stream.read(16)  # sender UUID
+                # 1.16（协议735）起聊天包增加 position 和 sender UUID
+                # 1.12.2~1.15.2（协议340~578）只有 message 字段
+                if getattr(self.bot, 'protocol_version', 758) >= 735:
+                    stream.read(1)  # position
+                    stream.read(16)  # sender UUID
             try:
                 obj = json.loads(json_str)
                 return self.bot._json_component_to_text(obj)
@@ -41,10 +44,12 @@ class Handler(ProtocolHandler):
         try:
             stream = BytesStream(data)
             read_string_from_stream(stream)  # message
-            stream.read(1)  # position
-            uuid_bytes = stream.read(16)
-            import uuid as _uuid
-            uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-            return self.bot.player_list.get(uuid_str, "未知玩家")
+            if getattr(self.bot, 'protocol_version', 758) >= 735:
+                stream.read(1)  # position
+                uuid_bytes = stream.read(16)
+                import uuid as _uuid
+                uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
+                return self.bot.player_list.get(uuid_str, "未知玩家")
+            return "未知玩家"
         except Exception:
             return "未知玩家"
