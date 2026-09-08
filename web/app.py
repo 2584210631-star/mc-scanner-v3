@@ -365,7 +365,6 @@ class ObserverSession:
         self.error = ""
         self.auth_mode = "unknown"
         self.version_name = ""
-        self.protocol_version = 0
         self.start_time = time.time()
         self.connect_time = None
         self.disconnect_time = None
