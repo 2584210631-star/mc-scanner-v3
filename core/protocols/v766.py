@@ -14,12 +14,16 @@ class Handler(ProtocolHandler):
 
     def send_chat_payload(self, message: str) -> bytes:
         timestamp = int(time.time() * 1000)
-        return (write_string(message[:256])
-                + struct.pack(">q", timestamp)
-                + struct.pack(">q", 0)
-                + b'\x00'           # hasSignature=false
-                + write_varint(0)   # messageCount=0
-                + write_varint(3) + b"\x00\x00\x00")  # acknowledged: ByteArray(3)
+        payload = (write_string(message[:256])
+                   + struct.pack(">q", timestamp)
+                   + struct.pack(">q", 0)
+                   + b'\x00'           # hasSignature=false
+                   + write_varint(0)   # messageCount=0
+                   + b"\x00\x00\x00")  # acknowledged: FixedBitSet固定3字节（1.20.5+无长度前缀）
+        # 1.21.5+ (769+) 增加 checksum 字节，无签名消息=1
+        if getattr(self.bot, 'protocol_version', 766) >= 769:
+            payload += b'\x01'
+        return payload
 
     def send_command_payload(self, command: str) -> bytes:
         return write_string(command[:256])
