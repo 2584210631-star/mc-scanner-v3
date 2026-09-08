@@ -529,31 +529,9 @@ def observer_start():
         return jsonify({"error": "host 不能为空"}), 400
     if not username:
         return jsonify({"error": "用户名不能为空"}), 400
-    # 和警告功能一样：从扫描结果取已知协议号，避免自动探测逐个试触发连接节流
-    proto = data.get("protocol_version")
-    if not proto or proto <= 0:
-        with scan_lock:
-            for r in scan_state.get("results", []):
-                if r.get("ip") == host and int(r.get("port", 25565)) == port:
-                    p = r.get("proto") or 0
-                    if p and p > 0:
-                        proto = p
-                    break
-    # 扫描结果没有时，快速SLP探测（3秒超时）拿协议号
-    if not proto or proto <= 0:
-        try:
-            from core.probe import slp_probe
-            info = slp_probe(host, port, timeout=3.0, protocol_version=-1)
-            if info and info.get("state") == "up":
-                proto = info.get("proto", 0)
-                _log(f"观察者SLP探测: {host}:{port} -> 协议{proto} ({info.get('version','')})")
-        except Exception:
-            pass
-    if not proto or proto <= 0:
-        proto = None
+    # 观察者不传protocol_version，让MCBot自动SLP探测后直接连（和昨天版本一致）
     session = ObserverSession(host, port, username, authme_password=authme,
-                              timeout=timeout, duration=duration,
-                              protocol_version=proto)
+                              timeout=timeout, duration=duration)
     session.session_id = f"{int(time.time() * 1000)}-{os.getpid()}-{len(observer_sessions) + 1}"
     session.thread = threading.Thread(target=session.run, daemon=True)
     with observer_lock:
