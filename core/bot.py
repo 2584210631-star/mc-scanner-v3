@@ -220,8 +220,9 @@ class MCBot:
                     self._do_configuration()
                 else:
                     self.conn.state = PROTO_STATE_PLAY
-                    # 旧版本（<1.20.2）没有Configuration阶段，在Play阶段发送Client Settings
+                    # 旧版本（<1.20.2）没有Configuration阶段，在Play阶段发送Client Settings和Player包
                     self._send_play_client_settings()
+                    self._send_play_player()
 
                 self.state = "play"
                 self.auth_mode = "offline"
@@ -377,6 +378,17 @@ class MCBot:
         except Exception:
             pass
 
+    def _send_play_player(self):
+        """旧版本在Play阶段发送Player（flying）包，告诉服务器玩家已就绪在地面上。
+        不发这个包，1.12.2 Vanilla可能认为玩家还在加载中，拒绝聊天消息。"""
+        pkts = self.play_packets
+        if not pkts or pkts.get("sb_player_flying") is None:
+            return
+        try:
+            self.conn.send_packet(pkts["sb_player_flying"], b'\x01')  # onGround=True
+        except Exception:
+            pass
+
     def _send_brand(self):
         """发送客户端品牌（vanilla）。部分服务端（模组服/反作弊）会等待品牌包。"""
         cfg = self.config_packets
@@ -453,11 +465,13 @@ class MCBot:
                     continue
 
                 if packet_id == pkts["cb_keep_alive"]:
-                    if len(data) >= 8:
-                        try:
-                            self.conn.send_packet(pkts["sb_keep_alive"], data[:8])
-                        except Exception:
-                            break
+                    try:
+                        self.conn.send_packet(pkts["sb_keep_alive"], data)
+                        # 顺便发Player（flying）包，告诉服务器玩家仍活跃
+                        if pkts.get("sb_player_flying") is not None:
+                            self.conn.send_packet(pkts["sb_player_flying"], b'\x01')
+                    except Exception:
+                        break
                 elif packet_id == pkts.get("cb_teleport"):
                     try:
                         # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1)+teleportId(varint)
