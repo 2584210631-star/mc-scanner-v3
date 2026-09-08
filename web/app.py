@@ -941,6 +941,10 @@ def warn_multi():
     def run_bot(ip, port, idx):
         name = f"{name_prefix}_{idx:02d}"
         try:
+            # 连接节流保护：1.12.2等旧版服务器默认 connection-throttle=4000ms
+            # 同一IP 4秒内只能连一次，按编号错开连接时间
+            if idx > 1:
+                time.sleep(4.5 * (idx - 1))
             r = join_and_warn(ip, port, name, messages, timeout=15.0,
                               message_delay=message_delay,
                               authme_password=authme_password)

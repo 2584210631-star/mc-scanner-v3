@@ -220,6 +220,8 @@ class MCBot:
                     self._do_configuration()
                 else:
                     self.conn.state = PROTO_STATE_PLAY
+                    # 旧版本（<1.20.2）没有Configuration阶段，在Play阶段发送Client Settings
+                    self._send_play_client_settings()
 
                 self.state = "play"
                 self.auth_mode = "offline"
@@ -357,6 +359,23 @@ class MCBot:
                    + struct.pack("?", True))
         payload += self.protocol_handler.get_client_info_extra()
         self.conn.send_packet(cfg["sb_client_info"], payload)
+
+    def _send_play_client_settings(self):
+        """旧版本（<1.20.2）在Play阶段发送Client Settings。
+        1.12.2等服务器需要收到设置包后才允许聊天。"""
+        pkts = self.play_packets
+        if not pkts or pkts.get("sb_client_info") is None:
+            return
+        try:
+            payload = (write_string("zh_CN")
+                       + struct.pack("b", 8)       # viewDistance
+                       + write_varint(0)           # chatMode: 0=enabled
+                       + struct.pack("?", True)    # chatColors
+                       + struct.pack("B", 0x7F)    # displayedSkinParts
+                       + write_varint(1))          # mainHand: 1=right
+            self.conn.send_packet(pkts["sb_client_info"], payload)
+        except Exception:
+            pass
 
     def _send_brand(self):
         """发送客户端品牌（vanilla）。部分服务端（模组服/反作弊）会等待品牌包。"""
