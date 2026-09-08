@@ -171,7 +171,10 @@ class MCBot:
 
         last_error = ""
         _requested_proto = self.protocol_version  # 保存用户初始指定的协议号，循环中会被覆盖
-        for proto in candidates:
+        _throttle_retries = {}
+        _idx = 0
+        while _idx < len(candidates):
+            proto = candidates[_idx]
             self.protocol_version = proto
             self.play_packets = get_play_packets(proto)
             self.config_packets = get_config_packets(proto)
@@ -235,10 +238,13 @@ class MCBot:
                 last_error = f"proto={proto}: {e}"
                 if self.conn:
                     self.conn.close()
-                # 连接节流时等4秒再试下一个协议
+                # 连接节流时等4秒重试当前协议（最多3次），否则试下一个
                 if "throttled" in str(e).lower():
-                    time.sleep(4.0)
-                continue
+                    _throttle_retries[proto] = _throttle_retries.get(proto, 0) + 1
+                    if _throttle_retries[proto] < 3:
+                        time.sleep(4.0)
+                        continue  # 不递增索引，重试当前协议
+                _idx += 1
 
         raise ConnectionError(f"所有协议版本尝试失败: {last_error}")
 
