@@ -151,6 +151,7 @@ class MCBot:
         else:
             info = slp_probe(self.host, self.port, timeout=5.0,
                                      protocol_version=self.protocol_version)
+        print(f"[DEBUG connect] SLP探测结果: state={info.get('state') if info else None}, proto={info.get('proto') if info else None}, version={info.get('version') if info else None}, _used={info.get('_used_protocol') if info else None}")
 
         # 构建候选协议版本列表
         if self.protocol_version is not None:
