@@ -43,13 +43,28 @@ class Handler(ProtocolHandler):
     def extract_chat_sender(self, data: bytes) -> str:
         try:
             stream = BytesStream(data)
-            read_string_from_stream(stream)  # message
+            json_str = read_string_from_stream(stream)  # message
             if getattr(self.bot, 'protocol_version', 758) >= 735:
                 stream.read(1)  # position
                 uuid_bytes = stream.read(16)
                 import uuid as _uuid
                 uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-                return self.bot.player_list.get(uuid_str, "未知玩家")
+                name = self.bot.player_list.get(uuid_str)
+                if name:
+                    return name
+            # 1.12.2 无 sender UUID 字段，从 JSON 里的 chat.type.text 的 with[0] 提取
+            try:
+                import json
+                obj = json.loads(json_str)
+                if isinstance(obj, dict) and obj.get("translate") == "chat.type.text":
+                    with_args = obj.get("with", [])
+                    if with_args:
+                        sender_obj = with_args[0]
+                        if isinstance(sender_obj, dict):
+                            return sender_obj.get("text", "") or str(sender_obj)
+                        return str(sender_obj)
+            except Exception:
+                pass
             return "未知玩家"
         except Exception:
             return "未知玩家"
