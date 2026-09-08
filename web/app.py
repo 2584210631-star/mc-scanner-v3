@@ -603,8 +603,12 @@ def observer_send():
             session.bot.send_command(message)
         else:
             session.bot.send_chat(message)
+        print(f"[观察者发送] {session.username} -> {session.host}:{session.port} [{msg_type}] {message[:50]}")
         return jsonify({"success": True, "type": msg_type, "message": message})
     except Exception as e:
+        print(f"[观察者发送失败] {session.username} -> {session.host}:{session.port} [{msg_type}] {message[:50]} 错误: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)[:200]})
 
 
