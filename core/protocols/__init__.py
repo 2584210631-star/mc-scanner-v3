@@ -34,7 +34,11 @@ def get_protocol_handler(bot) -> Optional[object]:
         from .v760 import Handler
     elif proto >= 759:
         from .v759 import Handler
+    elif proto >= 751:
+        from .v751 import Handler
+    elif proto >= 735:
+        from .v735 import Handler
     else:
-        from .v758 import Handler
+        from .v340 import Handler
 
     return Handler(bot)
