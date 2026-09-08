@@ -348,7 +348,7 @@ def _scan_worker(targets_list, config):
 # 登录指定服务器并保持连接，实时记录聊天消息与玩家进出，支持观察中发消息/命令。
 class ObserverSession:
     """单个服务器观察者会话"""
-    def __init__(self, host, port, username, authme_password=None, timeout=20.0, duration=0):
+    def __init__(self, host, port, username, authme_password=None, timeout=20.0, duration=0, protocol_version=None):
         self.session_id = ""
         self.duration = duration  # 观察时长（秒），0=一直观察
         self.host = host
@@ -356,6 +356,7 @@ class ObserverSession:
         self.username = username
         self.authme_password = authme_password
         self.timeout = timeout
+        self.protocol_version = protocol_version
         self.bot = None
         self.thread = None
         self.stop_event = threading.Event()
@@ -398,7 +399,8 @@ class ObserverSession:
     def run(self):
         try:
             self.bot = MCBot(host=self.host, port=self.port,
-                             username=self.username, timeout=self.timeout)
+                             username=self.username, timeout=self.timeout,
+                             protocol_version=self.protocol_version)
             self.bot.chat_callback = self._on_chat
             self.bot.player_callback = self._on_player
             self.bot.connect()
@@ -524,8 +526,19 @@ def observer_start():
         return jsonify({"error": "host 不能为空"}), 400
     if not username:
         return jsonify({"error": "用户名不能为空"}), 400
+    # 从扫描结果中获取已知协议号，避免自动探测在离线服上选错版本
+    proto = data.get("protocol_version")
+    if not proto:
+        with scan_lock:
+            for r in scan_state.get("results", []):
+                if r.get("ip") == host and int(r.get("port", 25565)) == port:
+                    p = r.get("proto") or 0
+                    if p and p > 0:
+                        proto = p
+                    break
     session = ObserverSession(host, port, username, authme_password=authme,
-                              timeout=timeout, duration=duration)
+                              timeout=timeout, duration=duration,
+                              protocol_version=proto)
     session.session_id = f"{int(time.time() * 1000)}-{os.getpid()}-{len(observer_sessions) + 1}"
     session.thread = threading.Thread(target=session.run, daemon=True)
     with observer_lock:
