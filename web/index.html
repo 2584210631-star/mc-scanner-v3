@@ -864,6 +864,17 @@ Protect your server NOW!</textarea></div>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+// HTML转义，防止XSS
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // 开场动画 - 赛博科技风 Pro
 (function() {
   const overlay = document.getElementById('intro-overlay');
@@ -1184,26 +1195,47 @@ async function loadResults(page) {
   const res = await fetch('/api/scan/results?' + params);
   const data = await res.json();
   totalResults = data.total;
-  document.getElementById('resultsBody').innerHTML = data.results.map(r => `
-    <tr>
-      <td><input type="checkbox" class="server-check" data-ip="${r.ip}" data-port="${r.port}"></td>
-      <td>${r.ip}:${r.port}</td>
-      <td>${r.version || '-'}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
-      <td><span class="badge badge-${r.core_type || 'unknown'}" style="text-transform:capitalize;">${r.core_type || '-'}</span></td>
-      <td>${r.fingerprint ? '<span title="被动: ' + (r.fingerprint.likely_software||'-') + '(' + (r.fingerprint.confidence||0) + '%)' + (r.fingerprint.active_software && r.fingerprint.active_software!='unknown' ? ' | 主动: ' + r.fingerprint.active_software + '(' + (r.fingerprint.active_confidence||0) + '%)' : '') + (r.fingerprint.field_order ? ' | 字段顺序: ' + r.fingerprint.field_order : '') + '">' + (r.fingerprint.likely_software||'-') + ' (' + (r.fingerprint.confidence||0) + '%)' + (r.fingerprint.active_software && r.fingerprint.active_software!='unknown' && r.fingerprint.active_software!=r.fingerprint.likely_software ? ' / ' + r.fingerprint.active_software : '') + '</span>' : '-'}</td>
+  document.getElementById('resultsBody').innerHTML = data.results.map(r => {
+    const ip = escapeHtml(r.ip);
+    const version = escapeHtml(r.version || '-');
+    const coreType = escapeHtml(r.core_type || 'unknown');
+    const motd = escapeHtml(r.motd || '-');
+    const motdTitle = escapeHtml(r.motd || '');
+    const players = (r.player_list || []).map(escapeHtml);
+    const playersTitle = escapeHtml(players.join(', '));
+    const playersDisplay = players.slice(0,3).join(', ') + (players.length > 3 ? ' +' + (players.length - 3) : '');
+    const auth = escapeHtml(r.auth || 'unknown');
+    const fp = r.fingerprint;
+    let fpHtml = '-';
+    if (fp) {
+      const likely = escapeHtml(fp.likely_software || '-');
+      const active = escapeHtml(fp.active_software || 'unknown');
+      const fieldOrder = escapeHtml(fp.field_order || '');
+      const title = '被动: ' + likely + '(' + (fp.confidence||0) + '%)' +
+        (fp.active_software && fp.active_software != 'unknown' ? ' | 主动: ' + active + '(' + (fp.active_confidence||0) + '%)' : '') +
+        (fp.field_order ? ' | 字段顺序: ' + fieldOrder : '');
+      fpHtml = '<span title="' + title + '">' + likely + ' (' + (fp.confidence||0) + '%)' +
+        (fp.active_software && fp.active_software != 'unknown' && fp.active_software != fp.likely_software ? ' / ' + active : '') + '</span>';
+    }
+    return `<tr>
+      <td><input type="checkbox" class="server-check" data-ip="${ip}" data-port="${r.port}"></td>
+      <td>${ip}:${r.port}</td>
+      <td>${version}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td><span class="badge badge-${coreType}" style="text-transform:capitalize;">${escapeHtml(r.core_type || '-')}</span></td>
+      <td>${fpHtml}</td>
       <td>${r.proto || '-'}</td>
-      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.motd||''}">${r.motd || '-'}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${motdTitle}">${motd}</td>
       <td>${r.players_online || 0}/${r.players_max || 0}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.player_list||[]).join(', ')}">${(r.player_list||[]).slice(0,3).join(', ') + ((r.player_list||[]).length>3?' +'+(r.player_list.length-3):'')}</td>
-      <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${playersTitle}">${playersDisplay}</td>
+      <td><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
       <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
       <td><div class="actions">
-        <button class="btn btn-success" onclick="toggleFavorite('${r.ip}',${r.port}, this)" title="收藏">☆</button>
-        <button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})">警告</button>
-        <button class="btn btn-warning" onclick="openCmdModal('${r.ip}',${r.port})">发命令</button>
+        <button class="btn btn-success" onclick="toggleFavorite('${ip}',${r.port}, this)" title="收藏">☆</button>
+        <button class="btn btn-primary" onclick="openWarnModal('${ip}',${r.port})">警告</button>
+        <button class="btn btn-warning" onclick="openCmdModal('${ip}',${r.port})">发命令</button>
       </div></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   renderPagination('pagination', page, data.total, 50, loadResults);
   drawVersionChart(data.results);
 }
@@ -1472,17 +1504,19 @@ async function loadDbResults(page) {
   const res = await fetch('/api/db/query?' + params);
   const data = await res.json();
   dbTotal = data.total;
-  document.getElementById('dbResultsBody').innerHTML = data.results.map(r => `
-    <tr>
-      <td>${r.ip}:${r.port}</td>
-      <td>${r.version || '-'}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
-      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.motd || '-'}</td>
+  document.getElementById('dbResultsBody').innerHTML = data.results.map(r => {
+    const ip = escapeHtml(r.ip);
+    const players = (r.player_list || []).map(escapeHtml);
+    return `<tr>
+      <td>${ip}:${r.port}</td>
+      <td>${escapeHtml(r.version || '-')}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
       <td>${r.players_online || 0}/${r.players_max || 0}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.player_list||[]).join(', ')}">${(r.player_list||[]).slice(0,3).join(', ') + ((r.player_list||[]).length>3?' +'+(r.player_list.length-3):'')}</td>
-      <td><span class="badge badge-${r.auth || 'unknown'}">${r.auth || '未知'}</span></td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(players.join(', '))}">${players.slice(0,3).join(', ') + (players.length>3?' +'+(players.length-3):'')}</td>
+      <td><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
       <td>${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   renderPagination('dbPagination', page, data.total, 50, loadDbResults);
 }
 
@@ -1513,7 +1547,7 @@ async function loadFavorites() {
   // 更新标签下拉
   const tagSelect = document.getElementById('favFilterTag');
   const currentTag = tagSelect.value;
-  tagSelect.innerHTML = '<option value="">全部标签</option>' + data.tags.map(t => `<option value="${t}">${t}</option>`).join('');
+  tagSelect.innerHTML = '<option value="">全部标签</option>' + data.tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   tagSelect.value = currentTag;
   // 缓存
   favCache = {};
@@ -1531,21 +1565,22 @@ async function loadFavorites() {
     const info = f.last_info || {};
     const state = info.state || 'unknown';
     const stateColor = state === 'up' ? 'var(--green)' : (state === 'offline' ? 'var(--red)' : 'var(--text-3)');
-    const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${t}</span>`).join(' ');
+    const ip = escapeHtml(f.ip);
+    const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
     return `<tr>
-      <td>${f.ip}:${f.port}</td>
-      <td>${info.version || '-'}</td>
-      <td><span class="badge badge-${info.core_type || 'unknown'}" style="text-transform:capitalize;">${info.core_type || '-'}</span></td>
+      <td>${ip}:${f.port}</td>
+      <td>${escapeHtml(info.version || '-')}</td>
+      <td><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
       <td style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
-      <td><span class="badge badge-${info.auth || 'unknown'}">${info.auth || '-'}</span></td>
+      <td><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
       <td>${tags || '-'}</td>
-      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.note || ''}">${f.note || '-'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
       <td style="font-size:11px;color:var(--text-3);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
       <td><div class="actions">
-        <button class="btn btn-success" onclick="rescanOneFavorite('${f.ip}',${f.port})" title="重查">↻</button>
-        <button class="btn btn-warning" onclick="editFavTags('${f.ip}',${f.port})" title="标签">🏷</button>
-        <button class="btn btn-warning" onclick="editFavNote('${f.ip}',${f.port})" title="备注">✎</button>
-        <button class="btn btn-danger" onclick="removeFavorite('${f.ip}',${f.port})" title="删除">✕</button>
+        <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
+        <button class="btn btn-warning" onclick="editFavTags('${ip}',${f.port})" title="标签">🏷</button>
+        <button class="btn btn-warning" onclick="editFavNote('${ip}',${f.port})" title="备注">✎</button>
+        <button class="btn btn-danger" onclick="removeFavorite('${ip}',${f.port})" title="删除">✕</button>
       </div></td>
     </tr>`;
   }).join('');
