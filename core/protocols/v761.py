@@ -25,9 +25,8 @@ class Handler(ProtocolHandler):
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
                 + b'\x00'           # hasSignature=false
-                + b'\x00'           # signedPreview=false
                 + write_varint(0)   # messageCount=0
-                + write_varint(3) + b"\x00\x00\x00")  # acknowledged: ByteArray(3)
+                + b"\x00\x00\x00")  # acknowledged: 固定3字节BitSet
 
     def send_command_payload(self, command: str) -> bytes:
         timestamp = int(time.time() * 1000)
@@ -35,9 +34,8 @@ class Handler(ProtocolHandler):
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
                 + b'\x00'           # hasSignature=false
-                + b'\x00'           # signedPreview=false
                 + write_varint(0)   # messageCount=0
-                + write_varint(3) + b"\x00\x00\x00")  # acknowledged: ByteArray(3)
+                + b"\x00\x00\x00")  # acknowledged: 固定3字节BitSet
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         try:
