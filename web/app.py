@@ -1374,6 +1374,13 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
     db.init_db(db_path)
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
     logger.info(f"[*] 数据库: {db_path}")
+    # 安全警告：绑定公网且未设置token
+    if host in ("0.0.0.0", "::") and not _get_web_token():
+        logger.warning("=" * 60)
+        logger.warning("[!] 安全警告：绑定 0.0.0.0 且未设置 web_token！")
+        logger.warning("[!] 任何人都可访问面板并执行命令/扫描。")
+        logger.warning("[!] 请在 config.json 中设置 web_token，或仅绑定 127.0.0.1")
+        logger.warning("=" * 60)
     app.run(host=host, port=port, debug=False, threaded=True)
 
 
