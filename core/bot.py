@@ -407,7 +407,9 @@ class MCBot:
         pkts = self.play_packets
         chat_id = pkts["sb_chat"]
         payload = self.protocol_handler.send_chat_payload(message)
+        print(f"[DEBUG send_chat] proto={self.protocol_version} chat_id={chat_id} payload_len={len(payload)} payload_hex={payload[:20].hex()}")
         self.conn.send_packet(chat_id, payload)
+        print(f"[DEBUG send_chat] 发送完成")
 
     def send_command(self, command: str):
         """发送聊天命令（不含前导 /）"""
@@ -455,9 +457,11 @@ class MCBot:
             while not self.stop_event.is_set():
                 try:
                     packet_id, data = self.conn.recv_packet(timeout=1.0)
+                    print(f"[DEBUG recv] packet_id={packet_id} data_len={len(data)}")
                 except socket.timeout:
                     continue
-                except Exception:
+                except Exception as e:
+                    print(f"[DEBUG recv] 异常: {e}")
                     break
 
                 # 先让版本协议处理器接管，返回True表示已处理，子类可选择性覆盖
