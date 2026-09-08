@@ -579,6 +579,8 @@ class MCBot:
                     parts.append(f"<{arg_texts[0]}> {arg_texts[1]}")
                 elif trans == "chat.type.emote" and len(arg_texts) >= 2:
                     parts.append(f"* {arg_texts[0]} {arg_texts[1]}")
+                elif trans == "chat.type.announcement" and len(arg_texts) >= 2:
+                    parts.append(f"[{arg_texts[0]}] {arg_texts[1]}")
                 elif trans == "multiplayer.player.joined" and arg_texts:
                     parts.append(f"{arg_texts[0]} 加入了游戏")
                 elif trans == "multiplayer.player.left" and arg_texts:
