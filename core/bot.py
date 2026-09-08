@@ -235,6 +235,9 @@ class MCBot:
                 last_error = f"proto={proto}: {e}"
                 if self.conn:
                     self.conn.close()
+                # 连接节流时等4秒再试下一个协议
+                if "throttled" in str(e).lower():
+                    time.sleep(4.0)
                 continue
 
         raise ConnectionError(f"所有协议版本尝试失败: {last_error}")
