@@ -536,6 +536,11 @@ def observer_start():
                     if p and p > 0:
                         proto = p
                     break
+    # 验证proto在支持列表里，否则回退自动探测
+    if proto:
+        from core.packets import get_play_packets
+        if get_play_packets(proto) is None:
+            proto = None
     session = ObserverSession(host, port, username, authme_password=authme,
                               timeout=timeout, duration=duration,
                               protocol_version=proto)

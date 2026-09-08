@@ -220,8 +220,6 @@ class MCBot:
                     self._do_configuration()
                 else:
                     self.conn.state = PROTO_STATE_PLAY
-                    # 旧版本（<1.20.2）没有Configuration阶段，在Play阶段发送Client Settings
-                    self._send_play_client_settings()
 
                 self.state = "play"
                 self.auth_mode = "offline"
