@@ -1,12 +1,14 @@
-"""1.18.2及以下（协议 < 759）协议处理器"""
+"""1.16.2-1.18.2（协议 751-758）协议处理器
+聊天包：message + position(Byte) + sender UUID(16)
+Player Info 改为枚举值：0=Add 1=GameMode 2=Latency 3=DisplayName 4=Remove"""
 from __future__ import annotations
 from .base import ProtocolHandler
 from ..buffer import write_string, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
 
 
 class Handler(ProtocolHandler):
-    protocol_version = 758
-    version_name = "1.18.2及以下"
+    protocol_version = 751
+    version_name = "1.16.2-1.18.2"
 
     def login_start_payload(self, username: str, uuid=None) -> bytes:
         return write_string(username)
@@ -18,39 +20,37 @@ class Handler(ProtocolHandler):
         return write_string("/" + command[:255])
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
+        """1.16.2+ 聊天包：message + position + sender UUID"""
         try:
             stream = BytesStream(data)
             json_str = read_string_from_stream(stream)
-            if getattr(self.bot, 'protocol_version', 758) >= 735:
-                stream.read(1)
-                stream.read(16)
+            stream.read(1)
+            stream.read(16)
             return self._parse_json_chat(json_str)
         except Exception:
             return ""
 
     def extract_chat_sender(self, data: bytes) -> str:
+        """从 sender UUID 查 player_list"""
         try:
             stream = BytesStream(data)
             read_string_from_stream(stream)
-            if getattr(self.bot, 'protocol_version', 758) >= 735:
-                stream.read(1)
-                uuid_bytes = stream.read(16)
-                name = self._sender_from_uuid(uuid_bytes)
-                if name:
-                    return name
+            stream.read(1)
+            uuid_bytes = stream.read(16)
+            name = self._sender_from_uuid(uuid_bytes)
+            return name or "未知玩家"
         except Exception:
-            pass
-        return "未知玩家"
+            return "未知玩家"
 
     def parse_player_info(self, data: bytes) -> None:
-        """旧版(<751) Player Info：位掩码 add/gamemode/latency/display/remove"""
+        """1.16.2+ Player Info：枚举值 Add/GameMode/Latency/DisplayName/Remove"""
         try:
             stream = BytesStream(data)
             actions = read_varint_from_stream(stream)
             count = read_varint_from_stream(stream)
             for _ in range(count):
                 uid = str(read_uuid_from_stream(stream))
-                if actions & 0x01:
+                if actions == 0:
                     name = read_string_from_stream(stream)
                     is_new = uid not in self.bot.player_list
                     self.bot.player_list[uid] = name
@@ -58,14 +58,19 @@ class Handler(ProtocolHandler):
                     for _ in range(props):
                         read_string_from_stream(stream); read_string_from_stream(stream)
                         if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                    read_varint_from_stream(stream)  # gamemode
+                    read_varint_from_stream(stream)  # ping
+                    if read_boolean_from_stream(stream): read_string_from_stream(stream)  # displayName
                     if is_new and self.bot.player_callback:
                         try: self.bot.player_callback(name, "join")
                         except Exception: pass
-                if actions & 0x02: read_varint_from_stream(stream)
-                if actions & 0x04: read_varint_from_stream(stream)
-                if actions & 0x08:
+                elif actions == 1:
+                    read_varint_from_stream(stream)
+                elif actions == 2:
+                    read_varint_from_stream(stream)
+                elif actions == 3:
                     if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                if actions & 0x10:
+                elif actions == 4:
                     old = self.bot.player_list.pop(uid, None)
                     if old is not None and self.bot.player_callback:
                         try: self.bot.player_callback(old, "leave")
