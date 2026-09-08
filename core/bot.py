@@ -154,6 +154,7 @@ class MCBot:
         print(f"[DEBUG connect] SLP探测结果: state={info.get('state') if info else None}, proto={info.get('proto') if info else None}, version={info.get('version') if info else None}, _used={info.get('_used_protocol') if info else None}")
 
         # 构建候选协议版本列表
+        print(f"[DEBUG connect] protocol_version={self.protocol_version!r} (type={type(self.protocol_version).__name__}), info_proto={info.get('proto') if info else None!r} (type={type(info.get('proto')).__name__ if info else 'None'}), info_used={info.get('_used_protocol') if info else None!r}")
         if self.protocol_version is not None:
             candidates = [int(self.protocol_version)]
         elif info and info.get("_used_protocol"):
@@ -162,11 +163,12 @@ class MCBot:
             candidates = [int(info["proto"])]
         else:
             candidates = []
+        print(f"[DEBUG connect] 初始candidates={candidates}")
         for p in COMMON_PROTOCOLS:
             if p not in candidates and get_play_packets(p) is not None:
                 candidates.append(p)
         candidates = [p for p in candidates if get_play_packets(p) is not None]
-        print(f"[DEBUG connect] candidates={candidates[:5]}... (共{len(candidates)}个)")
+        print(f"[DEBUG connect] 最终candidates={candidates[:5]}... (共{len(candidates)}个)")
 
         if not candidates:
             raise RuntimeError("没有支持的协议版本")
