@@ -27,19 +27,20 @@ class Handler(ProtocolHandler):
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
                 + b'\x00'  # hasSignature=false
-                + write_varint(0)  # signedPreview=false (VarInt)
+                + write_varint(0)  # messageCount=0 (VarInt, 1.19.3起替代signedPreview)
                 + b"\x00\x00\x00")  # acknowledgment 3字节
 
     def send_command_payload(self, command: str) -> bytes:
-        # 1.19.3-1.20.4 Chat Command包（无messageCount，1.20.5才加）
-        # command + timestamp + salt + hasSignature + argumentSignatures(Array) + acknowledgment(3字节)
+        # 1.19.3-1.20.4 Chat Command包
+        # command + timestamp + salt + hasSignature + argumentSignatures(Array) + messageCount + acknowledgment(3字节)
         timestamp = int(time.time() * 1000)
         return (write_string(command[:256])
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
                 + b'\x00'               # hasSignature=false
-                + write_varint(0)       # argumentSignatures 空数组
-                + b'\x00\x00\x00')     # acknowledgment 3字节
+                + write_varint(0)       # argumentSignatures(空数组)
+                + write_varint(0)       # messageCount=0
+                + b"\x00\x00\x00")      # acknowledgment 3字节
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         import json
