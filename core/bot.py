@@ -489,6 +489,7 @@ class MCBot:
                         z = struct.unpack(">d", stream.read(8))[0]
                         yaw = struct.unpack(">f", stream.read(4))[0]
                         pitch = struct.unpack(">f", stream.read(4))[0]
+                        flags = stream.read(1)  # flags: 位掩码（相对坐标）
                         # 1.17+ 有 teleport_id，旧版本没有
                         teleport_id = None
                         try:
