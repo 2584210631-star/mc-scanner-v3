@@ -192,6 +192,7 @@ class MCBot:
                 self.conn.handshake(protocol=proto, next_state=PROTO_STATE_LOGIN)
                 # Login Start — 由版本协议处理器构造
                 player_uuid = offline_uuid(self.username)
+                self.uuid = player_uuid  # 保存自己的UUID，用于聊天发送者识别
                 login_data = self.protocol_handler.login_start_payload(self.username, player_uuid)
                 self.conn.send_packet(self.login_packets["sb_start"], login_data)
 
@@ -219,6 +220,14 @@ class MCBot:
                         self._handle_login_plugin_request(resp_payload)
                         continue
                     if resp_id == self.login_packets["cb_success"]:
+                        # 解析服务器返回的真实UUID（离线服可能与offline_uuid不同）
+                        try:
+                            ss = BytesStream(resp_payload)
+                            real_uuid = read_uuid_from_stream(ss)
+                            if real_uuid:
+                                self.uuid = real_uuid
+                        except Exception:
+                            pass
                         break
 
                 # Configuration 阶段（仅 1.20.2+ 需要 Login Acknowledged）
