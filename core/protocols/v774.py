@@ -9,9 +9,4 @@ class Handler(V766Handler):
     protocol_version = 774
     version_name = "1.21.11+"
 
-    def send_chat_payload(self, message: str) -> bytes:
-        timestamp = int(time.time() * 1000)
-        return (write_string(message[:256])
-                + struct.pack(">q", timestamp)
-                + struct.pack(">q", 0)
-                + b'\x00' * 6)  # 尾部6字节（比766多1字节messageCount）
+    # send_chat_payload 继承 v766，1.21.11+ 聊天包格式未变
