@@ -72,6 +72,9 @@ class ProtocolHandler:
         try:
             import uuid as _uuid
             uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
+            # 匹配自己的UUID（离线模式offline_uuid）
+            if getattr(self.bot, 'uuid', None) and uuid_str == str(self.bot.uuid):
+                return self.bot.username
             return self.bot.player_list.get(uuid_str, "")
         except Exception:
             return ""
