@@ -220,9 +220,8 @@ class MCBot:
                     self._do_configuration()
                 else:
                     self.conn.state = PROTO_STATE_PLAY
-                    # 旧版本（<1.20.2）没有Configuration阶段，在Play阶段发送Client Settings和Player包
+                    # 旧版本（<1.20.2）没有Configuration阶段，在Play阶段发送Client Settings
                     self._send_play_client_settings()
-                    self._send_play_player()
 
                 self.state = "play"
                 self.auth_mode = "offline"
@@ -465,13 +464,11 @@ class MCBot:
                     continue
 
                 if packet_id == pkts["cb_keep_alive"]:
-                    try:
-                        self.conn.send_packet(pkts["sb_keep_alive"], data)
-                        # 顺便发Player（flying）包，告诉服务器玩家仍活跃
-                        if pkts.get("sb_player_flying") is not None:
-                            self.conn.send_packet(pkts["sb_player_flying"], b'\x01')
-                    except Exception:
-                        break
+                    if len(data) >= 8:
+                        try:
+                            self.conn.send_packet(pkts["sb_keep_alive"], data[:8])
+                        except Exception:
+                            break
                 elif packet_id == pkts.get("cb_teleport"):
                     try:
                         # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1)+teleportId(varint)
