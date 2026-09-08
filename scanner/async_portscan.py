@@ -120,7 +120,8 @@ async def _scan_async(targets, concurrency: int, timeout: float,
 
     _fill_batch()
     while pending:
-        done_set, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        done_set, pending_set = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        pending = list(pending_set)
         _fill_batch()
 
     if progress_cb:
