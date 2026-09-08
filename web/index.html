@@ -1760,7 +1760,7 @@ function pollObserverMessages() {
         if (m.type==='join') { cls='obs-join'; text = `>>> ${m.name} 加入了游戏`; }
         else if (m.type==='leave') { cls='obs-leave'; text = `<<< ${m.name} 离开了游戏`; }
         else if (m.type==='system') { cls='obs-system'; text = m.text; }
-        else { cls='obs-chat'; text = `<${m.sender||'未知'}> ${m.text}`; }
+        else { cls='obs-chat'; text = (m.sender && m.sender!=='系统' && !m.text.startsWith('[')) ? `<${m.sender}> ${m.text}` : m.text; }
         div.className = 'obs-msg '+cls;
         div.textContent = text;
         body.appendChild(div);
