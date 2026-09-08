@@ -457,7 +457,6 @@ class MCBot:
             while not self.stop_event.is_set():
                 try:
                     packet_id, data = self.conn.recv_packet(timeout=1.0)
-                    print(f"[DEBUG recv] packet_id={packet_id} data_len={len(data)}")
                 except socket.timeout:
                     continue
                 except Exception as e:
@@ -519,6 +518,7 @@ class MCBot:
                     try:
                         is_system = (packet_id == pkts.get("cb_system_chat")) or (packet_id == pkts.get("cb_profileless_chat"))
                         text, sender = self._extract_chat_with_sender(data, is_system)
+                        print(f"[DEBUG chat] packet_id={packet_id} text=[{text[:50]}] sender={sender}")
                         if text:
                             with self._chat_lock:
                                 self.chat_messages.append(text)
@@ -527,8 +527,8 @@ class MCBot:
                                     self.chat_callback(text, sender)
                                 except Exception:
                                     pass
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[DEBUG chat] 解析异常: {e}")
         finally:
             # 循环退出（掉线/被断开/停止）即视为连接结束，观察者据此判断
             self.connected = False
