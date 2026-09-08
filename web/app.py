@@ -539,6 +539,16 @@ def observer_start():
                     if p and p > 0:
                         proto = p
                     break
+    # 扫描结果没有时，快速SLP探测（3秒超时）拿协议号
+    if not proto or proto <= 0:
+        try:
+            from core.probe import slp_probe
+            info = slp_probe(host, port, timeout=3.0, protocol_version=-1)
+            if info and info.get("state") == "up":
+                proto = info.get("proto", 0)
+                _log(f"观察者SLP探测: {host}:{port} -> 协议{proto} ({info.get('version','')})")
+        except Exception:
+            pass
     if not proto or proto <= 0:
         proto = None
     session = ObserverSession(host, port, username, authme_password=authme,
