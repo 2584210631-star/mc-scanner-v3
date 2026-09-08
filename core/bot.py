@@ -170,6 +170,7 @@ class MCBot:
             raise RuntimeError("没有支持的协议版本")
 
         last_error = ""
+        _requested_proto = self.protocol_version  # 保存用户初始指定的协议号，循环中会被覆盖
         for proto in candidates:
             self.protocol_version = proto
             self.play_packets = get_play_packets(proto)
@@ -236,7 +237,7 @@ class MCBot:
                     self.conn.close()
                 # 如果用户指定了协议号或SLP探测到了协议号，该协议失败后不继续尝试其他协议
                 # 避免用错误的协议登录成功但发消息被踢
-                if self.protocol_version is not None or (info and (info.get("_used_protocol") or info.get("proto"))):
+                if _requested_proto is not None or (info and (info.get("_used_protocol") or info.get("proto"))):
                     break
                 continue
 
