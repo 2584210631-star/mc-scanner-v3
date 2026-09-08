@@ -6,6 +6,7 @@ MC TCP 连接：收发包、长度前缀、可选压缩、状态管理。
 import io
 import socket
 import threading
+import time
 import zlib
 from .buffer import write_varint, read_varint_from_stream, write_string
 
@@ -14,6 +15,8 @@ PROTO_STATE_STATUS = 1
 PROTO_STATE_LOGIN = 2
 PROTO_STATE_CONFIGURATION = 3
 PROTO_STATE_PLAY = 4
+
+MAX_PACKET_SIZE = 2 * 1024 * 1024  # 单个包最大2MB，防止恶意服务器内存放大
 
 
 class MCConnection:
@@ -80,13 +83,18 @@ class MCConnection:
             packet_data = uncompressed
         frame = write_varint(len(packet_data)) + packet_data
         with self._send_lock:
-            # 发送期间临时设为阻塞模式，避免 recv 线程设置的短 timeout 导致 sendall 超时
-            old_timeout = self.sock.gettimeout()
-            self.sock.settimeout(None)
+            import selectors
+            sel = selectors.DefaultSelector()
+            sel.register(self.sock, selectors.EVENT_WRITE)
             try:
+                # 等待写就绪，不修改 socket.timeout，避免与 recv 线程竞态
+                events = sel.select(timeout=self.timeout)
+                if not events:
+                    raise socket.timeout("send 等待写就绪超时")
                 self.sock.sendall(frame)
             finally:
-                self.sock.settimeout(old_timeout)
+                sel.unregister(self.sock)
+                sel.close()
 
     def recv_packet(self, timeout: float | None = None) -> tuple:
         """接收一个数据包，返回 (packet_id, payload_bytes)
@@ -104,10 +112,17 @@ class MCConnection:
                 if not events:
                     raise socket.timeout("recv 超时")
             packet_length = self._recv_varint()
+            if packet_length > MAX_PACKET_SIZE:
+                self.close()
+                raise ValueError(f"包过大: {packet_length} > {MAX_PACKET_SIZE}")
+            if packet_length < 0:
+                self.close()
+                raise ValueError(f"包长度非法: {packet_length}")
             try:
-                raw = self._recv_exact(packet_length)
+                raw = self._recv_exact(packet_length, total_timeout=timeout or self.timeout)
             except socket.timeout:
-                raise  # 超时不关闭连接，只是数据未到齐
+                self.close()  # 读包中途超时=半包，关闭连接避免流错位
+                raise
             except Exception:
                 self.close()
                 raise
@@ -146,13 +161,16 @@ class MCConnection:
                 raise ValueError("VarInt 过长")
         return result
 
-    def _recv_exact(self, n: int) -> bytes:
+    def _recv_exact(self, n: int, total_timeout: float = 15.0) -> bytes:
         buf = bytearray()
+        deadline = time.time() + total_timeout
         while len(buf) < n:
+            if time.time() > deadline:
+                raise socket.timeout(f"读包中途超时（已读{len(buf)}/{n}）")
             try:
                 chunk = self.sock.recv(n - len(buf))
             except socket.timeout:
-                continue  # 读包中途超时继续等，避免半包导致流错位
+                continue  # 短暂超时继续，但受 total_timeout 总限制
             if not chunk:
                 raise ConnectionError("连接在读取中关闭")
             buf.extend(chunk)

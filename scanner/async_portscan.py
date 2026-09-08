@@ -75,7 +75,6 @@ async def _scan_async(targets, concurrency: int, timeout: float,
                       stop_event=None) -> list:
     """异步扫描核心逻辑。"""
     semaphore = asyncio.Semaphore(concurrency)
-    tasks = []
     results = []
     done = 0
     open_count = 0
@@ -103,13 +102,26 @@ async def _scan_async(targets, concurrency: int, timeout: float,
             last_report = time.time()
         return r
 
-    for ip, port in targets:
-        if stop_event and stop_event.is_set():
-            break
-        tasks.append(asyncio.create_task(_wrapped(ip, port)))
+    # 分批创建协程，避免一次性创建百万协程导致OOM
+    BATCH_SIZE = max(concurrency * 5, 1000)
+    pending = []
+    target_iter = iter(targets)
 
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+    def _fill_batch():
+        """从迭代器填充一批协程"""
+        count = 0
+        for ip, port in target_iter:
+            if stop_event and stop_event.is_set():
+                break
+            pending.append(asyncio.create_task(_wrapped(ip, port)))
+            count += 1
+            if count >= BATCH_SIZE:
+                break
+
+    _fill_batch()
+    while pending:
+        done_set, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        _fill_batch()
 
     if progress_cb:
         progress_cb(done, open_count)

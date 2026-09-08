@@ -131,7 +131,8 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
     """
     protos = try_versions or [reported_proto if reported_proto and reported_proto > 0 else None]
     if protos[0] is None:
-        protos = list(reversed(supported_protos()))
+        # 无报告版本时，只试最常见的3个版本，避免版本风暴（18个全试要几分钟）
+        protos = list(reversed(supported_protos()))[:3]
 
     seen = set()
     last_detail = ""
@@ -170,7 +171,7 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 if resp_id == login_pkts["cb_disconnect"]:
                     msg, _ = read_string(resp_payload, 0)
                     low = msg.lower()
-                    if "whitelist" in low:
+                    if any(kw in low for kw in ["whitelist", "white list", "not white-listed", "not whitelisted", "白名单", "不在白名单"]):
                         return {"state": STATE_WHITELIST, "detected_proto": proto,
                                 "detail": f"whitelist: {msg[:80]}"}
                     return {"state": STATE_REJECTED, "detected_proto": proto,

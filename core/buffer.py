@@ -108,6 +108,10 @@ def read_string(data: bytes, offset: int = 0) -> tuple:
 
 def read_string_from_stream(stream) -> str:
     length = read_varint_from_stream(stream)
+    if length < 0:
+        raise ValueError(f"字符串长度非法: {length}")
+    if length > 1024 * 1024:  # 最大1MB，防止恶意服务器内存放大
+        raise ValueError(f"字符串过大: {length}")
     data = stream.read(length)
     if len(data) != length:
         raise ConnectionError("字符串被截断")

@@ -224,16 +224,20 @@ class ScanEngine:
 
         # 多线程发警告
         warn_results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.bot_workers) as ex:
-            futures = {}
-            for ip, port in offline_servers:
-                fut = ex.submit(join_and_warn, ip, port, username, messages,
-                                self.bot_timeout, message_delay, None, authme_password)
-                futures[fut] = (ip, port)
+        ex = concurrent.futures.ThreadPoolExecutor(max_workers=self.bot_workers)
+        futures = {}
+        for ip, port in offline_servers:
+            fut = ex.submit(join_and_warn, ip, port, username, messages,
+                            self.bot_timeout, message_delay, None, authme_password)
+            futures[fut] = (ip, port)
 
-            done = 0
+        done = 0
+        try:
             for fut in concurrent.futures.as_completed(futures):
                 if self.stop_event and self.stop_event.is_set():
+                    # 停止：取消未完成的任务，不等全部跑完
+                    for f in futures:
+                        f.cancel()
                     break
                 try:
                     r = fut.result()
@@ -248,6 +252,8 @@ class ScanEngine:
                 if done % 10 == 0:
                     print(f"[*] 警告进度: {done}/{len(offline_servers)} "
                           f"(已发送 {self.counters['messages_sent']} 条消息)")
+        finally:
+            ex.shutdown(wait=False)  # 不等待未完成任务
 
         # 更新数据库（从scan_results补充完整字段，避免UPSERT覆盖丢失）
         scan_map = {(r["ip"], r["port"]): r for r in scan_results}
@@ -283,6 +289,7 @@ class ScanEngine:
         db.init_db(self.db_path)
         print(f"[*] 导入 masscan banner: {ndjson_path}")
         pending = []
+        all_targets = []
         total = 0
         for ip, port, banner in extract_records(ndjson_path):
             p = parse_banner(banner)
@@ -294,6 +301,7 @@ class ScanEngine:
             p["players_online"] = p.pop("online", 0)
             p["players_max"] = p.pop("max", 0)
             pending.append(p)
+            all_targets.append((ip, port))
             total += 1
             if len(pending) >= 500:
                 db.upsert_many(self.db_path, pending)
@@ -303,10 +311,8 @@ class ScanEngine:
         print(f"[*] banner 导入完成，共 {total} 条")
 
         if then_auth:
-            all_rows = db.query(self.db_path, limit=100000)
-            targets = [(r["ip"], r["port"]) for r in all_rows]
-            print(f"[*] 对 {len(targets)} 个已发现服务器做认证检测...")
-            self.scan_targets(iter(targets))
+            print(f"[*] 对 {len(all_targets)} 个已发现服务器做认证检测...")
+            self.scan_targets(iter(all_targets))
         return self.results
 
     def _print_progress(self, done: int):
