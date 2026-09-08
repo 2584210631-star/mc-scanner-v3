@@ -20,8 +20,7 @@ class Handler(ProtocolHandler):
         return (write_string(message[:256])
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
-                + b'\x00'  # hasSignature=false
-                + b'\x00')  # signedPreview=false
+                + b'\x00')  # hasSignature=false（1.19无signedPreview）
 
     def send_command_payload(self, command: str) -> bytes:
         # 1.19 命令包格式同聊天包
@@ -29,7 +28,7 @@ class Handler(ProtocolHandler):
         return (write_string(command[:256])
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
-                + b'\x00' + b'\x00')
+                + b'\x00')  # hasSignature=false
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         try:
