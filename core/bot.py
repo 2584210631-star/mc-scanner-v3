@@ -482,12 +482,25 @@ class MCBot:
                             break
                 elif packet_id == pkts.get("cb_teleport"):
                     try:
-                        # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1)+teleportId(varint)
+                        # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1) [+teleportId(varint), 1.17+]
                         stream = BytesStream(data)
-                        stream.read(33)  # 跳过 x,y,z,yaw,pitch,flags
-                        teleport_id = read_varint_from_stream(stream)
-                        if pkts.get("sb_confirm_teleport") is not None:
+                        x = struct.unpack(">d", stream.read(8))[0]
+                        y = struct.unpack(">d", stream.read(8))[0]
+                        z = struct.unpack(">d", stream.read(8))[0]
+                        yaw = struct.unpack(">f", stream.read(4))[0]
+                        pitch = struct.unpack(">f", stream.read(4))[0]
+                        # 1.17+ 有 teleport_id，旧版本没有
+                        teleport_id = None
+                        try:
+                            teleport_id = read_varint_from_stream(stream)
+                        except Exception:
+                            pass
+                        if pkts.get("sb_confirm_teleport") is not None and teleport_id is not None:
                             self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
+                        elif pkts.get("sb_player_position_look") is not None:
+                            # 旧版本（1.12.2等）：回复 Player Position And Look 确认传送
+                            payload = struct.pack(">ddd", x, y, z) + struct.pack(">ff", yaw, pitch) + b'\x01'
+                            self.conn.send_packet(pkts["sb_player_position_look"], payload)
                     except Exception:
                         pass
                 elif packet_id == pkts.get("cb_ping"):

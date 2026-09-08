@@ -86,13 +86,13 @@ _PLAY_TABLES = [
     # 340 (1.12.2): Chat Message = 0x02（注意：0x03 是 Client Status，搞混会导致服务器 ArrayIndexOutOfBounds）
     {"min_proto": 340, "max_proto": 340, "sb_chat": 0x02, "sb_chat_command": None,
      "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
-     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": 0x00, "cb_disconnect": None,
+     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": None, "cb_disconnect": None,
      "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
      "cb_chat_message": None, "cb_system_chat": None},
     # 341-753: 旧版本（包ID各版本不同，由自动表补全）
     {"min_proto": 341, "max_proto": 753, "sb_chat": 0x03, "sb_chat_command": None,
      "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
-     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": 0x00, "cb_disconnect": None,
+     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": None, "cb_disconnect": None,
      "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
      "cb_chat_message": None, "cb_system_chat": None},
 ]
