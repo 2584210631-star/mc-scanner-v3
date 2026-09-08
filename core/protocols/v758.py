@@ -1,7 +1,7 @@
 """1.18.2及以下（协议 < 759）协议处理器"""
 from __future__ import annotations
 from .base import ProtocolHandler
-from ..buffer import write_string, BytesStream, read_string_from_stream
+from ..buffer import write_string, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
 
 
 class Handler(ProtocolHandler):
@@ -21,7 +21,6 @@ class Handler(ProtocolHandler):
         try:
             stream = BytesStream(data)
             json_str = read_string_from_stream(stream)
-            # 1.16（协议735）起聊天包增加 position 和 sender UUID
             if getattr(self.bot, 'protocol_version', 758) >= 735:
                 stream.read(1)
                 stream.read(16)
@@ -30,8 +29,6 @@ class Handler(ProtocolHandler):
             return ""
 
     def extract_chat_sender(self, data: bytes) -> str:
-        # 1.12.2 无 sender UUID，sender 嵌在 text 的 <> 前缀中，由 bot._extract_chat_with_sender 统一处理
-        # 1.16+ 有 UUID，从 player_list 查
         try:
             stream = BytesStream(data)
             read_string_from_stream(stream)
@@ -44,3 +41,34 @@ class Handler(ProtocolHandler):
         except Exception:
             pass
         return "未知玩家"
+
+    def parse_player_info(self, data: bytes) -> None:
+        """旧版(<751) Player Info：位掩码 add/gamemode/latency/display/remove"""
+        try:
+            stream = BytesStream(data)
+            actions = read_varint_from_stream(stream)
+            count = read_varint_from_stream(stream)
+            for _ in range(count):
+                uid = str(read_uuid_from_stream(stream))
+                if actions & 0x01:
+                    name = read_string_from_stream(stream)
+                    is_new = uid not in self.bot.player_list
+                    self.bot.player_list[uid] = name
+                    props = read_varint_from_stream(stream)
+                    for _ in range(props):
+                        read_string_from_stream(stream); read_string_from_stream(stream)
+                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                    if is_new and self.bot.player_callback:
+                        try: self.bot.player_callback(name, "join")
+                        except Exception: pass
+                if actions & 0x02: read_varint_from_stream(stream)
+                if actions & 0x04: read_varint_from_stream(stream)
+                if actions & 0x08:
+                    if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                if actions & 0x10:
+                    old = self.bot.player_list.pop(uid, None)
+                    if old is not None and self.bot.player_callback:
+                        try: self.bot.player_callback(old, "leave")
+                        except Exception: pass
+        except Exception:
+            pass

@@ -347,7 +347,6 @@ class MCBot:
     def _send_client_information(self):
         """发送 Client Information 包（configuration 阶段）"""
         cfg = self.config_packets
-        proto = self.protocol_version
         payload = (write_string("en_us")
                    + struct.pack("b", 8)
                    + write_varint(0)
@@ -356,8 +355,7 @@ class MCBot:
                    + write_varint(1)
                    + struct.pack("?", False)
                    + struct.pack("?", True))
-        if proto >= 769:
-            payload += write_varint(0)  # particleStatus (1.21.4+)
+        payload += self.protocol_handler.get_client_info_extra()
         self.conn.send_packet(cfg["sb_client_info"], payload)
 
     def _send_brand(self):
@@ -460,113 +458,7 @@ class MCBot:
                 elif packet_id == pkts.get("cb_disconnect"):
                     break
                 elif packet_id == pkts.get("cb_player_info"):
-                    # Player Info Update — 解析玩家列表
-                    try:
-                        stream = BytesStream(data)
-                        actions = read_varint_from_stream(stream)
-                        count = read_varint_from_stream(stream)
-                        for _ in range(count):
-                            try:
-                                uid = str(read_uuid_from_stream(stream))
-                                if self.protocol_version >= 761:
-                                    # 1.19.3+ 动作位：add(0x01) init_chat(0x02) gamemode(0x04)
-                                    # listed(0x08) latency(0x10) display(0x20)；移除走独立 cb_player_remove 包
-                                    if actions & 0x01:  # ADD_PLAYER
-                                        name = read_string_from_stream(stream)
-                                        is_new = uid not in self.player_list
-                                        self.player_list[uid] = name
-                                        props = read_varint_from_stream(stream)
-                                        for _ in range(props):
-                                            read_string_from_stream(stream); read_string_from_stream(stream)
-                                            if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                                        if is_new and self.player_callback:
-                                            try:
-                                                self.player_callback(name, "join")
-                                            except Exception:
-                                                pass
-                                    if actions & 0x02:  # initialize_chat — chat session
-                                        if read_boolean_from_stream(stream):
-                                            stream.read(16)  # uuid
-                                            stream.read(8)   # expireTime
-                                            klen = read_varint_from_stream(stream)
-                                            stream.read(klen)
-                                    if actions & 0x04: read_varint_from_stream(stream)  # update_game_mode
-                                    if actions & 0x08: read_varint_from_stream(stream)  # update_listed
-                                    if actions & 0x10: read_varint_from_stream(stream)  # update_latency
-                                    if actions & 0x20:
-                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
-                                elif self.protocol_version >= 751:
-                                    # 1.16.2-1.19.2 (751-760): action 是枚举值，不是位掩码
-                                    # 0=Add 1=GameMode 2=Latency 3=DisplayName 4=Remove
-                                    if actions == 0:  # Add Player
-                                        name = read_string_from_stream(stream)
-                                        is_new = uid not in self.player_list
-                                        self.player_list[uid] = name
-                                        props = read_varint_from_stream(stream)
-                                        for _ in range(props):
-                                            read_string_from_stream(stream); read_string_from_stream(stream)
-                                            if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                                        read_varint_from_stream(stream)  # gamemode
-                                        read_varint_from_stream(stream)  # ping
-                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)  # displayName
-                                        if self.protocol_version >= 760:
-                                            # 1.19.1/1.19.2 新增: Optional RemoteChatSession
-                                            if read_boolean_from_stream(stream):
-                                                stream.read(16)  # sessionId UUID
-                                                stream.read(8)   # expiresAt Long
-                                                klen = read_varint_from_stream(stream)
-                                                stream.read(klen)  # publicKey
-                                                slen = read_varint_from_stream(stream)
-                                                stream.read(slen)  # signature
-                                        if is_new and self.player_callback:
-                                            try:
-                                                self.player_callback(name, "join")
-                                            except Exception:
-                                                pass
-                                    elif actions == 1:  # Update Game Mode
-                                        read_varint_from_stream(stream)
-                                    elif actions == 2:  # Update Latency
-                                        read_varint_from_stream(stream)
-                                    elif actions == 3:  # Update Display Name
-                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                                    elif actions == 4:  # Remove Player
-                                        old = self.player_list.pop(uid, None)
-                                        if old is not None and self.player_callback:
-                                            try:
-                                                self.player_callback(old, "leave")
-                                            except Exception:
-                                                pass
-                                else:
-                                    # 旧版(<751, 1.16.1前) 动作位：add(0x01) gamemode(0x02)
-                                    # latency(0x04) display(0x08) remove(0x10)
-                                    if actions & 0x01:  # ADD_PLAYER
-                                        name = read_string_from_stream(stream)
-                                        is_new = uid not in self.player_list
-                                        self.player_list[uid] = name
-                                        props = read_varint_from_stream(stream)
-                                        for _ in range(props):
-                                            read_string_from_stream(stream); read_string_from_stream(stream)
-                                            if read_boolean_from_stream(stream): read_string_from_stream(stream)
-                                        if is_new and self.player_callback:
-                                            try:
-                                                self.player_callback(name, "join")
-                                            except Exception:
-                                                pass
-                                    if actions & 0x02: read_varint_from_stream(stream)  # gamemode
-                                    if actions & 0x04: read_varint_from_stream(stream)  # latency
-                                    if actions & 0x08:
-                                        if read_boolean_from_stream(stream): read_string_from_stream(stream)  # display name
-                                    if actions & 0x10:  # REMOVE_PLAYER
-                                        old = self.player_list.pop(uid, None)
-                                        if old is not None and self.player_callback:
-                                            try:
-                                                self.player_callback(old, "leave")
-                                            except Exception:
-                                                pass
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
+                    self.protocol_handler.parse_player_info(data)
                 elif packet_id == pkts.get("cb_player_remove"):
                     # 1.19.3+ 独立玩家移除包：UUID 数组
                     try:

@@ -46,6 +46,15 @@ class ProtocolHandler:
         """处理一个 play 阶段包。返回 True 表示已处理，False 表示未识别。"""
         return False
 
+    def parse_player_info(self, data: bytes) -> None:
+        """解析 Player Info Update 包，更新 bot.player_list 和 player_callback。
+        各版本按自己的格式覆盖。"""
+        pass
+
+    def get_client_info_extra(self) -> bytes:
+        """Configuration 阶段 Client Information 包的版本特有额外字段。"""
+        return b""
+
     # ===== 通用辅助方法（各版本共用，减少重复）=====
 
     @staticmethod

@@ -2,7 +2,7 @@
 from __future__ import annotations
 import struct, time
 from .v761 import Handler as V761Handler
-from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_boolean_from_stream
+from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
 
 
 class Handler(V761Handler):
@@ -37,8 +37,8 @@ class Handler(V761Handler):
             if is_system:
                 json_str = read_string_from_stream(stream)
             else:
-                stream.read(16)  # senderUuid
-                stream.read(1)   # index (Byte, 760特有)
+                stream.read(16)
+                stream.read(1)
                 if read_boolean_from_stream(stream):
                     slen = read_varint_from_stream(stream)
                     stream.read(slen)
@@ -46,3 +46,44 @@ class Handler(V761Handler):
             return self._parse_json_chat(json_str)
         except Exception:
             return ""
+
+    def parse_player_info(self, data: bytes) -> None:
+        """751-760 Player Info：枚举值 Add/GameMode/Latency/DisplayName/Remove，760多RemoteChatSession"""
+        try:
+            stream = BytesStream(data)
+            actions = read_varint_from_stream(stream)
+            count = read_varint_from_stream(stream)
+            for _ in range(count):
+                uid = str(read_uuid_from_stream(stream))
+                if actions == 0:
+                    name = read_string_from_stream(stream)
+                    is_new = uid not in self.bot.player_list
+                    self.bot.player_list[uid] = name
+                    props = read_varint_from_stream(stream)
+                    for _ in range(props):
+                        read_string_from_stream(stream); read_string_from_stream(stream)
+                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                    read_varint_from_stream(stream)
+                    read_varint_from_stream(stream)
+                    if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                    if self.bot.protocol_version >= 760:
+                        if read_boolean_from_stream(stream):
+                            stream.read(16); stream.read(8)
+                            klen = read_varint_from_stream(stream); stream.read(klen)
+                            slen = read_varint_from_stream(stream); stream.read(slen)
+                    if is_new and self.bot.player_callback:
+                        try: self.bot.player_callback(name, "join")
+                        except Exception: pass
+                elif actions == 1:
+                    read_varint_from_stream(stream)
+                elif actions == 2:
+                    read_varint_from_stream(stream)
+                elif actions == 3:
+                    if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                elif actions == 4:
+                    old = self.bot.player_list.pop(uid, None)
+                    if old is not None and self.bot.player_callback:
+                        try: self.bot.player_callback(old, "leave")
+                        except Exception: pass
+        except Exception:
+            pass

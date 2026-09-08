@@ -56,3 +56,8 @@ class Handler(ProtocolHandler):
             return self._parse_json_chat(nick_json) or "未知玩家"
         except Exception:
             return "未知玩家"
+
+    def parse_player_info(self, data: bytes) -> None:
+        """759 在 751-760 区间，player_info 格式同 v760（枚举值，无RemoteChatSession）"""
+        from .v760 import Handler as V760Handler
+        V760Handler.parse_player_info(self, data)
