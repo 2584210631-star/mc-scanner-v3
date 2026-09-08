@@ -60,11 +60,10 @@ class AsyncScanEngine:
         if self.stop_event and self.stop_event.is_set():
             return {"ip": ip, "port": port, "state": "cancelled"}
 
-        # 阶段1：端口扫描
-        async with port_sem:
-            if self.rate_limit > 0:
-                await asyncio.sleep(1.0 / self.rate_limit)
-            port_result = await _check_port(ip, port, self.timeout, port_sem)
+        # 阶段1：端口扫描（_check_port 内部已用 port_sem 控制并发，外层不再重复获取）
+        if self.rate_limit > 0:
+            await asyncio.sleep(1.0 / self.rate_limit)
+        port_result = await _check_port(ip, port, self.timeout, port_sem)
 
         self._bump("total")
 
