@@ -22,6 +22,12 @@ class Handler(ProtocolHandler):
     def send_command_payload(self, command: str) -> bytes:
         return write_string(command[:256])
 
+    def get_client_info_extra(self) -> bytes:
+        """1.21.4+ (769+) Client Information 增加 particleStatus"""
+        if getattr(self.bot, 'protocol_version', 766) >= 769:
+            return write_varint(0)
+        return b""
+
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         try:
             stream = BytesStream(data)
