@@ -443,10 +443,22 @@ class MCBot:
                     try:
                         # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1)+teleportId(varint)
                         stream = BytesStream(data)
-                        stream.read(33)  # 跳过 x,y,z,yaw,pitch,flags
+                        import struct
+                        x = struct.unpack(">d", stream.read(8))[0]
+                        y = struct.unpack(">d", stream.read(8))[0]
+                        z = struct.unpack(">d", stream.read(8))[0]
+                        yaw = struct.unpack(">f", stream.read(4))[0]
+                        pitch = struct.unpack(">f", stream.read(4))[0]
+                        stream.read(1)  # flags
                         teleport_id = read_varint_from_stream(stream)
                         if pkts.get("sb_confirm_teleport") is not None:
                             self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
+                        # 回发 Player Position And Look 确认位置（1.12.2等旧版必需，否则服务器认为玩家还在传送中）
+                        pos_look_id = pkts.get("sb_player_position_look")
+                        if pos_look_id is not None:
+                            pos_payload = (struct.pack(">d", x) + struct.pack(">d", y) + struct.pack(">d", z)
+                                           + struct.pack(">f", yaw) + struct.pack(">f", pitch) + b'\x01')
+                            self.conn.send_packet(pos_look_id, pos_payload)
                     except Exception:
                         pass
                 elif packet_id == pkts.get("cb_ping"):
