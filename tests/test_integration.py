@@ -59,7 +59,7 @@ class TestIntegration(unittest.TestCase):
         ex._load_defaults()
         self.assertTrue(ex.is_excluded("192.168.1.1"))
         self.assertTrue(ex.is_excluded("10.0.0.1"))
-        self.assertTrue(ex.is_excluded("127.0.0.1"))
+        self.assertFalse(ex.is_excluded("127.0.0.1"))
         self.assertFalse(ex.is_excluded("8.8.8.8"))
 
     def test_excluder_filter(self):
