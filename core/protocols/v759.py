@@ -32,7 +32,6 @@ class Handler(ProtocolHandler):
                 + b'\x00' + b'\x00')
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
-        import json
         try:
             stream = BytesStream(data)
             if is_system:
@@ -42,15 +41,10 @@ class Handler(ProtocolHandler):
                 read_string_from_stream(stream)  # nickname
                 stream.read(8)  # timestamp
                 stream.read(8)  # salt
-                has_sig = read_boolean_from_stream(stream)
-                if has_sig:
+                if read_boolean_from_stream(stream):
                     stream.read(256)  # signature
                 json_str = read_string_from_stream(stream)
-            try:
-                obj = json.loads(json_str)
-                return self.bot._json_component_to_text(obj)
-            except (json.JSONDecodeError, TypeError):
-                return json_str
+            return self._parse_json_chat(json_str)
         except Exception:
             return ""
 
@@ -59,10 +53,6 @@ class Handler(ProtocolHandler):
             stream = BytesStream(data)
             stream.read(16)  # UUID
             nick_json = read_string_from_stream(stream)
-            import json
-            try:
-                return self.bot._json_component_to_text(json.loads(nick_json))
-            except Exception:
-                return nick_json
+            return self._parse_json_chat(nick_json) or "未知玩家"
         except Exception:
             return "未知玩家"

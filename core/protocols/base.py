@@ -1,6 +1,7 @@
 """协议处理器基类 — 每个版本继承并实现自己的格式"""
 from __future__ import annotations
 from typing import Optional, Tuple
+import json
 
 
 class ProtocolHandler:
@@ -44,3 +45,45 @@ class ProtocolHandler:
     def handle_play_packet(self, packet_id: int, data: bytes) -> bool:
         """处理一个 play 阶段包。返回 True 表示已处理，False 表示未识别。"""
         return False
+
+    # ===== 通用辅助方法（各版本共用，减少重复）=====
+
+    @staticmethod
+    def _parse_json_chat(json_str: str) -> str:
+        """解析 JSON 聊天组件为纯文本（带翻译表）"""
+        try:
+            obj = json.loads(json_str)
+            from ..bot import MCBot
+            return MCBot._json_component_to_text(obj)
+        except (json.JSONDecodeError, TypeError):
+            return json_str
+
+    def _sender_from_uuid(self, uuid_bytes: bytes) -> str:
+        """从 UUID 字节查 player_list 获取玩家名，查不到返回空串"""
+        try:
+            import uuid as _uuid
+            uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
+            return self.bot.player_list.get(uuid_str, "")
+        except Exception:
+            return ""
+
+    def _sender_from_json(self, stream) -> str:
+        """从聊天 JSON 的 chat.type.text.with[0] 提取 sender（player_list查不到时的fallback）"""
+        try:
+            from ..buffer import read_varint_from_stream, read_boolean_from_stream, read_string_from_stream
+            read_varint_from_stream(stream)  # index
+            if read_boolean_from_stream(stream):  # hasSignature
+                sig_len = read_varint_from_stream(stream)
+                stream.read(sig_len)
+            json_str = read_string_from_stream(stream)
+            obj = json.loads(json_str)
+            if isinstance(obj, dict) and obj.get("translate") == "chat.type.text":
+                with_args = obj.get("with", [])
+                if with_args:
+                    sender_obj = with_args[0]
+                    if isinstance(sender_obj, dict):
+                        return sender_obj.get("text", "") or str(sender_obj)
+                    return str(sender_obj)
+        except Exception:
+            pass
+        return ""

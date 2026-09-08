@@ -17,18 +17,15 @@ class Handler(ProtocolHandler):
         return (write_string(message[:256])
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
-                + b'\x00' * 5)  # 尾部5字节
+                + b'\x00' * 5)
 
     def send_command_payload(self, command: str) -> bytes:
-        # 1.20.5+ Chat Command包：只有command字段
         return write_string(command[:256])
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
-        import json
         try:
             stream = BytesStream(data)
             if is_system:
-                # 1.20.5+ System Chat 是 Network NBT
                 try:
                     txt = self.bot._nbt_component_to_text(stream)
                     if txt:
@@ -37,17 +34,13 @@ class Handler(ProtocolHandler):
                     pass
                 json_str = read_string_from_stream(stream)
             else:
-                stream.read(16)  # senderUuid
-                read_varint_from_stream(stream)  # index
-                if read_boolean_from_stream(stream):  # hasSignature
+                stream.read(16)
+                read_varint_from_stream(stream)
+                if read_boolean_from_stream(stream):
                     sig_len = read_varint_from_stream(stream)
-                    stream.read(sig_len)  # signature
-                json_str = read_string_from_stream(stream)  # message
-            try:
-                obj = json.loads(json_str)
-                return self.bot._json_component_to_text(obj)
-            except (json.JSONDecodeError, TypeError):
-                return json_str
+                    stream.read(sig_len)
+                json_str = read_string_from_stream(stream)
+            return self._parse_json_chat(json_str)
         except Exception:
             return ""
 
@@ -55,30 +48,10 @@ class Handler(ProtocolHandler):
         try:
             stream = BytesStream(data)
             uuid_bytes = stream.read(16)
-            import uuid as _uuid
-            uuid_str = str(_uuid.UUID(bytes=uuid_bytes))
-            # 先从 player_list 查
-            name = self.bot.player_list.get(uuid_str)
+            name = self._sender_from_uuid(uuid_bytes)
             if name:
                 return name
-            # 查不到则解析 JSON 里的 chat.type.text 的 with[0]（sender 名）
-            try:
-                read_varint_from_stream(stream)  # index
-                if read_boolean_from_stream(stream):  # hasSignature
-                    sig_len = read_varint_from_stream(stream)
-                    stream.read(sig_len)
-                json_str = read_string_from_stream(stream)
-                import json
-                obj = json.loads(json_str)
-                if isinstance(obj, dict) and obj.get("translate") == "chat.type.text":
-                    with_args = obj.get("with", [])
-                    if with_args:
-                        sender_obj = with_args[0]
-                        if isinstance(sender_obj, dict):
-                            return sender_obj.get("text", "") or str(sender_obj)
-                        return str(sender_obj)
-            except Exception:
-                pass
-            return "未知玩家"
+            name = self._sender_from_json(stream)
+            return name or "未知玩家"
         except Exception:
             return "未知玩家"
