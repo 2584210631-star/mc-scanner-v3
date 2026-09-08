@@ -34,12 +34,16 @@ def _build_engine(db_path=None, workers=None, timeout=None, auth_check=True,
     )
 
 
-def parse_and_filter_targets(targets_str: str, ports=None, exclude_file=None):
-    """解析目标字符串 + 排除过滤，返回 (targets列表, 目标数)"""
+def parse_and_filter_targets(targets_str, ports=None, exclude_file=None):
+    """解析目标（字符串或列表）+ 排除过滤，返回 (targets列表, 目标数)"""
     cfg = config.load_config()
     ports = ports or cfg["ports"]
     exclude_file = exclude_file or cfg["exclude_file"]
-    targets_list = [t.strip() for t in targets_str.split(',') if t.strip()]
+    # 兼容 list（分布式分片 targets）和逗号分隔字符串
+    if isinstance(targets_str, (list, tuple)):
+        targets_list = [str(t).strip() for t in targets_str if str(t).strip()]
+    else:
+        targets_list = [t.strip() for t in str(targets_str).split(',') if t.strip()]
     parsed = list(parse_targets(targets_list, ports))
     ex = Excluder(exclude_file)
     filtered = list(ex.filter_targets(iter(parsed)))

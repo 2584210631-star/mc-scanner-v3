@@ -232,7 +232,9 @@ def _scan_worker(targets_list, config):
                 use_masscan = False
             else:
                 _log(f"使用 masscan 高速扫描，速率: {config.get('masscan_rate', 5000)}/s")
-                targets_str = ",".join(str(t) for t in targets_list)
+                # targets_list 是 (ip, port) tuple，masscan 只需要 IP（去重）
+                unique_ips = list(dict.fromkeys(t[0] if isinstance(t, (tuple, list)) else str(t) for t in targets_list))
+                targets_str = ",".join(unique_ips)
                 ports_str = ",".join(str(p) for p in config.get("ports", [25565]))
                 try:
                     ndjson_path = run_masscan(
