@@ -435,6 +435,9 @@ class ObserverSession:
             with self.lock:
                 self.status = "error"
                 self.error = str(e)[:300]
+            print(f"[观察者错误] {self.username}@{self.host}:{self.port} - {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             if self.bot:
                 try:
@@ -528,7 +531,7 @@ def observer_start():
         return jsonify({"error": "用户名不能为空"}), 400
     # 从扫描结果中获取已知协议号，避免自动探测在离线服上选错版本
     proto = data.get("protocol_version")
-    if not proto:
+    if not proto or proto <= 0:
         with scan_lock:
             for r in scan_state.get("results", []):
                 if r.get("ip") == host and int(r.get("port", 25565)) == port:
@@ -537,10 +540,12 @@ def observer_start():
                         proto = p
                     break
     # 验证proto在支持列表里，否则回退自动探测
-    if proto:
+    if proto and proto > 0:
         from core.packets import get_play_packets
         if get_play_packets(proto) is None:
             proto = None
+    else:
+        proto = None
     session = ObserverSession(host, port, username, authme_password=authme,
                               timeout=timeout, duration=duration,
                               protocol_version=proto)
