@@ -613,6 +613,12 @@ class MCBot:
         except Exception:
             pass
         text = self._extract_chat_text(data, is_system)
+        # 旧版本（1.12.2等）聊天格式为 "<玩家名> 消息"，sender 嵌在 text 里
+        if not is_system and sender == "未知玩家" and text.startswith("<"):
+            gt = text.find(">")
+            if gt > 1 and gt < 20:
+                sender = text[1:gt]
+                text = text[gt + 1:].lstrip()
         return text, sender
 
     def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
