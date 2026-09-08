@@ -17,4 +17,4 @@ class Handler(V766Handler):
                 + b'\x00'           # hasSignature=false
                 + write_varint(0)   # messageCount=0
                 + b"\x00\x00\x00"   # acknowledged: 固定3字节BitSet
-                + b'\x00')          # checksum: 0=IGNORE_CHECKSUM（1.21.5+新增）
+                + b'\x01')          # checksum: 无签名时=1（空数组hashCode=1，0会被服务器视为无效）
