@@ -4,7 +4,7 @@
 from __future__ import annotations
 import struct, time
 from .base import ProtocolHandler
-from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream
+from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
 
 
 class Handler(ProtocolHandler):
@@ -65,3 +65,34 @@ class Handler(ProtocolHandler):
             return name or "未知玩家"
         except Exception:
             return "未知玩家"
+
+    def parse_player_info(self, data: bytes) -> None:
+        """1.19.3+ Player Info：位掩码 add/init_chat/gamemode/listed/latency/display"""
+        try:
+            stream = BytesStream(data)
+            actions = read_varint_from_stream(stream)
+            count = read_varint_from_stream(stream)
+            for _ in range(count):
+                uid = str(read_uuid_from_stream(stream))
+                if actions & 0x01:
+                    name = read_string_from_stream(stream)
+                    is_new = uid not in self.bot.player_list
+                    self.bot.player_list[uid] = name
+                    props = read_varint_from_stream(stream)
+                    for _ in range(props):
+                        read_string_from_stream(stream); read_string_from_stream(stream)
+                        if read_boolean_from_stream(stream): read_string_from_stream(stream)
+                    if is_new and self.bot.player_callback:
+                        try: self.bot.player_callback(name, "join")
+                        except Exception: pass
+                if actions & 0x02:
+                    if read_boolean_from_stream(stream):
+                        stream.read(16); stream.read(8)
+                        klen = read_varint_from_stream(stream); stream.read(klen)
+                if actions & 0x04: read_varint_from_stream(stream)
+                if actions & 0x08: read_varint_from_stream(stream)
+                if actions & 0x10: read_varint_from_stream(stream)
+                if actions & 0x20:
+                    if read_boolean_from_stream(stream): read_string_from_stream(stream)
+        except Exception:
+            pass
