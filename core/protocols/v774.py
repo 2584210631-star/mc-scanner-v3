@@ -16,4 +16,5 @@ class Handler(V766Handler):
                 + struct.pack(">q", 0)
                 + b'\x00'           # hasSignature=false
                 + write_varint(0)   # messageCount=0
-                + b"\x00\x00\x00")  # acknowledged: 固定3字节BitSet（1.21.11+无长度前缀）
+                + b"\x00\x00\x00"   # acknowledged: 固定3字节BitSet
+                + b'\x00')          # checksum: 0=IGNORE_CHECKSUM（1.21.5+新增）
