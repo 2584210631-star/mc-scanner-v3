@@ -574,7 +574,16 @@ def cmd_distributed(args, cfg):
 def cmd_proxy(args, cfg):
     """代理管理（v3.3 新增）"""
     from core.proxy import ProxyManager, get_proxy_manager
-    manager = get_proxy_manager(proxy_file=args.file or "proxies.txt", auto_fetch=False)
+    proxy_file = args.file or "proxies.txt"
+    manager = get_proxy_manager(proxy_file=proxy_file, auto_fetch=False)
+    if manager is None:
+        if args.fetch:
+            # 文件不存在但要fetch，直接创建新管理器
+            manager = ProxyManager(proxy_file=proxy_file, auto_fetch=False)
+        else:
+            print(f"[!] 代理文件不存在: {proxy_file}")
+            print("    使用 --fetch 从网络获取代理，或 --add <proto://host:port> 添加")
+            return
     if args.fetch:
         count = manager.fetch_from_api(fetch_socks5=args.socks5)
         print(f"[+] 从 ProxyScrape 获取 {count} 个代理")

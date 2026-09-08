@@ -26,7 +26,7 @@ def shard_cidr(cidr: str, num_shards: int, ports: list = None) -> list:
         for i, addr in enumerate(net.hosts()):
             shards.append({
                 "shard_id": i,
-                "targets": str(addr),
+                "targets": [str(addr)],
                 "ports": ports,
                 "estimated_hosts": 1,
             })
@@ -46,10 +46,8 @@ def shard_cidr(cidr: str, num_shards: int, ports: list = None) -> list:
         if not group:
             break
         shard_id = len(shards)
-        if len(group) == 1:
-            target = str(group[0])
-        else:
-            target = f"{group[0].network_address}-{group[-1].broadcast_address}"
+        # targets 统一用 CIDR 列表，避免 "a.b.c.d-x.y.z.w" 范围格式无法被 parse_targets 解析
+        target = [str(s) for s in group]
         shards.append({
             "shard_id": shard_id,
             "targets": target,

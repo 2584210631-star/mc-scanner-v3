@@ -29,12 +29,12 @@ class Handler(V766Handler):
                     pass
                 json_str = read_string_from_stream(stream)
             else:
-                # 774+: UUID + index + hasSignature(Boolean) + signature(ByteArray) + message
+                # 774+: UUID + index + hasSignature(Boolean) + [signature] + message
                 stream.read(16)  # senderUuid
                 read_varint_from_stream(stream)  # index
-                read_boolean_from_stream(stream)  # hasSignature
-                sig_len = read_varint_from_stream(stream)  # signature长度
-                stream.read(sig_len)  # signature
+                if read_boolean_from_stream(stream):  # hasSignature
+                    sig_len = read_varint_from_stream(stream)  # signature长度
+                    stream.read(sig_len)  # signature
                 json_str = read_string_from_stream(stream)  # message
             try:
                 obj = json.loads(json_str)

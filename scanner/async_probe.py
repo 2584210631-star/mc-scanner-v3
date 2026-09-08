@@ -41,7 +41,7 @@ def _parse_json(data: bytes):
     """解析 JSON，优先用 simdjson，回退标准库。"""
     if _HAS_SIMDJSON:
         try:
-            return json.loads(_parser.parse(data).as_dict())
+            return _parser.parse(data).as_dict()
         except Exception:
             pass
     try:

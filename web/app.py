@@ -62,7 +62,11 @@ def parse_ports_spec(ports_spec):
     return sorted(set(result))
 
 app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False
+# Flask 2.x 用 config，Flask 3.x 用 app.json.ensure_ascii
+try:
+    app.json.ensure_ascii = False
+except AttributeError:
+    app.config['JSON_AS_ASCII'] = False
 
 
 def _get_web_token():
@@ -155,7 +159,11 @@ def _scan_worker(targets_list, config):
             import ipaddress
             subnets = []
             for t in targets_list:
-                t = str(t).strip()
+                # targets_list 是 (ip, port) tuple 列表，连续扫描只需要 IP 部分
+                if isinstance(t, (tuple, list)):
+                    t = str(t[0]).strip()
+                else:
+                    t = str(t).strip()
                 if not t:
                     continue
                 try:
@@ -791,7 +799,7 @@ def export_results():
         for r in results:
             v = r.get("version") or "未知"
             versions[v] = versions.get(v, 0) + 1
-        version_rows = "".join("<tr><td>" + v + "</td><td>" + str(c) + "</td></tr>" for v, c in sorted(versions.items(), key=lambda x: -x[1]))
+        version_rows = "".join("<tr><td>" + _html_escape(v) + "</td><td>" + str(c) + "</td></tr>" for v, c in sorted(versions.items(), key=lambda x: -x[1]))
         server_rows = ""
         for r in results:
             players = ", ".join(r.get("player_list", [])) or "-"
@@ -1062,13 +1070,23 @@ def db_query():
     auth = request.args.get("auth")
     modded = request.args.get("modded")
     search = request.args.get("search")
-    limit = int(request.args.get("limit", 100))
-    offset = int(request.args.get("offset", 0))
+    try:
+        limit = int(request.args.get("limit", 100))
+    except (ValueError, TypeError):
+        limit = 100
+    try:
+        offset = int(request.args.get("offset", 0))
+    except (ValueError, TypeError):
+        offset = 0
+    try:
+        modded_val = int(modded) if modded else None
+    except (ValueError, TypeError):
+        modded_val = None
     if not os.path.exists(db_path):
         return jsonify({"total": 0, "results": []})
-    rows = db.query(db_path, auth=auth, modded=modded and int(modded),
+    rows = db.query(db_path, auth=auth, modded=modded_val,
                      search=search, limit=limit, offset=offset)
-    total = db.count(db_path, auth=auth, modded=modded and int(modded), search=search)
+    total = db.count(db_path, auth=auth, modded=modded_val, search=search)
     return jsonify({"total": total, "results": rows})
 
 

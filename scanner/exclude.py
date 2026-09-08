@@ -29,8 +29,6 @@ class Excluder:
                         continue
             print(f"[*] 已加载排除列表: {filepath} ({len(self.networks)} 条)")
         except FileNotFoundError:
-            pass
-        except FileNotFoundError:
             print(f"[!] 排除列表文件不存在: {filepath}，使用默认私有地址段")
             self._load_defaults()
 
@@ -64,7 +62,7 @@ class Excluder:
         return False
 
     def filter_targets(self, targets):
-        """过滤目标生成器，排除不在列表中的 IP"""
+        """过滤目标生成器，排除在列表中的 IP"""
         for ip, port in targets:
             if not self.is_excluded(ip):
                 yield (ip, port)
