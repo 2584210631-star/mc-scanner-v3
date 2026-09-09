@@ -42,12 +42,22 @@ def run_masscan(targets: str, ports: str = "25565", rate: int = 1000,
 
     cmd = [
         "masscan",
-        targets,
         "-p", ports,
         "--rate", str(rate),
         "-oJ", output_file,
         "--wait", "3",
     ]
+    # Windows命令行长度限制8191字符，目标列表过长时用-iL文件传入
+    if len(targets) > 500 or "," in targets:
+        fd, target_file = tempfile.mkstemp(suffix=".txt", prefix="masscan_targets_")
+        with os.fdopen(fd, "w") as f:
+            # masscan -iL 支持每行一个CIDR或IP
+            for t in targets.split(","):
+                f.write(t.strip() + "\n")
+        cmd.extend(["-iL", target_file])
+        print(f"[*] 目标列表过长({len(targets)}字符)，使用临时文件 {target_file}")
+    else:
+        cmd.insert(1, targets)
     if exclude_file and os.path.exists(exclude_file):
         cmd.extend(["--excludefile", exclude_file])
 
