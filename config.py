@@ -78,6 +78,29 @@ def set(key: str, value):
     _GLOBAL_CFG[key] = value
 
 
+def get_all() -> dict:
+    """返回全部配置的副本。"""
+    if _GLOBAL_CFG is None:
+        load_config()
+    return dict(_GLOBAL_CFG)
+
+
+def save_config(cfg: dict = None, path: str = None) -> bool:
+    """保存配置到文件。cfg为None则保存当前内存配置。"""
+    if _GLOBAL_CFG is None:
+        load_config()
+    data = cfg if cfg is not None else _GLOBAL_CFG
+    target = path or _CONFIG_PATH or "config.json"
+    try:
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        _GLOBAL_CFG.update(data)
+        return True
+    except Exception as e:
+        print(f"[!] 保存配置失败: {e}")
+        return False
+
+
 def reload_config(path: str = None) -> dict:
     """强制重新加载配置文件。"""
     global _GLOBAL_CFG, _CONFIG_PATH
