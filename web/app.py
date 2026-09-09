@@ -1237,6 +1237,28 @@ def ai_presets():
     from core.ai_generator import get_preset_list
     return jsonify({"presets": get_preset_list()})
 
+@app.route('/api/ai/get')
+def ai_get():
+    """GET版本，浏览器地址栏直接调用。参数: topic, preset, api_key, base_url, model"""
+    topic = request.args.get("topic", "").strip()
+    preset = request.args.get("preset", "novel")
+    custom_prompt = request.args.get("prompt")
+    if not topic and not custom_prompt:
+        return jsonify({"success": False, "error": "缺少topic参数，例如: /api/ai/get?topic=李白&preset=celebrity"}), 400
+    from core.ai_generator import generate_content
+    result = generate_content(
+        topic=topic, preset=preset,
+        api_key=request.args.get("api_key") or config.get("ai_api_key", ""),
+        base_url=request.args.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+        model=request.args.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
+        custom_prompt=custom_prompt,
+    )
+    # 浏览器直接访问时返回纯文本，方便阅读
+    if request.args.get("format") == "text":
+        text = result["text"] if result["success"] else f"错误: {result['error']}"
+        return Response(text, mimetype="text/plain; charset=utf-8")
+    return jsonify(result)
+
 @app.route('/api/ai/generate', methods=['POST'])
 def ai_generate():
     data = request.json or {}
