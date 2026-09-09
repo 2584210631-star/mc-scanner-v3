@@ -34,6 +34,10 @@ DEFAULT_CONFIG = {
     "discord_webhook": "",     # Discord Webhook URL，空=不启用通知
     "rescan_enabled": False,   # 智能重扫（玩家历史追踪+动态重扫频率）
     "duplicate_detection": False,  # 重复服务器检测
+    # AI 内容生成
+    "ai_api_key": "",          # AI API Key（OpenAI兼容）
+    "ai_base_url": "https://api.openai.com/v1",  # AI API 地址
+    "ai_model": "gpt-3.5-turbo",  # AI 模型名
 }
 
 _GLOBAL_CFG = None

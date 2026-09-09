@@ -720,6 +720,35 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="btn btn-secondary" onclick="checkMasscan()">检查 masscan</button>
       <div id="masscanCheckResult" style="margin-top:12px;"></div>
     </div>
+    <div class="tool-card">
+      <h3>AI 生成内容并发送</h3>
+      <p>调用 AI 生成小说故事、名人简介等内容，自动分段后发送到指定服务器。需配置 API Key。</p>
+      <div class="form-row">
+        <div class="form-group"><label>生成类型</label>
+          <select id="aiPreset">
+            <option value="novel">小说故事</option>
+            <option value="celebrity">名人简介</option>
+            <option value="poem">诗词</option>
+            <option value="speech">演讲稿</option>
+            <option value="joke">笑话段子</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:2;"><label>主题</label><input type="text" id="aiTopic" placeholder="例如: 李白 / 人工智能的未来"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>服务器 IP</label><input type="text" id="aiIp" placeholder="1.2.3.4"></div>
+        <div class="form-group"><label>端口</label><input type="number" id="aiPort" value="25565"></div>
+        <div class="form-group"><label>用户名</label><input type="text" id="aiUsername" value="StoryBot"></div>
+        <div class="form-group"><label>AuthMe密码</label><input type="text" id="aiAuthme" placeholder="可选"></div>
+      </div>
+      <div class="form-group"><label>API Key（留空用全局配置）</label><input type="password" id="aiApiKey" placeholder="sk-..."></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-primary" onclick="aiGenerateOnly()">仅生成预览</button>
+        <button class="btn btn-success" onclick="aiGenerateAndSend()">生成并发送</button>
+      </div>
+      <div id="aiResult" style="margin-top:12px;"></div>
+    </div>
   </div>
 
   <!-- 观察者标签页 -->
@@ -1451,6 +1480,59 @@ async function genPackets() {
   document.getElementById('genPacketsResult').innerHTML = data.success
     ? `<div style="color:#48bb78;">${data.message}</div>`
     : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+}
+
+// ===== AI 内容生成 =====
+function _aiParams() {
+  return {
+    preset: document.getElementById('aiPreset').value,
+    topic: document.getElementById('aiTopic').value,
+    api_key: document.getElementById('aiApiKey').value || null,
+    ip: document.getElementById('aiIp').value,
+    port: parseInt(document.getElementById('aiPort').value),
+    username: document.getElementById('aiUsername').value,
+    authme_password: document.getElementById('aiAuthme').value || null,
+  };
+}
+async function aiGenerateOnly() {
+  const p = _aiParams();
+  if (!p.topic && p.preset !== 'custom') { alert('请输入主题'); return; }
+  const div = document.getElementById('aiResult');
+  div.innerHTML = '<div style="color:var(--text-secondary);">AI生成中，请稍候...</div>';
+  try {
+    const res = await fetch('/api/ai/generate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({preset: p.preset, topic: p.topic, api_key: p.api_key})
+    });
+    const data = await res.json();
+    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${data.error}</div>`; return; }
+    let html = `<div style="color:#48bb78;margin-bottom:8px;">生成成功，共 ${data.segments.length} 段（自动适配MC聊天长度）</div>`;
+    html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text) + '</div>';
+    html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">分段预览:</div>';
+    data.segments.forEach((s, i) => {
+      html += `<div style="font-size:12px;padding:4px 8px;margin:2px 0;background:var(--bg-secondary);border-radius:4px;">[${i+1}] ${escapeHtml(s)}</div>`;
+    });
+    div.innerHTML = html;
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+}
+async function aiGenerateAndSend() {
+  const p = _aiParams();
+  if (!p.topic && p.preset !== 'custom') { alert('请输入主题'); return; }
+  if (!p.ip) { alert('请输入服务器IP'); return; }
+  const div = document.getElementById('aiResult');
+  div.innerHTML = '<div style="color:var(--text-secondary);">AI生成中，生成后将自动连接服务器发送...</div>';
+  try {
+    const res = await fetch('/api/ai/send', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(p)
+    });
+    const data = await res.json();
+    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${data.error}</div>`; return; }
+    let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
+    html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
+    if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${data.error}</div>`;
+    div.innerHTML = html;
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
 }
 
 async function loadDbStats() {
