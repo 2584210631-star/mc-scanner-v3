@@ -1230,6 +1230,33 @@ def default_config():
         "ports": [25565],
     })
 
+@app.route('/api/config/get')
+def config_get():
+    """读取当前配置（敏感字段打码）"""
+    cfg = config.get_all()
+    # 敏感字段打码
+    for k in ("ai_api_key", "web_token"):
+        if cfg.get(k):
+            v = str(cfg[k])
+            cfg[k] = v[:4] + "****" + v[-2:] if len(v) > 8 else "****"
+    return jsonify(cfg)
+
+@app.route('/api/config/save', methods=['POST'])
+def config_save():
+    """保存配置到文件"""
+    data = request.json or {}
+    # 只允许保存白名单字段
+    allowed = {"ai_api_key", "ai_base_url", "ai_model", "web_token", "web_host", "web_port",
+               "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level"}
+    to_save = {k: v for k, v in data.items() if k in allowed}
+    # api_key如果是打码状态（含****），不覆盖原值
+    if "ai_api_key" in to_save and "****" in str(to_save["ai_api_key"]):
+        del to_save["ai_api_key"]
+    if "web_token" in to_save and "****" in str(to_save["web_token"]):
+        del to_save["web_token"]
+    ok = config.save_config(to_save)
+    return jsonify({"success": ok, "saved": list(to_save.keys())})
+
 
 # ===== AI 内容生成 API =====
 @app.route('/api/ai/presets')
