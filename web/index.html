@@ -644,10 +644,12 @@ tbody tr:last-child td { border-bottom: none; }
         </select>
         <input type="text" id="dbFilterSearch" placeholder="搜索..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadDbResults(1)">
         <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
+        <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
+        <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>IP:端口</th><th>版本</th><th>MOTD</th><th>玩家</th><th>认证</th><th>最后更新</th></tr></thead>
+          <thead><tr><th style="width:30px;"><input type="checkbox" id="dbSelectAll" onchange="dbToggleSelectAll(this)"></th><th>IP:端口</th><th>版本</th><th>MOTD</th><th>玩家</th><th>认证</th><th>最后更新</th></tr></thead>
           <tbody id="dbResultsBody"></tbody>
         </table>
       </div>
@@ -783,6 +785,7 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="form-group"><label>机器人用户名</label><input type="text" id="batchWarnUsername" value="SecurityBot"></div>
       <div class="form-group"><label>并发数</label><input type="number" id="batchWarnWorkers" value="5" min="1" max="20"></div>
     </div>
+    <div class="form-group"><label>AuthMe 密码（可选，服务器有登录插件时自动注册/登录）</label><input type="text" id="batchWarnAuthme" placeholder="留空则不使用AuthMe"></div>
     <div class="form-group"><label>警告消息（每行一条，会同时发给所有选中服务器）</label>
       <textarea id="batchWarnMessages" rows="5">您好，我是安全扫描机器人
 检测到您的服务器处于离线模式
@@ -1394,37 +1397,6 @@ function openBatchWarnModal() {
 }
 function closeBatchWarnModal() { document.getElementById('batchWarnModal').classList.add('hidden'); }
 
-async function confirmBatchWarn() {
-  const selected = getSelectedServers();
-  const messages = document.getElementById('batchWarnMessages').value.split('\n').filter(m => m.trim());
-  if (!messages.length) { alert('请输入至少一条警告消息'); return; }
-  const resultDiv = document.getElementById('batchWarnResult');
-  resultDiv.innerHTML = '<div style="color:var(--text-secondary);">正在发送...</div>';
-  try {
-    const res = await fetch('/api/warn/batch', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        targets: selected,
-        username: document.getElementById('batchWarnUsername').value,
-        messages: messages,
-        workers: parseInt(document.getElementById('batchWarnWorkers').value)
-      })
-    });
-    const data = await res.json();
-    if (data.error) { resultDiv.innerHTML = '<div style="color:#f56565;">失败: ' + data.error + '</div>'; return; }
-    let html = `<div style="color:#48bb78;margin-bottom:8px;">完成：共 ${data.total} 台，成功发送 ${data.messages_sent} 条消息</div>`;
-    html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
-    html += '<tr><th style="text-align:left;padding:4px;">服务器</th><th style="text-align:left;padding:4px;">状态</th><th style="text-align:left;padding:4px;">消息数</th></tr>';
-    data.results.forEach(r => {
-      const status = r.success ? '<span style="color:#48bb78;">成功</span>' : '<span style="color:#f56565;">失败</span>';
-      const err = r.error ? ' (' + r.error.substring(0, 40) + ')' : '';
-      html += `<tr><td style="padding:4px;border-top:1px solid var(--border);">${r.ip}:${r.port}</td><td style="padding:4px;border-top:1px solid var(--border);">${status}${err}</td><td style="padding:4px;border-top:1px solid var(--border);">${r.messages_sent}</td></tr>`;
-    });
-    html += '</table>';
-    resultDiv.innerHTML = html;
-  } catch(e) { resultDiv.innerHTML = '<div style="color:#f56565;">请求失败: ' + e.message + '</div>'; }
-}
-
 function openCmdModal(ip, port) {
   cmdIp = ip; cmdPort = port;
   document.getElementById('cmdTarget').textContent = ip + ':' + port;
@@ -1508,6 +1480,7 @@ async function loadDbResults(page) {
     const ip = escapeHtml(r.ip);
     const players = (r.player_list || []).map(escapeHtml);
     return `<tr>
+      <td><input type="checkbox" class="db-server-check" data-ip="${r.ip}" data-port="${r.port}"></td>
       <td>${ip}:${r.port}</td>
       <td>${escapeHtml(r.version || '-')}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
       <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
@@ -1518,6 +1491,74 @@ async function loadDbResults(page) {
     </tr>`;
   }).join('');
   renderPagination('dbPagination', page, data.total, 50, loadDbResults);
+}
+
+// ===== 数据库批量操作 =====
+function dbToggleSelectAll(cb) {
+  document.querySelectorAll('.db-server-check').forEach(c => c.checked = cb.checked);
+}
+function getDbSelectedServers() {
+  return Array.from(document.querySelectorAll('.db-server-check:checked')).map(c => ({
+    ip: c.dataset.ip, port: parseInt(c.dataset.port)
+  }));
+}
+async function dbRescanSelected() {
+  const selected = getDbSelectedServers();
+  if (selected.length === 0) { alert('请先勾选要重新探查的服务器'); return; }
+  if (!confirm(`确定重新探查 ${selected.length} 个服务器？`)) return;
+  try {
+    const res = await fetch('/api/db/rescan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({targets: selected, workers: 10})
+    });
+    const data = await res.json();
+    if (data.error) { alert('失败: ' + data.error); return; }
+    alert(`重新探查完成：共 ${data.total} 个，${data.up} 个在线，已更新数据库`);
+    loadDbResults(dbCurrentPage);
+  } catch(e) { alert('请求失败: ' + e.message); }
+}
+function openDbWarnModal() {
+  const selected = getDbSelectedServers();
+  if (selected.length === 0) { alert('请先勾选要警告的服务器'); return; }
+  document.getElementById('batchWarnCount').textContent = selected.length;
+  document.getElementById('batchWarnResult').innerHTML = '';
+  document.getElementById('batchWarnModal').classList.remove('hidden');
+  // 标记来源为数据库，确认时调用/api/db/warn
+  window._warnSource = 'db';
+}
+// 确认批量警告（支持结果页和数据库页两种来源）
+async function confirmBatchWarn() {
+  const selected = window._warnSource === 'db' ? getDbSelectedServers() : getSelectedServers();
+  const messages = document.getElementById('batchWarnMessages').value.split('\n').filter(m => m.trim());
+  if (!messages.length) { alert('请输入至少一条警告消息'); return; }
+  const resultDiv = document.getElementById('batchWarnResult');
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary);">正在发送...</div>';
+  const api = window._warnSource === 'db' ? '/api/db/warn' : '/api/warn/batch';
+  try {
+    const res = await fetch(api, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        targets: selected,
+        username: document.getElementById('batchWarnUsername').value,
+        messages: messages,
+        workers: parseInt(document.getElementById('batchWarnWorkers').value),
+        authme_password: document.getElementById('batchWarnAuthme').value || null
+      })
+    });
+    const data = await res.json();
+    if (data.error) { resultDiv.innerHTML = '<div style="color:#f56565;">失败: ' + data.error + '</div>'; return; }
+    let html = `<div style="color:#48bb78;margin-bottom:8px;">完成：共 ${data.total} 台，成功发送 ${data.messages_sent} 条消息</div>`;
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+    html += '<tr><th style="text-align:left;padding:4px;">服务器</th><th style="text-align:left;padding:4px;">状态</th><th style="text-align:left;padding:4px;">消息数</th></tr>';
+    data.results.forEach(r => {
+      const status = r.success ? '<span style="color:#48bb78;">成功</span>' : '<span style="color:#f56565;">失败</span>';
+      const err = r.error ? ' (' + r.error.substring(0, 40) + ')' : '';
+      html += `<tr><td style="padding:4px;border-top:1px solid var(--border);">${r.ip}:${r.port}</td><td style="padding:4px;border-top:1px solid var(--border);">${status}${err}</td><td style="padding:4px;border-top:1px solid var(--border);">${r.messages_sent}</td></tr>`;
+    });
+    html += '</table>';
+    resultDiv.innerHTML = html;
+    window._warnSource = null;
+  } catch(e) { resultDiv.innerHTML = '<div style="color:#f56565;">请求失败: ' + e.message + '</div>'; }
 }
 
 async function loadHistory() {
