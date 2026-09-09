@@ -885,6 +885,8 @@ def warn_batch():
     username = data.get("username", "SecurityBot")
     messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
     workers = int(data.get("workers", 5))
+    authme_password = data.get("authme_password")
+    message_delay = float(data.get("message_delay", 0.8))
 
     # 解析目标列表，支持 [{"ip":...,"port":...}] 或 ["ip:port", ...]
     targets = []
@@ -902,7 +904,7 @@ def warn_batch():
     results = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {ex.submit(join_and_warn, ip, port, username, messages,
-                              15.0, 0.8, None, None): (ip, port)
+                              15.0, message_delay, None, authme_password): (ip, port)
                    for ip, port in targets}
         for fut in as_completed(futures):
             try:
@@ -1111,6 +1113,98 @@ def db_stats():
     if not os.path.exists(db_path):
         return jsonify({"total": 0, "by_auth": {}, "online_servers": 0, "by_version": {}})
     return jsonify(db.stats(db_path))
+
+
+@app.route('/api/db/rescan', methods=['POST'])
+def db_rescan():
+    """数据库一键重新探查：对选中服务器重新SLP探测并更新数据库"""
+    data = request.json or {}
+    targets_raw = data.get("targets", [])
+    db_path = _safe_db_path(data.get("db_path", "mcscanner.db"))
+    workers = int(data.get("workers", 10))
+
+    targets = []
+    for t in targets_raw:
+        if isinstance(t, dict):
+            targets.append((t["ip"], int(t.get("port", 25565))))
+        elif isinstance(t, str) and ":" in t:
+            ip, port = t.rsplit(":", 1)
+            targets.append((ip, int(port)))
+    if not targets:
+        return jsonify({"error": "请先选择要重新探查的服务器"}), 400
+
+    _log(f"数据库重新探查开始: {len(targets)} 个目标")
+    from core.probe import slp_probe, auth_probe
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    results = []
+
+    def probe_one(ip, port):
+        try:
+            r = slp_probe(ip, port, timeout=5.0)
+            if r and r.get("state") == "up":
+                auth = auth_probe(ip, port, r.get("protocol_version", 0))
+                r.update(auth)
+                r["ip"] = ip
+                r["port"] = port
+                r["last_updated"] = int(time.time())
+                return r
+        except Exception:
+            pass
+        return None
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(probe_one, ip, port): (ip, port) for ip, port in targets}
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r:
+                results.append(r)
+
+    if results:
+        db.upsert_many(db_path, results)
+    up = len(results)
+    _log(f"数据库重新探查完成: {len(targets)} 个目标, {up} 个在线, 已更新数据库")
+    return jsonify({"total": len(targets), "up": up, "updated": up})
+
+
+@app.route('/api/db/warn', methods=['POST'])
+def db_warn():
+    """数据库一键警告：对选中服务器发送警告消息，支持AuthMe"""
+    data = request.json or {}
+    targets_raw = data.get("targets", [])
+    username = data.get("username", "SecurityBot")
+    messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
+    authme_password = data.get("authme_password")
+    workers = int(data.get("workers", 5))
+    message_delay = float(data.get("message_delay", 0.8))
+
+    targets = []
+    for t in targets_raw:
+        if isinstance(t, dict):
+            targets.append((t["ip"], int(t.get("port", 25565))))
+        elif isinstance(t, str) and ":" in t:
+            ip, port = t.rsplit(":", 1)
+            targets.append((ip, int(port)))
+    if not targets:
+        return jsonify({"error": "请先选择要警告的服务器"}), 400
+
+    _log(f"数据库批量警告开始: {len(targets)} 个目标, authme={'是' if authme_password else '否'}")
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    results = []
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {ex.submit(join_and_warn, ip, port, username, messages,
+                              15.0, message_delay, None, authme_password): (ip, port)
+                   for ip, port in targets}
+        for fut in as_completed(futures):
+            try:
+                r = fut.result()
+                results.append({"ip": r.ip, "port": r.port, "success": r.success,
+                                "messages_sent": r.messages_sent, "error": r.error})
+            except Exception as e:
+                ip, port = futures[fut]
+                results.append({"ip": ip, "port": port, "success": False, "error": str(e)})
+    sent = sum(r["messages_sent"] for r in results)
+    _log(f"数据库批量警告完成: 成功发送 {sent} 条消息")
+    return jsonify({"total": len(results), "messages_sent": sent, "results": results})
 
 
 @app.route('/api/history')
