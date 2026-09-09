@@ -459,6 +459,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div class="tab" data-tab="history">历史</div>
   <div class="tab" data-tab="tools">工具</div>
   <div class="tab" data-tab="observer">观察者</div>
+  <div class="tab" data-tab="settings">设置</div>
 </nav>
 
 <div class="container">
@@ -786,6 +787,41 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<!-- 设置标签页 -->
+<div id="tab-settings" class="hidden">
+  <div class="panel">
+    <h2>AI 配置</h2>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">配置后永久保存到 config.json，支持 DeepSeek / OpenAI 等兼容接口。</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;"><label>API Key</label><input type="password" id="setAiApiKey" placeholder="sk-..."></div>
+      <div class="form-group" style="flex:2;"><label>API 地址 (base_url)</label><input type="text" id="setAiBaseUrl" placeholder="https://api.deepseek.com/v1"></div>
+      <div class="form-group"><label>模型</label><input type="text" id="setAiModel" placeholder="deepseek-chat"></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-primary" onclick="saveAiConfig()">保存配置</button>
+      <span id="setAiStatus" style="font-size:13px;"></span>
+    </div>
+    <div style="margin-top:16px;padding:10px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
+      <b>常用配置：</b><br>
+      DeepSeek: base_url=https://api.deepseek.com/v1, model=deepseek-chat<br>
+      OpenAI: base_url=https://api.openai.com/v1, model=gpt-3.5-turbo<br>
+      通义千问: base_url=https://dashscope.aliyuncs.com/compatible-mode/v1, model=qwen-turbo
+    </div>
+  </div>
+  <div class="panel">
+    <h2>面板配置</h2>
+    <div class="form-row">
+      <div class="form-group"><label>访问 Token（空=不启用）</label><input type="password" id="setWebToken" placeholder="留空不启用认证"></div>
+      <div class="form-group"><label>消息间隔(秒)</label><input type="number" id="setMsgDelay" step="0.1" min="0.1"></div>
+      <div class="form-group"><label>机器人超时(秒)</label><input type="number" id="setBotTimeout" min="1"></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-primary" onclick="savePanelConfig()">保存面板配置</button>
+      <span id="setPanelStatus" style="font-size:13px;"></span>
+    </div>
+  </div>
+</div>
+
 <!-- 单独警告弹窗 -->
 <div class="modal-overlay hidden" id="warnModal">
   <div class="modal">
@@ -1077,6 +1113,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (this.dataset.tab === 'favorites') loadFavorites();
     if (this.dataset.tab === 'history') loadHistory();
     if (this.dataset.tab === 'tools') checkMasscan();
+    if (this.dataset.tab === 'settings') loadSettings();
   };
 });
 
@@ -1657,6 +1694,66 @@ async function loadHistory() {
       </div>
     `).join('')
     : '<div style="color:#999;text-align:center;padding:20px;">暂无历史记录</div>';
+}
+
+// ===== 设置页 =====
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/config/get');
+    const cfg = await res.json();
+    document.getElementById('setAiApiKey').value = cfg.ai_api_key || '';
+    document.getElementById('setAiBaseUrl').value = cfg.ai_base_url || '';
+    document.getElementById('setAiModel').value = cfg.ai_model || '';
+    document.getElementById('setWebToken').value = cfg.web_token || '';
+    document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
+    document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
+  } catch(e) { console.error('加载配置失败', e); }
+}
+async function saveAiConfig() {
+  const status = document.getElementById('setAiStatus');
+  status.textContent = '保存中...';
+  status.style.color = 'var(--text-secondary)';
+  try {
+    const res = await fetch('/api/config/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        ai_api_key: document.getElementById('setAiApiKey').value,
+        ai_base_url: document.getElementById('setAiBaseUrl').value,
+        ai_model: document.getElementById('setAiModel').value,
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      status.textContent = '✓ 已保存到 config.json';
+      status.style.color = '#48bb78';
+    } else {
+      status.textContent = '保存失败';
+      status.style.color = '#f56565';
+    }
+  } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
+}
+async function savePanelConfig() {
+  const status = document.getElementById('setPanelStatus');
+  status.textContent = '保存中...';
+  status.style.color = 'var(--text-secondary)';
+  try {
+    const res = await fetch('/api/config/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        web_token: document.getElementById('setWebToken').value,
+        message_delay: parseFloat(document.getElementById('setMsgDelay').value),
+        bot_timeout: parseInt(document.getElementById('setBotTimeout').value),
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      status.textContent = '✓ 已保存（重启面板生效）';
+      status.style.color = '#48bb78';
+    } else {
+      status.textContent = '保存失败';
+      status.style.color = '#f56565';
+    }
+  } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
 }
 
 // ===== 收藏管理 =====
