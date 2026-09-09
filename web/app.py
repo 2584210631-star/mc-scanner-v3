@@ -1231,6 +1231,67 @@ def default_config():
     })
 
 
+# ===== AI 内容生成 API =====
+@app.route('/api/ai/presets')
+def ai_presets():
+    from core.ai_generator import get_preset_list
+    return jsonify({"presets": get_preset_list()})
+
+@app.route('/api/ai/generate', methods=['POST'])
+def ai_generate():
+    data = request.json or {}
+    topic = data.get("topic", "").strip()
+    preset = data.get("preset", "novel")
+    custom_prompt = data.get("custom_prompt")
+    custom_system = data.get("custom_system")
+    if not topic and not custom_prompt:
+        return jsonify({"success": False, "error": "请输入主题或自定义提示词"}), 400
+    from core.ai_generator import generate_content
+    cfg = config.get("ai_api_key", "")
+    result = generate_content(
+        topic=topic, preset=preset,
+        api_key=data.get("api_key") or cfg,
+        base_url=data.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+        model=data.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
+        custom_prompt=custom_prompt, custom_system=custom_system,
+    )
+    return jsonify(result)
+
+@app.route('/api/ai/send', methods=['POST'])
+def ai_send():
+    """AI生成内容并发送到指定服务器"""
+    data = request.json or {}
+    ip = data.get("ip")
+    port = int(data.get("port", 25565))
+    username = data.get("username", "StoryBot")
+    authme_password = data.get("authme_password")
+    if not ip:
+        return jsonify({"success": False, "error": "请指定服务器IP"}), 400
+    # 先生成
+    from core.ai_generator import generate_content
+    gen = generate_content(
+        topic=data.get("topic", ""), preset=data.get("preset", "novel"),
+        api_key=data.get("api_key") or config.get("ai_api_key", ""),
+        base_url=data.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+        model=data.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
+        custom_prompt=data.get("custom_prompt"),
+    )
+    if not gen["success"]:
+        return jsonify({"success": False, "error": gen["error"]})
+    # 再发送
+    from core.bot import join_and_warn
+    messages = gen["segments"]
+    _log(f"AI生成并发送: {len(messages)}段 -> {ip}:{port}")
+    r = join_and_warn(ip, port, username, messages, timeout=15.0,
+                      message_delay=float(data.get("message_delay", 1.0)),
+                      authme_password=authme_password)
+    return jsonify({
+        "success": r.success, "messages_sent": r.messages_sent,
+        "total_segments": len(messages), "text": gen["text"],
+        "segments": gen["segments"], "error": r.error,
+    })
+
+
 # ===== 收藏管理 API =====
 @app.route('/api/favorites')
 def fav_list():
