@@ -880,6 +880,19 @@ def main():
 
     cfg = load_config(args.config if hasattr(args, 'config') else None)
     logger.setup_logger(cfg.get('log_level', 'INFO'))
+    # 初始化全局代理（如果proxies.txt存在且有代理，自动启用轮换）
+    try:
+        import os
+        from core.proxy import get_proxy_manager
+        from core.conn import set_global_proxy_manager
+        proxy_file = cfg.get("proxy_file", "proxies.txt")
+        if os.path.exists(proxy_file):
+            mgr = get_proxy_manager(proxy_file=proxy_file, auto_fetch=False)
+            if mgr and mgr.proxies:
+                set_global_proxy_manager(mgr)
+                print(f"[*] 已启用代理: {len(mgr.proxies)} 个代理，自动轮换")
+    except Exception as e:
+        print(f"[!] 代理初始化失败: {e}")
     return args.func(args, cfg)
 
 
