@@ -187,8 +187,11 @@ class MockMCServer:
                                 self.received_brands.append(payload)
                         except Exception:
                             pass
-                    elif packet_id == 0x03:  # Finish Configuration (client)
+                    elif packet_id == 0x07:  # Known Packs (client response)
+                        # 客户端回应Known Packs后，服务器主动发Finish Configuration
                         self._send_packet(conn, 0x03, b"")  # Finish Configuration (server)
+                    elif packet_id == 0x03:  # Finish Configuration (client)
+                        # 客户端回应Finish，进入Play
                         state = STATE_PLAY
                         self._send_login_play(conn)
                         self._send_keep_alive(conn)
