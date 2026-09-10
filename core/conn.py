@@ -5,6 +5,7 @@ MC TCP 连接：收发包、长度前缀、可选压缩、状态管理。
 """
 import io
 import socket
+import struct
 import threading
 import time
 import zlib
@@ -18,9 +19,89 @@ PROTO_STATE_PLAY = 4
 
 MAX_PACKET_SIZE = 2 * 1024 * 1024  # 单个包最大2MB，防止恶意服务器内存放大
 
+# 全局代理（设置后所有MCConnection默认走代理）
+_global_proxy = None
+_global_proxy_lock = threading.Lock()
+_global_proxy_manager = None  # ProxyManager实例，设置后每次连接自动轮换
+
+def set_global_proxy(proxy):
+    """设置全局代理（Proxy对象或None）。设置后所有新连接默认走代理。"""
+    global _global_proxy
+    with _global_proxy_lock:
+        _global_proxy = proxy
+
+def get_global_proxy():
+    """获取当前全局代理。如果设置了ProxyManager，会自动轮换。"""
+    global _global_proxy
+    with _global_proxy_lock:
+        if _global_proxy_manager is not None:
+            p = _global_proxy_manager.get_proxy()
+            if p is not None:
+                return p
+        return _global_proxy
+
+def set_global_proxy_manager(manager):
+    """设置全局ProxyManager，每次连接自动从它获取代理（轮换）。"""
+    global _global_proxy_manager
+    with _global_proxy_lock:
+        _global_proxy_manager = manager
+
+
+def _connect_via_socks5(sock, proxy_host, proxy_port, target_host, target_port, username="", password=""):
+    """通过SOCKS5代理建立TCP连接。"""
+    sock.connect((proxy_host, proxy_port))
+    # 握手: VER=5, NMETHODS, METHODS
+    if username and password:
+        sock.sendall(b"\x05\x01\x02")  # 用户名密码认证
+    else:
+        sock.sendall(b"\x05\x01\x00")  # 无认证
+    resp = sock.recv(2)
+    if resp[0] != 0x05:
+        raise ConnectionError("SOCKS5代理响应错误")
+    if resp[1] == 0x02:
+        # 用户名密码认证
+        sock.sendall(b"\x01" + bytes([len(username)]) + username.encode() + bytes([len(password)]) + password.encode())
+        auth_resp = sock.recv(2)
+        if auth_resp[1] != 0x00:
+            raise ConnectionError("SOCKS5代理认证失败")
+    elif resp[1] != 0x00:
+        raise ConnectionError("SOCKS5代理不支持的认证方式")
+    # CONNECT请求: VER=5, CMD=1, RSV=0, ATYP=1(IPv4), DST.ADDR, DST.PORT
+    try:
+        addr_bytes = socket.inet_aton(target_host)
+        sock.sendall(b"\x05\x01\x00\x01" + addr_bytes + struct.pack(">H", target_port))
+    except OSError:
+        # 域名，用ATYP=3
+        host_bytes = target_host.encode()
+        sock.sendall(b"\x05\x01\x00\x03" + bytes([len(host_bytes)]) + host_bytes + struct.pack(">H", target_port))
+    resp = sock.recv(10)
+    if resp[1] != 0x00:
+        raise ConnectionError(f"SOCKS5代理连接失败，错误码={resp[1]}")
+
+
+def _connect_via_http(sock, proxy_host, proxy_port, target_host, target_port, username="", password=""):
+    """通过HTTP CONNECT代理建立TCP连接。"""
+    sock.connect((proxy_host, proxy_port))
+    auth_header = ""
+    if username and password:
+        import base64
+        token = base64.b64encode(f"{username}:{password}".encode()).decode()
+        auth_header = f"Proxy-Authorization: Basic {token}\r\n"
+    request = f"CONNECT {target_host}:{target_port} HTTP/1.1\r\nHost: {target_host}:{target_port}\r\n{auth_header}\r\n"
+    sock.sendall(request.encode())
+    # 读取响应头
+    resp = b""
+    while b"\r\n\r\n" not in resp:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        resp += chunk
+    if b"200" not in resp.split(b"\r\n")[0]:
+        raise ConnectionError(f"HTTP代理连接失败: {resp.split(b'\\r\\n')[0].decode(errors='ignore')}")
+
 
 class MCConnection:
-    def __init__(self, host: str, port: int = 25565, timeout: float = 15.0):
+    def __init__(self, host: str, port: int = 25565, timeout: float = 15.0, proxy=None):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -28,12 +109,24 @@ class MCConnection:
         self.compression_threshold = -1
         self.state = PROTO_STATE_HANDSHAKE
         self._send_lock = threading.Lock()
+        self.proxy = proxy  # Proxy对象或None
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         try:
-            self.sock.connect((self.host, self.port))
+            proxy = self.proxy if self.proxy is not None else get_global_proxy()
+            if proxy is not None:
+                if proxy.proto == "socks5":
+                    _connect_via_socks5(self.sock, proxy.host, proxy.port,
+                                        self.host, self.port,
+                                        proxy.username, proxy.password)
+                else:
+                    _connect_via_http(self.sock, proxy.host, proxy.port,
+                                      self.host, self.port,
+                                      proxy.username, proxy.password)
+            else:
+                self.sock.connect((self.host, self.port))
         except Exception:
             self.sock.close()
             self.sock = None

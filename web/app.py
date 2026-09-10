@@ -198,11 +198,13 @@ def _scan_worker(targets_list, config):
                         scan_timeout=config.get("scan_timeout", 2.5),
                         progress_callback=_on_progress,
                     )
-                    all_results.extend(sub_results)
+                    # 只保留up结果，避免大范围连续扫描时offline结果占满内存
+                    up_results = [r for r in sub_results if r.get("state") == "up"]
+                    all_results.extend(up_results)
                     with scan_lock:
                         scan_state["results"] = all_results
                         scan_state["progress"] = int((i + 1) * 100 / len(subnets)) if subnets else 100
-                    _log(f"  网段 {subnet} 完成，累计 {len(all_results)} 个服务器")
+                    _log(f"  网段 {subnet} 完成，累计 {len(all_results)} 个在线服务器")
                 except Exception as e:
                     _log(f"  网段 {subnet} 出错: {e}")
             with scan_lock:
@@ -794,14 +796,21 @@ def export_results():
         results = [r for r in results if r.get("auth") == auth]
     if fmt == "csv":
         import csv
-        import io
-        output = io.StringIO()
-        if results:
-            keys = list(results[0].keys())
-            writer = csv.DictWriter(output, fieldnames=keys)
-            writer.writeheader()
-            writer.writerows(results)
-        return Response(output.getvalue(), mimetype="text/csv",
+        def _csv_generator():
+            if results:
+                keys = list(results[0].keys())
+                # 用yield逐行输出，避免大结果集全量进内存
+                import io
+                output = io.StringIO()
+                writer = csv.DictWriter(output, fieldnames=keys)
+                writer.writeheader()
+                yield output.getvalue()
+                for r in results:
+                    output = io.StringIO()
+                    writer = csv.DictWriter(output, fieldnames=keys)
+                    writer.writerow(r)
+                    yield output.getvalue()
+        return Response(_csv_generator(), mimetype="text/csv",
                         headers={"Content-Disposition": "attachment; filename=results.csv"})
     elif fmt == "html":
         offline = sum(1 for r in results if r.get("auth") == "offline")
@@ -1613,6 +1622,19 @@ def commands_run():
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
     db.init_db(db_path)
+    # 初始化全局代理（如果proxies.txt存在且有代理，自动启用轮换）
+    try:
+        import os
+        from core.proxy import get_proxy_manager
+        from core.conn import set_global_proxy_manager
+        proxy_file = config.get("proxy_file", "proxies.txt")
+        if os.path.exists(proxy_file):
+            mgr = get_proxy_manager(proxy_file=proxy_file, auto_fetch=False)
+            if mgr and mgr.proxies:
+                set_global_proxy_manager(mgr)
+                logger.info(f"[*] 已启用代理: {len(mgr.proxies)} 个代理，自动轮换")
+    except Exception as e:
+        logger.warning(f"[!] 代理初始化失败: {e}")
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
     logger.info(f"[*] 数据库: {db_path}")
     # 安全警告：绑定公网且未设置token
