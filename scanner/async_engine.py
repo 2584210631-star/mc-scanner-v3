@@ -211,7 +211,7 @@ class AsyncScanEngine:
         return asyncio.run(_run())
 
     def scan_with_portscan(self, targets, scan_concurrency: int = 1000,
-                           scan_timeout: float = 2.5) -> list:
+                           scan_timeout: float = 2.5, progress_callback=None) -> list:
         """两阶段扫描（端口扫描 + SLP探测），异步版本。"""
         from scanner.async_portscan import scan_ports_async, get_open_ports_async
         print(f"[*] 异步流水线扫描（并发={self.concurrency}, SLP并发={self.slp_concurrency}）")
@@ -225,6 +225,7 @@ class AsyncScanEngine:
             timeout=scan_timeout,
             rate_limit=self.rate_limit,
             stop_event=self.stop_event,
+            progress_cb=progress_callback,
         )
         open_ports = get_open_ports_async(port_results)
         print(f"[*] 发现 {len(open_ports)} 个开放端口")

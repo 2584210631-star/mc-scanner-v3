@@ -220,7 +220,7 @@ class ScanEngine:
 
         # 先扫描发现服务器
         scan_results = self.scan_with_portscan(targets)
-        offline_servers = [(r["ip"], r["port"]) for r in scan_results
+        offline_servers = [(r["ip"], r["port"], r.get("proto", 0)) for r in scan_results
                            if r.get("auth") == "cracked"]
 
         print(f"\n[*] 发现 {len(offline_servers)} 个可警告服务器，开始发送警告...")
@@ -233,11 +233,11 @@ class ScanEngine:
             futures = {}
             target_iter = iter(offline_servers)
             # 初始填充一批
-            for ip, port in target_iter:
+            for ip, port, proto in target_iter:
                 if len(futures) >= BATCH_SIZE:
                     break
                 fut = ex.submit(join_and_warn, ip, port, username, messages,
-                                self.bot_timeout, message_delay, None, authme_password)
+                                self.bot_timeout, message_delay, proto or None, authme_password)
                 futures[fut] = (ip, port)
             while futures:
                 if self.stop_event and self.stop_event.is_set():
@@ -259,9 +259,9 @@ class ScanEngine:
                         self._bump("messages_sent", r.messages_sent)
                     # 补充新任务
                     try:
-                        nip, nport = next(target_iter)
+                        nip, nport, nproto = next(target_iter)
                         nfut = ex.submit(join_and_warn, nip, nport, username, messages,
-                                         self.bot_timeout, message_delay, None, authme_password)
+                                         self.bot_timeout, message_delay, nproto or None, authme_password)
                         futures[nfut] = (nip, nport)
                     except StopIteration:
                         pass

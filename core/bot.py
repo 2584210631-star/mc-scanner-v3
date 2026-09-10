@@ -145,12 +145,11 @@ class MCBot:
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
-        # 获取服务器信息
+        # 获取服务器信息（protocol_version已知时跳过探测，直接握手，避免重复连接）
         if self.protocol_version is None:
             info = probe_with_fallback(self.host, self.port, timeout=5.0)
         else:
-            info = slp_probe(self.host, self.port, timeout=5.0,
-                                     protocol_version=self.protocol_version)
+            info = None  # 已知协议版本，跳过SLP探测
 
         # 构建候选协议版本列表
         if self.protocol_version is not None:
