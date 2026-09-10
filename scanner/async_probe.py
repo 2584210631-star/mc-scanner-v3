@@ -124,7 +124,8 @@ async def async_slp_probe(ip: str, port: int, timeout: float = 4.0) -> dict:
              core_type/mods/forge_channels
     """
     last_error = ""
-    for proto in COMMON_PROTOCOLS:
+    # 先试 proto=-1（服务器返回真实版本），失败再遍历常见协议
+    for proto in (-1,) + COMMON_PROTOCOLS:
         try:
             start = time.time()
             connect_fut = asyncio.open_connection(ip, port)

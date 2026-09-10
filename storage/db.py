@@ -96,6 +96,11 @@ def init_db(db_path: str):
     conn = get_conn(db_path)
     conn.execute(SCHEMA)
     _migrate(conn)
+    # 二级索引：加速过滤和排序
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_auth ON servers(auth)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_core_type ON servers(core_type)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_is_modded ON servers(is_modded)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_last_updated ON servers(last_updated)")
     conn.commit()
     # v3.2.1: 初始化扩展表（玩家历史、重扫队列）
     try:
