@@ -10,15 +10,15 @@ DEFAULT_CONFIG = {
     "username": "SecurityBot",
     "messages": None,
     "ports": [25565],
-    "scan_threads": 200,
-    "scan_timeout": 2.5,
-    "workers": 32,            # SLP探测线程数
-    "timeout": 4.0,           # SLP探测超时
-    "bot_threads": 10,
-    "bot_timeout": 12,
-    "message_delay": 0.8,
+    "scan_threads": 50,
+    "scan_timeout": 3.0,
+    "workers": 16,            # SLP探测线程数
+    "timeout": 5.0,           # SLP探测超时
+    "bot_threads": 5,
+    "bot_timeout": 15,
+    "message_delay": 1.2,
     "retry_count": 1,
-    "rate": 0,
+    "rate": 30,
     "authme_password": "",
     "exclude_file": "exclude.conf",
     "db_path": "mcscanner.db",
