@@ -133,8 +133,9 @@ class PushServer:
                         self._send_packet(0x01, write_string("minecraft:brand"))
                     elif packet_id == 0x02:  # plugin message (品牌回复)
                         pass
-                    elif packet_id == 0x03:  # finish configuration (client)
+                    elif packet_id == 0x07:  # known packs (client response) -> 服务器主动发finish
                         self._send_packet(0x03, b"")  # finish configuration (server)
+                    elif packet_id == 0x03:  # finish configuration (client response)
                         state = 4
                         self._send_login_play()
                     elif packet_id == 0x04:  # keep alive

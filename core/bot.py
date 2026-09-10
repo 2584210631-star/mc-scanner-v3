@@ -283,25 +283,20 @@ class MCBot:
             pass
 
     def _do_configuration(self):
-        """Configuration 阶段：客户端主动发 Finish，兼容 vanilla / Paper / Spigot / Velocity"""
+        """Configuration 阶段：等服务器发 Finish Configuration 后回应，兼容 vanilla / Paper / Spigot / Velocity"""
         cfg = self.config_packets
         deadline = time.time() + max(self.timeout, 15.0)
         self._send_client_information()
         self._send_brand()
         sent_known = False
         sent_finish = False
-        first = time.time()
-
-        # 标准流程：客户端先发 Finish Configuration，服务器回复后进入 Play
-        # 先等一小段时间收服务器的 Known Packs 等包，再发 Finish
-        finish_deadline = time.time() + 0.8
 
         while time.time() < deadline:
             try:
                 resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
             except Exception:
-                # 超时后如果还没发 Finish，主动发
-                if not sent_finish and time.time() > finish_deadline and cfg.get("sb_finish") is not None:
+                # 超时兜底：某些旧服务器/代理不主动发Finish，超时后才主动发
+                if not sent_finish and time.time() > deadline - 1.0 and cfg.get("sb_finish") is not None:
                     try:
                         self.conn.send_packet(cfg["sb_finish"], b"")
                         sent_finish = True
@@ -331,13 +326,7 @@ class MCBot:
                 if cfg.get("sb_known_packs") is not None and not sent_known:
                     self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
                     sent_known = True
-                # 收到 Known Packs 后立即发 Finish
-                if not sent_finish and cfg.get("sb_finish") is not None:
-                    try:
-                        self.conn.send_packet(cfg["sb_finish"], b"")
-                        sent_finish = True
-                    except Exception:
-                        pass
+                # 注意：不在这里发Finish！Paper 1.20.2+有配置任务队列，必须等服务器发cb_finish
             elif cfg.get("cb_cookie_request") is not None and resp_id == cfg["cb_cookie_request"]:
                 try:
                     _stream = BytesStream(resp_payload)
