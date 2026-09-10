@@ -50,15 +50,17 @@ class ScanEngine:
         self.results = []
 
     def _throttle(self):
-        """限速"""
+        """限速：锁内计算目标时间，锁外sleep，避免持锁阻塞其他worker"""
         if self.rate_limit <= 0:
             return
         with self._lock:
             now = time.time()
-            wait = (1.0 / self.rate_limit) - (now - self._last_probe)
-            if wait > 0:
-                time.sleep(wait)
-            self._last_probe = time.time()
+            target = self._last_probe + (1.0 / self.rate_limit)
+            wait = target - now
+            # 预占时间槽，防止多个线程同时通过
+            self._last_probe = max(now, target)
+        if wait > 0:
+            time.sleep(wait)
 
     def _bump(self, key: str, n: int = 1):
         with self._lock:
@@ -222,38 +224,49 @@ class ScanEngine:
 
         print(f"\n[*] 发现 {len(offline_servers)} 个可警告服务器，开始发送警告...")
 
-        # 多线程发警告
+        # 分批提交任务，避免一次性创建几千个连接
         warn_results = []
-        ex = concurrent.futures.ThreadPoolExecutor(max_workers=self.bot_workers)
-        futures = {}
-        for ip, port in offline_servers:
-            fut = ex.submit(join_and_warn, ip, port, username, messages,
-                            self.bot_timeout, message_delay, None, authme_password)
-            futures[fut] = (ip, port)
-
+        BATCH_SIZE = max(self.bot_workers * 4, 100)
         done = 0
-        try:
-            for fut in concurrent.futures.as_completed(futures):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.bot_workers) as ex:
+            futures = {}
+            target_iter = iter(offline_servers)
+            # 初始填充一批
+            for ip, port in target_iter:
+                if len(futures) >= BATCH_SIZE:
+                    break
+                fut = ex.submit(join_and_warn, ip, port, username, messages,
+                                self.bot_timeout, message_delay, None, authme_password)
+                futures[fut] = (ip, port)
+            while futures:
                 if self.stop_event and self.stop_event.is_set():
-                    # 停止：取消未完成的任务，不等全部跑完
                     for f in futures:
                         f.cancel()
                     break
-                try:
-                    r = fut.result()
-                except Exception as e:
-                    ip, port = futures[fut]
-                    from core.bot import BotResult
-                    r = BotResult(ip=ip, port=port, error=str(e))
-                warn_results.append(r)
-                done += 1
-                if r.messages_sent > 0:
-                    self._bump("messages_sent", r.messages_sent)
-                if done % 10 == 0:
+                done_set, _ = concurrent.futures.wait(
+                    futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                for fut in done_set:
+                    ip, port = futures.pop(fut)
+                    try:
+                        r = fut.result()
+                    except Exception as e:
+                        from core.bot import BotResult
+                        r = BotResult(ip=ip, port=port, error=str(e))
+                    warn_results.append(r)
+                    done += 1
+                    if r.messages_sent > 0:
+                        self._bump("messages_sent", r.messages_sent)
+                    # 补充新任务
+                    try:
+                        nip, nport = next(target_iter)
+                        nfut = ex.submit(join_and_warn, nip, nport, username, messages,
+                                         self.bot_timeout, message_delay, None, authme_password)
+                        futures[nfut] = (nip, nport)
+                    except StopIteration:
+                        pass
+                if done % 20 == 0 or done == len(offline_servers):
                     print(f"[*] 警告进度: {done}/{len(offline_servers)} "
-                          f"(已发送 {self.counters['messages_sent']} 条消息)")
-        finally:
-            ex.shutdown(wait=False)  # 不等待未完成任务
+                          f"(已发送 {self.counters['messages_sent']} 条消息)", end="\r")
 
         # 更新数据库（从scan_results补充完整字段，避免UPSERT覆盖丢失）
         scan_map = {(r["ip"], r["port"]): r for r in scan_results}

@@ -25,8 +25,9 @@ from web.app import ObserverSession, observer_sessions, observer_lock
 
 PROTO = 767  # 1.21
 CB_KEEP_ALIVE = 0x26
-CB_SYSTEM_CHAT = 0x62
-CB_PLAYER_INFO = 0x38
+CB_SYSTEM_CHAT = 0x6C  # 767协议系统聊天包ID
+CB_PLAYER_INFO = 0x3E  # 767协议玩家信息包ID
+CB_PLAYER_REMOVE = 0x3D  # 767协议玩家移除包ID
 CB_LOGIN = 0x2B
 
 
@@ -176,8 +177,8 @@ class PushServer:
 
     def push_player_remove(self, name):
         puuid = self.player_uuids.get(name, uuid.uuid3(uuid.NAMESPACE_OID, f"Obs:{name}"))
-        payload = write_varint(0x80) + write_varint(1) + write_uuid(puuid)
-        self._send_packet(CB_PLAYER_INFO, payload)
+        payload = write_varint(1) + write_uuid(puuid)  # Player Remove: count + UUID数组
+        self._send_packet(CB_PLAYER_REMOVE, payload)
 
     def stop(self):
         self.running = False

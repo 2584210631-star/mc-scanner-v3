@@ -35,8 +35,6 @@ def read_varint(data: bytes, offset: int = 0) -> tuple:
             break
         if num_read > 5:
             raise ValueError("VarInt 过长")
-    if result >= (1 << 31):
-        result -= (1 << 32)
     return result, offset + num_read
 
 
@@ -54,8 +52,6 @@ def read_varint_from_stream(stream) -> int:
             break
         if num_read > 5:
             raise ValueError("VarInt 过长")
-    if result >= (1 << 31):
-        result -= (1 << 32)
     return result
 
 
