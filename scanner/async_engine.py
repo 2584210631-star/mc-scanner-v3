@@ -219,6 +219,7 @@ class AsyncScanEngine:
             list(targets),
             concurrency=scan_concurrency,
             timeout=scan_timeout,
+            rate_limit=self.rate_limit,
             stop_event=self.stop_event,
         )
         open_ports = get_open_ports_async(port_results)
