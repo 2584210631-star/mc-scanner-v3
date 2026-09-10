@@ -23,7 +23,8 @@ class AsyncScanEngine:
                  timeout: float = 4.0,
                  auth_check: bool = True,
                  rate_limit: int = 0,
-                 stop_event: Optional[threading.Event] = None):
+                 stop_event: Optional[threading.Event] = None,
+                 fingerprint: bool = False):
         self.db_path = db_path
         self.concurrency = concurrency      # 端口扫描并发
         self.slp_concurrency = slp_concurrency  # SLP 探测并发
@@ -31,6 +32,7 @@ class AsyncScanEngine:
         self.auth_check = auth_check
         self.rate_limit = rate_limit
         self.stop_event = stop_event
+        self.fingerprint = fingerprint  # 主动协议指纹（异步引擎暂未实现，预留）
         self.results = []
         self.counters = {
             "total": 0, "up": 0, "cracked": 0, "online": 0,
@@ -143,7 +145,9 @@ class AsyncScanEngine:
             batch = save_queue[:]
             save_queue.clear()
             try:
-                db.upsert_many(self.db_path, batch)
+                # 放到线程池写库，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, db.upsert_many, self.db_path, batch)
             except Exception:
                 pass
 

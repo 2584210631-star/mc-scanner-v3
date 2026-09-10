@@ -7,7 +7,23 @@ v3.1 新增：core_type、mods、forge_channels 字段（自动迁移旧数据�
 import json
 import os
 import sqlite3
+import threading
 from datetime import datetime, timezone
+
+# 线程局部连接池：每个线程每个db_path复用一个连接，避免频繁创建
+_local = threading.local()
+
+def get_conn(db_path: str):
+    """获取线程局部持久连接（首次创建时设置PRAGMA，后续复用）。"""
+    if not hasattr(_local, 'conns'):
+        _local.conns = {}
+    if db_path not in _local.conns:
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA temp_store=MEMORY")
+        _local.conns[db_path] = conn
+    return _local.conns[db_path]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS servers (
@@ -81,7 +97,6 @@ def init_db(db_path: str):
     conn.execute(SCHEMA)
     _migrate(conn)
     conn.commit()
-    conn.close()
     # v3.2.1: 初始化扩展表（玩家历史、重扫队列）
     try:
         from storage import player_history, rescan
@@ -95,7 +110,6 @@ def upsert_server(db_path: str, rec: dict):
     conn = get_conn(db_path)
     conn.execute(UPSERT_SQL, _record_to_tuple(rec))
     conn.commit()
-    conn.close()
 
 
 def upsert_many(db_path: str, records: list) -> int:
@@ -105,7 +119,6 @@ def upsert_many(db_path: str, records: list) -> int:
     rows = [_record_to_tuple(r) for r in records]
     conn.executemany(UPSERT_SQL, rows)
     conn.commit()
-    conn.close()
     return len(rows)
 
 
@@ -174,7 +187,6 @@ def query(db_path: str, auth: str = None, modded: int = None,
     sql += " ORDER BY last_updated DESC LIMIT ? OFFSET ?"
     args += [limit, offset]
     rows = conn.execute(sql, args).fetchall()
-    conn.close()
     return [_row_to_dict(r, QUERY_COLS) for r in rows]
 
 
@@ -199,7 +211,6 @@ def count(db_path: str, auth: str = None, modded: int = None,
     if conds:
         sql += " WHERE " + " AND ".join(conds)
     total = conn.execute(sql, args).fetchone()[0]
-    conn.close()
     return total
 
 
@@ -222,7 +233,6 @@ def stats(db_path: str) -> dict:
             "SELECT core_type, COUNT(*) FROM servers WHERE core_type IS NOT NULL AND core_type != '' GROUP BY core_type ORDER BY COUNT(*) DESC")}
     except Exception:
         pass
-    conn.close()
     return {
         "total": total,
         "by_auth": by_auth,
