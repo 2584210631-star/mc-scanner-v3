@@ -84,12 +84,13 @@ def warn_from_db(auth="cracked", modded=None, search=None, limit=0,
         for row in rows:
             ip = row.get('ip')
             port = row.get('port', 25565)
+            proto = row.get('proto', 0)
             if not ip:
                 continue
             fut = ex.submit(join_and_warn, ip, port,
                             username or cfg["username"], messages,
                             cfg["bot_timeout"], message_delay or cfg["message_delay"],
-                            None, authme_password or cfg.get("authme_password") or None)
+                            proto or None, authme_password or cfg.get("authme_password") or None)
             futures[fut] = (ip, port)
         for i, fut in enumerate(as_completed(futures), 1):
             ip, port = futures[fut]

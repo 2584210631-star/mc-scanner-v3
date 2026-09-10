@@ -78,43 +78,40 @@ def parse_masscan_json(filepath: str) -> list:
     """
     解析 masscan 的 JSON 输出文件，返回 [(ip, port, banner), ...] 列表。
     支持 masscan 的 -oJ 格式（JSON 数组）和 NDJSON 格式。
+    流式逐行读取，避免大文件整读内存。
     """
     results = []
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read().strip()
-        if not content:
-            return results
+            first_line = f.readline().strip()
+            if not first_line:
+                return results
+            # 判断格式：以 '[' 开头是 JSON 数组，否则是 NDJSON
+            is_json_array = first_line.startswith('[')
+            lines_to_process = [first_line] if not is_json_array else []
 
-        # 尝试解析为 JSON 数组
-        try:
-            data = json.loads(content)
-            if isinstance(data, list):
-                for item in data:
-                    ip = item.get("ip")
-                    ports = item.get("ports", [])
-                    for p in ports:
-                        port = p.get("port")
-                        banner = p.get("banner", {}).get("service", {}).get("banner", "")
-                        if ip and port:
-                            results.append((ip, port, banner))
-        except json.JSONDecodeError:
-            # NDJSON 格式（每行一个 JSON）
-            for line in content.split('\n'):
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
+            def _parse_item(line):
+                line = line.strip().rstrip(',')
+                if not line or line in ('[', ']') or line.startswith('#'):
+                    return
                 try:
                     item = json.loads(line)
-                    ip = item.get("ip")
-                    ports = item.get("ports", [])
-                    for p in ports:
-                        port = p.get("port")
-                        banner = p.get("banner", {}).get("service", {}).get("banner", "")
-                        if ip and port:
-                            results.append((ip, port, banner))
                 except json.JSONDecodeError:
-                    continue
+                    return
+                ip = item.get("ip")
+                ports = item.get("ports", [])
+                for p in ports:
+                    port = p.get("port")
+                    banner = p.get("banner", {}).get("service", {}).get("banner", "")
+                    if ip and port:
+                        results.append((ip, port, banner))
+
+            # 处理第一行（NDJSON格式）
+            for line in lines_to_process:
+                _parse_item(line)
+            # 流式逐行处理剩余内容
+            for line in f:
+                _parse_item(line)
     except FileNotFoundError:
         print(f"[!] 文件不存在: {filepath}")
     return results

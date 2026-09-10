@@ -176,6 +176,7 @@ def _scan_worker(targets_list, config):
                 except:
                     subnets.append(t)
             _log(f"连续扫描模式: 拆分为 {len(subnets)} 个 /24 网段")
+            from scanner.async_engine import AsyncScanEngine
             all_results = []
             for i, subnet in enumerate(subnets):
                 _log(f"连续扫描 [{i+1}/{len(subnets)}]: {subnet}")
@@ -183,16 +184,17 @@ def _scan_worker(targets_list, config):
                     sub_targets = list(parse_targets([subnet], config.get("ports", [25565])))
                     if not sub_targets:
                         continue
-                    engine = ScanEngine(stop_event=scan_stop_event, 
+                    engine = AsyncScanEngine(stop_event=scan_stop_event, 
                         db_path=config.get("db_path", "mcscanner.db"),
-                        workers=config.get("workers", 32),
+                        concurrency=config.get("scan_threads", 200),
+                        slp_concurrency=min(400, config.get("workers", 32) * 10),
                         timeout=config.get("timeout", 4.0),
                         auth_check=config.get("auth_check", True),
                         rate_limit=config.get("rate", 0),
                     )
                     sub_results = engine.scan_with_portscan(
                         iter(sub_targets),
-                        scan_threads=config.get("scan_threads", 200),
+                        scan_concurrency=config.get("scan_threads", 200),
                         scan_timeout=config.get("scan_timeout", 2.5),
                         progress_callback=_on_progress,
                     )
@@ -889,14 +891,14 @@ def warn_batch():
     authme_password = data.get("authme_password")
     message_delay = float(data.get("message_delay", 0.8))
 
-    # 解析目标列表，支持 [{"ip":...,"port":...}] 或 ["ip:port", ...]
+    # 解析目标列表，支持 [{"ip":...,"port":...,"proto":...}] 或 ["ip:port", ...]
     targets = []
     for t in targets_raw:
         if isinstance(t, dict):
-            targets.append((t["ip"], int(t.get("port", 25565))))
+            targets.append((t["ip"], int(t.get("port", 25565)), t.get("proto", 0)))
         elif isinstance(t, str) and ":" in t:
             ip, port = t.rsplit(":", 1)
-            targets.append((ip, int(port)))
+            targets.append((ip, int(port), 0))
     if not targets:
         return jsonify({"error": "请先选择要警告的服务器"}), 400
 
@@ -905,8 +907,8 @@ def warn_batch():
     results = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {ex.submit(join_and_warn, ip, port, username, messages,
-                              15.0, message_delay, None, authme_password): (ip, port)
-                   for ip, port in targets}
+                              15.0, message_delay, proto or None, authme_password): (ip, port)
+                   for ip, port, proto in targets}
         for fut in as_completed(futures):
             try:
                 r = fut.result()
@@ -936,10 +938,10 @@ def warn_multi():
     targets = []
     for t in targets_raw:
         if isinstance(t, dict):
-            targets.append((t["ip"], int(t.get("port", 25565))))
+            targets.append((t["ip"], int(t.get("port", 25565)), t.get("proto", 0)))
         elif isinstance(t, str) and ":" in t:
             ip, port = t.rsplit(":", 1)
-            targets.append((ip, int(port)))
+            targets.append((ip, int(port), 0))
     if not targets:
         return jsonify({"error": "请先选择要警告的服务器"}), 400
     if bot_count < 1 or bot_count > 50:
@@ -950,7 +952,7 @@ def warn_multi():
     from concurrent.futures import ThreadPoolExecutor, as_completed
     results = []
 
-    def run_bot(ip, port, idx):
+    def run_bot(ip, port, proto, idx):
         name = f"{name_prefix}_{idx:02d}"
         try:
             # 连接节流保护：1.12.2等旧版服务器默认 connection-throttle=4000ms
@@ -959,6 +961,7 @@ def warn_multi():
                 time.sleep(4.5 * (idx - 1))
             r = join_and_warn(ip, port, name, messages, timeout=15.0,
                               message_delay=message_delay,
+                              protocol_version=proto or None,
                               authme_password=authme_password)
             return {"ip": ip, "port": port, "name": name, "success": r.success,
                     "messages_sent": r.messages_sent, "error": r.error}
@@ -967,9 +970,9 @@ def warn_multi():
 
     with ThreadPoolExecutor(max_workers=min(workers, 50)) as ex:
         futures = []
-        for ip, port in targets:
+        for ip, port, proto in targets:
             for i in range(bot_count):
-                futures.append(ex.submit(run_bot, ip, port, i + 1))
+                futures.append(ex.submit(run_bot, ip, port, proto, i + 1))
         for fut in as_completed(futures):
             results.append(fut.result())
 
