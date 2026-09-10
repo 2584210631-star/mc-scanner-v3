@@ -508,6 +508,7 @@ class ObserverSession:
             "players": players,
             "events": events_out,
             "last_seq": last_seq,
+            "chat": list(self.chat_log),
         }
 
 
