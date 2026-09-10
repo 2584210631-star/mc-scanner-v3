@@ -134,6 +134,7 @@ def cmd_scan(args, cfg):
             timeout=args.timeout or cfg['timeout'],
             auth_check=not args.no_auth,
             rate_limit=args.rate or cfg['rate'],
+            fingerprint=getattr(args, 'fingerprint', False),
         )
         results = engine.scan_with_portscan(targets)
         up_results = [r for r in results if r.get('state') == 'up']
@@ -155,6 +156,7 @@ def cmd_scan(args, cfg):
         rate=args.rate or cfg['rate'],
         exclude_file=args.exclude or cfg['exclude_file'],
         db_path=args.db or cfg['db_path'],
+        fingerprint=getattr(args, 'fingerprint', False),
     )
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
     for s in sorted(results, key=lambda x: x.get('proto', 0)):
@@ -710,6 +712,7 @@ def main():
     s.add_argument("--workers", type=int)
     s.add_argument("--timeout", type=float)
     s.add_argument("--no-auth", action="store_true")
+    s.add_argument("--fingerprint", action="store_true", help="启用主动协议指纹（每台up服额外1次TCP连接）")
     s.add_argument("--rate", type=int, default=0)
     s.add_argument("--exclude")
     s.add_argument("-o", "--output")
