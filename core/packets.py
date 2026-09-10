@@ -50,12 +50,19 @@ _PLAY_TABLES = [
      "cb_plugin_message": 0x18, "sb_plugin_message": 0x14, "cb_player_info": 0x3F,
      "cb_player_remove": 0x3E, "cb_chat_message": 0x3A, "cb_system_chat": 0x72,
      "cb_profileless_chat": 0x1D},
-    # 773+: 1.21.9+
-    {"min_proto": 773, "max_proto": 9999, "sb_chat": 0x08, "sb_chat_command": 0x06,
+    # 773-774: 1.21.9-1.21.11
+    {"min_proto": 773, "max_proto": 774, "sb_chat": 0x08, "sb_chat_command": 0x06,
      "cb_keep_alive": 0x2B, "sb_keep_alive": 0x1B, "cb_ping": 0x3B, "sb_pong": 0x2C,
      "cb_login": 0x30, "cb_teleport": 0x46, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x20,
      "cb_plugin_message": 0x18, "sb_plugin_message": 0x15, "cb_player_info": 0x44,
      "cb_player_remove": 0x43, "cb_chat_message": 0x3F, "cb_system_chat": 0x77,
+     "cb_profileless_chat": 0x21},
+    # 775+: 26.1+ (Minecraft 26.1/26.2)
+    {"min_proto": 775, "max_proto": 9999, "sb_chat": 0x09, "sb_chat_command": 0x07,
+     "cb_keep_alive": 0x2C, "sb_keep_alive": 0x1C, "cb_ping": 0x3D, "sb_pong": 0x2D,
+     "cb_login": 0x31, "cb_teleport": 0x48, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x20,
+     "cb_plugin_message": 0x18, "sb_plugin_message": 0x16, "cb_player_info": 0x46,
+     "cb_player_remove": 0x45, "cb_chat_message": 0x41, "cb_system_chat": 0x79,
      "cb_profileless_chat": 0x21},
     # 761: 1.19.3
     {"min_proto": 761, "max_proto": 761, "sb_chat": 0x05, "sb_chat_command": 0x04,
