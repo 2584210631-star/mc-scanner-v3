@@ -79,14 +79,27 @@ async def _scan_async(targets, concurrency: int, timeout: float,
     done = 0
     open_count = 0
     last_report = time.time()
-    rate_interval = 1.0 / rate_limit if rate_limit > 0 else 0
+    # 全局令牌桶限速（避免每任务各自sleep导致实际速率=并发×rate）
+    rate_lock = asyncio.Lock()
+    last_req = 0.0
+
+    async def _acquire_rate():
+        if rate_limit <= 0:
+            return
+        min_interval = 1.0 / rate_limit
+        nonlocal last_req
+        async with rate_lock:
+            now = time.time()
+            wait = last_req + min_interval - now
+            if wait > 0:
+                await asyncio.sleep(wait)
+            last_req = time.time()
 
     async def _wrapped(ip, port):
         nonlocal done, open_count, last_report
         if stop_event and stop_event.is_set():
             return AsyncScanResult(ip=ip, port=port, is_open=False, error="stopped")
-        if rate_interval > 0:
-            await asyncio.sleep(rate_interval)
+        await _acquire_rate()
         if stop_event and stop_event.is_set():
             return AsyncScanResult(ip=ip, port=port, is_open=False, error="stopped")
         try:
