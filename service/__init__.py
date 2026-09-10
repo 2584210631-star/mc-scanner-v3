@@ -18,7 +18,7 @@ from storage import db
 
 
 def _build_engine(db_path=None, workers=None, timeout=None, auth_check=True,
-                  rate_limit=0, stop_event=None) -> ScanEngine:
+                  rate_limit=0, stop_event=None, fingerprint=False) -> ScanEngine:
     cfg = config.load_config()
     return ScanEngine(
         db_path=db_path or cfg["db_path"],
@@ -27,6 +27,7 @@ def _build_engine(db_path=None, workers=None, timeout=None, auth_check=True,
         auth_check=auth_check,
         rate_limit=rate_limit,
         stop_event=stop_event,
+        fingerprint=fingerprint,
         # v3.2.1 新增特性
         rescan_enabled=cfg.get("rescan_enabled", False),
         duplicate_detection=cfg.get("duplicate_detection", False),
@@ -51,7 +52,8 @@ def parse_and_filter_targets(targets_str, ports=None, exclude_file=None):
 
 
 def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
-                  rate=0, exclude_file=None, db_path=None, stop_event=None) -> list:
+                  rate=0, exclude_file=None, db_path=None, stop_event=None,
+                  fingerprint=False) -> list:
     """完整扫描：端口扫描 + SLP探测 + 认证检测"""
     cfg = config.load_config()
     targets, total = parse_and_filter_targets(targets_str, exclude_file=exclude_file)
@@ -59,7 +61,7 @@ def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
         logger.warning("没有有效目标")
         return []
     logger.info(f"开始扫描 {total} 个目标")
-    engine = _build_engine(db_path, workers, timeout, auth_check, rate, stop_event)
+    engine = _build_engine(db_path, workers, timeout, auth_check, rate, stop_event, fingerprint)
     results = engine.scan_with_portscan(
         iter(targets),
         scan_threads=cfg["scan_threads"],

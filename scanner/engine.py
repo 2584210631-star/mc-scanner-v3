@@ -23,7 +23,7 @@ class ScanEngine:
                  timeout: float = 4.0, auth_check: bool = True, rate_limit: int = 0,
                  bot_workers: int = 10, bot_timeout: float = 12.0, stop_event=None,
                  rescan_enabled: bool = False, duplicate_detection: bool = False,
-                 discord_webhook: str = ""):
+                 discord_webhook: str = "", fingerprint: bool = False):
         self.db_path = db_path
         self.workers = workers
         self.timeout = timeout
@@ -32,6 +32,7 @@ class ScanEngine:
         self.bot_workers = bot_workers
         self.bot_timeout = bot_timeout
         self.stop_event = stop_event
+        self.fingerprint = fingerprint  # 主动协议指纹（额外TCP连接，默认关闭）
         # v3.2.1 新增特性
         self.rescan_enabled = rescan_enabled
         self.duplicate_detection = duplicate_detection
@@ -104,8 +105,8 @@ class ScanEngine:
             else:
                 result["auth"] = "unknown"
             # v3.3.2: 主动协议指纹（malformed login 探测服务端软件）
-            # 仅在 auth_check 开启时执行，--no-auth 时跳过
-            if self.auth_check:
+            # 默认关闭，需显式开启 --fingerprint（每台up服务器额外1次TCP连接）
+            if self.auth_check and self.fingerprint:
                 try:
                     proto = result.get("proto") or 0
                     af = active_fingerprint(ip, port, proto, timeout=self.timeout)
