@@ -128,8 +128,8 @@ async def async_slp_probe(ip: str, port: int, timeout: float = 4.0) -> dict:
     for proto in (-1,) + COMMON_PROTOCOLS:
         try:
             start = time.time()
-            connect_fut = asyncio.open_connection(ip, port)
-            reader, writer = await asyncio.wait_for(connect_fut, timeout=timeout)
+            from scanner.async_portscan import _open_connection
+            reader, writer = await _open_connection(ip, port, timeout)
 
             # 发送 Handshake + Status Request
             writer.write(_build_handshake(ip, port, proto))
