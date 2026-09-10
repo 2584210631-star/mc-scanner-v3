@@ -5,9 +5,36 @@
 可选 uvloop 加速（Linux）。
 """
 import asyncio
+import socket
 import time
 from dataclasses import dataclass
 from typing import Optional, AsyncIterator
+
+
+async def _open_connection(ip, port, timeout):
+    """异步建立TCP连接，支持全局代理（有代理时走线程池+代理连接）。"""
+    from core.conn import get_global_proxy
+    proxy = get_global_proxy()
+    if proxy is None:
+        return await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
+
+    # 有代理：在线程池里用同步socket建立代理连接，再包装成asyncio
+    def _connect_via_proxy():
+        from core.conn import _connect_via_socks5, _connect_via_http
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        if proxy.proto == "socks5":
+            _connect_via_socks5(sock, proxy.host, proxy.port, ip, port,
+                                proxy.username, proxy.password)
+        else:
+            _connect_via_http(sock, proxy.host, proxy.port, ip, port,
+                              proxy.username, proxy.password)
+        return sock
+
+    loop = asyncio.get_event_loop()
+    sock = await loop.run_in_executor(None, _connect_via_proxy)
+    reader, writer = await asyncio.open_connection(sock=sock)
+    return reader, writer
 
 try:
     import uvloop
@@ -46,8 +73,7 @@ async def _check_port(ip: str, port: int, timeout: float,
         for attempt in range(retries + 1):
             start = time.time()
             try:
-                fut = asyncio.open_connection(ip, port)
-                reader, writer = await asyncio.wait_for(fut, timeout=timeout)
+                reader, writer = await _open_connection(ip, port, timeout)
                 latency = (time.time() - start) * 1000
                 writer.close()
                 try:
