@@ -85,19 +85,20 @@ PROTOCOL_TO_VERSION = {
     772: "1.21.7",
     773: "1.21.8/9/10",
     774: "1.21.11",
-    775: "1.21.12+",
+    775: "26.1",
+    776: "26.2",
 }
 
 # 常见协议版本（用于协议回退）
-COMMON_PROTOCOLS = [775, 774, 770, 767, 766, 765, 764, 763, 762, 761, 760, 759, 758, 757, 756, 755, 754, 340]
+COMMON_PROTOCOLS = [776, 775, 774, 770, 767, 766, 765, 764, 763, 762, 761, 760, 759, 758, 757, 756, 755, 754, 340]
 
 
 def get_version_name(proto: int) -> str:
     """协议号转版本名"""
     if proto in PROTOCOL_TO_VERSION:
         return PROTOCOL_TO_VERSION[proto]
-    if proto > 775:
-        return f"1.21.12+ (协议{proto})"
+    if proto > 776:
+        return f"26.2+ (协议{proto})"
     return f"未知 (协议{proto})"
 
 
