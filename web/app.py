@@ -642,7 +642,7 @@ def start_scan():
         "ports": ports,
         "exclude_file": data.get("exclude_file", "exclude.conf"),
         "continuous": continuous,
-        "async_mode": data.get("async_mode", False),
+        "async_mode": data.get("async_mode", True),
     }
     t = threading.Thread(target=_scan_worker, args=(parsed, config), daemon=True)
     t.start()
