@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # 已知最大协议号，超过此值可能是未来版本，格式可能不兼容
-_KNOWN_MAX_PROTOCOL = 775
+_KNOWN_MAX_PROTOCOL = 776
 _warned_versions = set()
 
 
@@ -21,10 +21,14 @@ def get_protocol_handler(bot) -> Optional[object]:
         _warned_versions.add(proto)
         logger.warning(
             f"协议版本 {proto} 超过已知最大版本 {_KNOWN_MAX_PROTOCOL}，"
-            f"将回退使用 v774 处理器，聊天/命令格式可能不兼容"
+            f"将回退使用 v776 处理器，聊天/命令格式可能不兼容"
         )
 
-    if proto >= 774:
+    if proto >= 776:
+        from .v776 import Handler
+    elif proto >= 775:
+        from .v775 import Handler
+    elif proto >= 774:
         from .v774 import Handler
     elif proto >= 766:
         from .v766 import Handler
