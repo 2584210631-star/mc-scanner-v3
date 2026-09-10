@@ -12,9 +12,19 @@ from typing import Optional, AsyncIterator
 
 
 async def _open_connection(ip, port, timeout):
-    """异步建立TCP连接，支持全局代理（有代理时走线程池+代理连接）。"""
+    """异步建立TCP连接，支持全局代理（有代理时走线程池+代理连接）。
+    本地/私有地址（127/10/172.16/192.168）自动绕过代理直连。"""
+    import ipaddress
     from core.conn import get_global_proxy
     proxy = get_global_proxy()
+    # 本地/私有地址不走代理（否则会连到代理服务器的本地）
+    if proxy is not None:
+        try:
+            addr = ipaddress.ip_address(ip)
+            if addr.is_private or addr.is_loopback or addr.is_link_local:
+                proxy = None
+        except ValueError:
+            pass
     if proxy is None:
         return await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
 
