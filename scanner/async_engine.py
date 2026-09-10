@@ -38,6 +38,22 @@ class AsyncScanEngine:
         }
         self._lock = threading.Lock()
         self._start_time = None
+        self._rate_lock = None  # 延迟创建（需要在事件循环内）
+        self._last_req = 0.0
+
+    async def _acquire_rate(self):
+        """全局令牌桶限速：确保全局速率不超过 rate_limit/s"""
+        if self.rate_limit <= 0:
+            return
+        if self._rate_lock is None:
+            self._rate_lock = asyncio.Lock()
+        min_interval = 1.0 / self.rate_limit
+        async with self._rate_lock:
+            now = time.time()
+            wait = self._last_req + min_interval - now
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_req = time.time()
 
     def _bump(self, key: str, n: int = 1):
         with self._lock:
@@ -61,8 +77,7 @@ class AsyncScanEngine:
             return {"ip": ip, "port": port, "state": "cancelled"}
 
         # 阶段1：端口扫描（_check_port 内部已用 port_sem 控制并发，外层不再重复获取）
-        if self.rate_limit > 0:
-            await asyncio.sleep(1.0 / self.rate_limit)
+        await self._acquire_rate()
         port_result = await _check_port(ip, port, self.timeout, port_sem)
 
         self._bump("total")

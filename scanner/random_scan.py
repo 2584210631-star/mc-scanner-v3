@@ -7,7 +7,7 @@ import random
 import socket
 import ipaddress
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from typing import Iterator, Tuple, List, Optional
 
 try:
@@ -150,21 +150,37 @@ def random_scan(
     exclude_file: Optional[str] = None,
 ) -> List[Tuple[str, int]]:
     excluder = Excluder(exclude_file) if exclude_file else None
-    targets = list(generate_random_targets(target_count, port_ranges, excluder))
+    target_gen = generate_random_targets(target_count, port_ranges, excluder)
     open_ports = []
     done = 0
+    BATCH_SIZE = max(max_workers * 4, 200)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(check_port, ip, port, timeout): (ip, port) for ip, port in targets}
-        for future in as_completed(futures):
-            if stop_event and stop_event.is_set():
+        futures = {}
+        # 初始填充一批
+        for ip, port in target_gen:
+            if len(futures) >= BATCH_SIZE:
                 break
-            ip, port = futures[future]
-            done += 1
-            try:
-                if future.result():
-                    open_ports.append((ip, port))
-            except:
-                pass
+            futures[executor.submit(check_port, ip, port, timeout)] = (ip, port)
+        while futures:
+            if stop_event and stop_event.is_set():
+                for f in futures:
+                    f.cancel()
+                break
+            done_set, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done_set:
+                ip, port = futures.pop(future)
+                done += 1
+                try:
+                    if future.result():
+                        open_ports.append((ip, port))
+                except:
+                    pass
+                # 补充新任务
+                try:
+                    nip, nport = next(target_gen)
+                    futures[executor.submit(check_port, nip, nport, timeout)] = (nip, nport)
+                except StopIteration:
+                    pass
             if progress_callback:
                 progress_callback(done, target_count, len(open_ports))
     return open_ports

@@ -151,10 +151,8 @@ class MCBot:
         else:
             info = slp_probe(self.host, self.port, timeout=5.0,
                                      protocol_version=self.protocol_version)
-        print(f"[DEBUG connect] SLP探测结果: state={info.get('state') if info else None}, proto={info.get('proto') if info else None}, version={info.get('version') if info else None}, _used={info.get('_used_protocol') if info else None}")
 
         # 构建候选协议版本列表
-        print(f"[DEBUG connect] protocol_version={self.protocol_version!r} (type={type(self.protocol_version).__name__}), info_proto={info.get('proto') if info else None!r} (type={type(info.get('proto')).__name__ if info else 'None'}), info_used={info.get('_used_protocol') if info else None!r}")
         if self.protocol_version is not None:
             candidates = [int(self.protocol_version)]
         elif info and info.get("_used_protocol"):
@@ -163,12 +161,10 @@ class MCBot:
             candidates = [int(info["proto"])]
         else:
             candidates = []
-        print(f"[DEBUG connect] 初始candidates={candidates}")
         for p in COMMON_PROTOCOLS:
             if p not in candidates and get_play_packets(p) is not None:
                 candidates.append(p)
         candidates = [p for p in candidates if get_play_packets(p) is not None]
-        print(f"[DEBUG connect] 最终candidates={candidates[:5]}... (共{len(candidates)}个)")
 
         if not candidates:
             raise RuntimeError("没有支持的协议版本")
@@ -288,23 +284,35 @@ class MCBot:
             pass
 
     def _do_configuration(self):
-        """Configuration 阶段：响应式流程，兼容 vanilla / Paper / Spigot / Velocity"""
+        """Configuration 阶段：客户端主动发 Finish，兼容 vanilla / Paper / Spigot / Velocity"""
         cfg = self.config_packets
         deadline = time.time() + max(self.timeout, 15.0)
         self._send_client_information()
         self._send_brand()
         sent_known = False
+        sent_finish = False
         first = time.time()
+
+        # 标准流程：客户端先发 Finish Configuration，服务器回复后进入 Play
+        # 先等一小段时间收服务器的 Known Packs 等包，再发 Finish
+        finish_deadline = time.time() + 0.8
 
         while time.time() < deadline:
             try:
                 resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
             except Exception:
+                # 超时后如果还没发 Finish，主动发
+                if not sent_finish and time.time() > finish_deadline and cfg.get("sb_finish") is not None:
+                    try:
+                        self.conn.send_packet(cfg["sb_finish"], b"")
+                        sent_finish = True
+                    except Exception:
+                        pass
                 continue
 
             if resp_id == cfg["cb_finish"]:
                 # 服务器发 Finish Configuration，客户端回复后进入 Play
-                if cfg.get("sb_finish") is not None:
+                if cfg.get("sb_finish") is not None and not sent_finish:
                     try:
                         self.conn.send_packet(cfg["sb_finish"], b"")
                     except Exception:
@@ -324,6 +332,13 @@ class MCBot:
                 if cfg.get("sb_known_packs") is not None and not sent_known:
                     self.conn.send_packet(cfg["sb_known_packs"], write_varint(0))
                     sent_known = True
+                # 收到 Known Packs 后立即发 Finish
+                if not sent_finish and cfg.get("sb_finish") is not None:
+                    try:
+                        self.conn.send_packet(cfg["sb_finish"], b"")
+                        sent_finish = True
+                    except Exception:
+                        pass
             elif cfg.get("cb_cookie_request") is not None and resp_id == cfg["cb_cookie_request"]:
                 try:
                     _stream = BytesStream(resp_payload)
