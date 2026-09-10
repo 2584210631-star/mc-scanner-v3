@@ -116,6 +116,15 @@ class MCConnection:
         self.sock.settimeout(self.timeout)
         try:
             proxy = self.proxy if self.proxy is not None else get_global_proxy()
+            # 本地/私有地址不走代理（否则会连到代理服务器的本地）
+            if proxy is not None:
+                import ipaddress
+                try:
+                    addr = ipaddress.ip_address(self.host)
+                    if addr.is_private or addr.is_loopback or addr.is_link_local:
+                        proxy = None
+                except ValueError:
+                    pass
             if proxy is not None:
                 if proxy.proto == "socks5":
                     _connect_via_socks5(self.sock, proxy.host, proxy.port,
