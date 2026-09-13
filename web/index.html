@@ -240,40 +240,159 @@ tbody tr:last-child td { border-bottom: none; }
 .obs-session-card .obs-status { font-size:11px;margin-top:2px;font-family:var(--mono); }
 .obs-status-online { color:var(--primary); }
 .obs-status-offline { color:var(--red); }
-/* ===== Intro (simplified) ===== */
+/* ===== Intro (炫酷赛博风) ===== */
 #intro-overlay {
   position: fixed; inset: 0; z-index: 9999;
-  background: var(--canvas);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #0a0a0a;
+  overflow: hidden;
 }
-.intro-center { text-align: center; z-index: 5; }
-.intro-title-wrap { display: flex; justify-content: center; gap: 2px; margin-bottom: 16px; }
+.intro-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,217,146,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,217,146,0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
+  transform: perspective(500px) rotateX(60deg) scale(2.5);
+  transform-origin: center bottom;
+  animation: gridMove 8s linear infinite;
+}
+@keyframes gridMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 50px; }
+}
+.intro-glow {
+  position: absolute; inset: -20%;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(0,217,146,0.15), transparent 45%),
+    radial-gradient(ellipse at 70% 80%, rgba(0,217,146,0.1), transparent 45%);
+  filter: blur(40px);
+  animation: glowPulse 4s ease-in-out infinite alternate;
+}
+@keyframes glowPulse {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+.intro-scanline {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,217,146,0.8), transparent);
+  top: 0;
+  animation: scanMove 3s linear infinite;
+}
+@keyframes scanMove {
+  0% { top: -2px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.intro-corner {
+  position: absolute; width: 30px; height: 30px;
+  border-color: rgba(0,217,146,0.5);
+}
+.intro-corner.tl { top: 20px; left: 20px; border-top: 2px solid; border-left: 2px solid; }
+.intro-corner.tr { top: 20px; right: 20px; border-top: 2px solid; border-right: 2px solid; }
+.intro-corner.bl { bottom: 20px; left: 20px; border-bottom: 2px solid; border-left: 2px solid; }
+.intro-corner.br { bottom: 20px; right: 20px; border-bottom: 2px solid; border-right: 2px solid; }
+.intro-coord {
+  position: absolute; font-family: var(--mono); font-size: 10px;
+  color: rgba(0,217,146,0.5); letter-spacing: 2px;
+}
+.intro-coord.tl { top: 24px; left: 60px; }
+.intro-coord.tr { top: 24px; right: 60px; }
+.intro-coord.bl { bottom: 24px; left: 60px; }
+.intro-coord.br { bottom: 24px; right: 60px; }
+.intro-center {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; z-index: 5;
+}
+.intro-radar {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px; height: 500px;
+  border: 1px solid rgba(0,217,146,0.1);
+  border-radius: 50%;
+  z-index: 1;
+}
+.intro-radar::before {
+  content: ''; position: absolute; inset: 40px;
+  border: 1px solid rgba(0,217,146,0.08);
+  border-radius: 50%;
+}
+.intro-radar::after {
+  content: ''; position: absolute; inset: 90px;
+  border: 1px solid rgba(0,217,146,0.06);
+  border-radius: 50%;
+}
+.intro-radar-sweep {
+  position: absolute; top: 50%; left: 50%;
+  width: 250px; height: 250px;
+  transform-origin: 0 0;
+  background: conic-gradient(from 0deg, rgba(0,217,146,0.4), transparent 60deg);
+  border-radius: 0 100% 0 0;
+  animation: radarSpin 3s linear infinite;
+  opacity: 0.5;
+}
+@keyframes radarSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+#intro-matrix {
+  position: absolute; inset: 0;
+  opacity: 0.15; z-index: 0;
+}
+.intro-particles {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+}
+.intro-particle {
+  position: absolute;
+  width: 2px; height: 2px;
+  background: rgba(0,217,146,0.8);
+  border-radius: 50%;
+}
+.intro-title-wrap {
+  display: flex; justify-content: center; gap: 4px;
+  margin-bottom: 16px; position: relative; z-index: 6;
+}
 .intro-letter {
-  font-size: clamp(32px, 6vw, 56px);
-  font-weight: 700; font-family: var(--mono);
-  color: var(--ink);
-  opacity: 0; display: inline-block;
+  font-size: clamp(36px, 7vw, 64px);
+  font-weight: 900; font-family: var(--mono);
+  color: #fff;
+  text-shadow: 0 0 10px rgba(0,217,146,0.8), 0 0 30px rgba(0,217,146,0.4);
+  opacity: 0;
+  display: inline-block;
+  position: relative;
 }
-.intro-letter.space { width: 10px; }
+.intro-letter.glitch {
+  animation: glitch 0.3s linear;
+}
+@keyframes glitch {
+  0% { text-shadow: 2px 0 #ff0040, -2px 0 #00d992; transform: translate(2px); }
+  25% { text-shadow: -2px 0 #ff0040, 2px 0 #00d992; transform: translate(-2px); }
+  50% { text-shadow: 2px 0 #00d992, -2px 0 #ff0040; transform: translate(1px); }
+  75% { text-shadow: -1px 0 #ff0040, 1px 0 #00d992; transform: translate(-1px); }
+  100% { text-shadow: 0 0 10px rgba(0,217,146,0.8), 0 0 30px rgba(0,217,146,0.4); transform: translate(0); }
+}
+.intro-letter.space { width: 12px; }
 .intro-sub {
-  font-size: 10px; color: var(--mute);
-  letter-spacing: 4px; font-family: var(--mono);
-  opacity: 0; height: 14px; text-transform: uppercase;
+  font-size: 11px; color: rgba(0,217,146,0.6);
+  letter-spacing: 6px; font-family: var(--mono);
+  opacity: 0; height: 16px;
 }
 .intro-sub .char { opacity: 0; display: inline-block; }
 .intro-progress-wrap {
   position: absolute; bottom: 60px; left: 50%;
   transform: translateX(-50%);
-  width: min(360px, 70vw); z-index: 5;
+  width: min(400px, 70vw); z-index: 5;
 }
 .intro-progress-label {
   display: flex; justify-content: space-between;
   font-family: var(--mono); font-size: 10px;
-  color: var(--mute); letter-spacing: 1px;
+  color: rgba(0,217,146,0.6); letter-spacing: 2px;
   margin-bottom: 8px;
 }
 .intro-progress-bar {
-  height: 2px; background: var(--hairline);
+  height: 3px; background: rgba(0,217,146,0.15);
+  overflow: hidden;
   position: relative;
 }
 .intro-progress-fill {
@@ -281,9 +400,23 @@ tbody tr:last-child td { border-bottom: none; }
   background: var(--primary);
   position: relative;
 }
-/* hide decorative intro elements */
-.intro-grid, .intro-glow, .intro-scanline, .intro-corner, .intro-coord,
-.intro-radar, .intro-radar-sweep, #intro-matrix, .intro-particles, .intro-particle { display: none !important; }
+.intro-progress-fill::after {
+  content: ''; position: absolute; right: 0; top: -3px;
+  width: 8px; height: 9px;
+  background: #fff;
+}
+.intro-skip {
+  position: absolute; top: 20px; right: 20px; z-index: 10;
+  background: transparent; border: 1px solid rgba(0,217,146,0.3);
+  color: rgba(0,217,146,0.7); padding: 6px 14px;
+  font-size: 11px; font-family: var(--mono); letter-spacing: 1px;
+  cursor: pointer; border-radius: var(--radius-sm);
+  transition: all .15s; text-transform: uppercase;
+}
+.intro-skip:hover {
+  border-color: var(--primary); color: var(--primary);
+  background: rgba(0,217,146,0.08);
+}
 /* ===== Responsive ===== */
 @media (max-width: 640px) {
   .topbar { padding: 10px 16px; }
@@ -298,13 +431,30 @@ tbody tr:last-child td { border-bottom: none; }
 </head>
 <body>
 <div id="intro-overlay">
+  <canvas id="intro-matrix"></canvas>
+  <div class="intro-grid"></div>
+  <div class="intro-glow"></div>
+  <div class="intro-scanline"></div>
+  <div class="intro-radar">
+    <div class="intro-radar-sweep"></div>
+  </div>
+  <div class="intro-particles" id="introParticles"></div>
+  <div class="intro-corner tl"></div>
+  <div class="intro-corner tr"></div>
+  <div class="intro-corner bl"></div>
+  <div class="intro-corner br"></div>
+  <div class="intro-coord tl">SYS://INIT</div>
+  <div class="intro-coord tr">v3.3.2</div>
+  <div class="intro-coord bl">SCANNING...</div>
+  <div class="intro-coord br" id="introCoord">00:00:00</div>
+  <button id="introSkip" class="intro-skip">跳过 →</button>
   <div class="intro-center">
     <div class="intro-title-wrap" id="introTitle"></div>
     <div class="intro-sub" id="introSub"></div>
   </div>
   <div class="intro-progress-wrap">
     <div class="intro-progress-label">
-      <span>LOADING</span>
+      <span>LOADING SYSTEM</span>
       <span id="introPercent">0%</span>
     </div>
     <div class="intro-progress-bar">
@@ -821,15 +971,129 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// 开场动画 - VoltAgent极简风
+// 开场动画 - 炫酷赛博风 (anime.js)
 (function() {
   const overlay = document.getElementById('intro-overlay');
   if (!overlay || typeof anime === 'undefined') { if(overlay) overlay.remove(); return; }
 
-  // 构建标题字母
+  let skipped = false;
+  let matrixAnimId = null;
+  let clockTimer = null;
+  let glitchTimer = null;
+  const particleAnims = [];
+
+  function finishIntro() {
+    if (skipped) return;
+    skipped = true;
+    if (clockTimer) clearInterval(clockTimer);
+    if (glitchTimer) clearInterval(glitchTimer);
+    if (matrixAnimId) cancelAnimationFrame(matrixAnimId);
+    particleAnims.forEach(a => { try { a.pause(); } catch(e){} });
+    // 退出动画
+    anime({
+      targets: '.intro-letter:not(.space)',
+      translateX: () => (Math.random() - 0.5) * 400,
+      translateY: () => (Math.random() - 0.5) * 300,
+      rotate: () => (Math.random() - 0.5) * 720,
+      opacity: 0, scale: 0,
+      duration: 500,
+      delay: anime.stagger(30),
+      easing: 'easeInExpo'
+    });
+    anime({
+      targets: '.intro-sub',
+      opacity: 0, translateY: 20,
+      duration: 300, easing: 'easeInQuad'
+    });
+    anime({
+      targets: '.intro-progress-wrap',
+      opacity: 0, scaleX: 0,
+      duration: 300, easing: 'easeInQuad'
+    });
+    anime({
+      targets: '.intro-radar',
+      scale: 2, opacity: 0,
+      duration: 500, easing: 'easeInQuad'
+    });
+    anime({
+      targets: overlay,
+      opacity: 0,
+      duration: 400,
+      delay: 300,
+      easing: 'easeInQuad',
+      complete: () => {
+        overlay.remove();
+        animatePageIn();
+      }
+    });
+  }
+
+  // 跳过按钮
+  const skipBtn = document.getElementById('introSkip');
+  if (skipBtn) skipBtn.onclick = finishIntro;
+  // 点击任意位置也跳过
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target.classList.contains('intro-grid') || e.target.id === 'intro-matrix') {
+      finishIntro();
+    }
+  });
+
+  // ===== 数字雨 =====
+  const matrixCanvas = document.getElementById('intro-matrix');
+  const mctx = matrixCanvas.getContext('2d');
+  let mW, mH, mCols, mDrops;
+  const mChars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ<>/\\|{}[]=+*#$%&';
+  function initMatrix() {
+    mW = matrixCanvas.width = overlay.offsetWidth;
+    mH = matrixCanvas.height = overlay.offsetHeight;
+    mCols = Math.floor(mW / 16);
+    mDrops = Array(mCols).fill(0).map(() => Math.random() * -100);
+  }
+  initMatrix();
+  function drawMatrix() {
+    if (skipped) return;
+    mctx.fillStyle = 'rgba(10,10,10,0.08)';
+    mctx.fillRect(0, 0, mW, mH);
+    mctx.font = '14px monospace';
+    for (let i = 0; i < mCols; i++) {
+      const ch = mChars[Math.floor(Math.random() * mChars.length)];
+      const x = i * 16, y = mDrops[i] * 16;
+      mctx.fillStyle = Math.random() > 0.975 ? '#fff' : 'rgba(0,217,146,0.7)';
+      mctx.fillText(ch, x, y);
+      if (y > mH && Math.random() > 0.975) mDrops[i] = 0;
+      mDrops[i]++;
+    }
+    matrixAnimId = requestAnimationFrame(drawMatrix);
+  }
+  drawMatrix();
+
+  // ===== 漂浮粒子 =====
+  const pContainer = document.getElementById('introParticles');
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('div');
+    p.className = 'intro-particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.top = Math.random() * 100 + '%';
+    p.style.opacity = Math.random() * 0.5 + 0.2;
+    pContainer.appendChild(p);
+    const anim = anime({
+      targets: p,
+      translateY: (Math.random() - 0.5) * 200,
+      translateX: (Math.random() - 0.5) * 100,
+      opacity: 0,
+      duration: 3000 + Math.random() * 4000,
+      loop: true,
+      direction: 'alternate',
+      easing: 'easeInOutSine',
+      delay: Math.random() * 3000
+    });
+    particleAnims.push(anim);
+  }
+
+  // ===== 构建标题字母 =====
   const titleEl = document.getElementById('introTitle');
   const titleText = 'MC SCANNER';
-  titleText.split('').forEach((ch, i) => {
+  titleText.split('').forEach((ch) => {
     const span = document.createElement('span');
     span.className = 'intro-letter' + (ch === ' ' ? ' space' : '');
     span.textContent = ch === ' ' ? '' : ch;
@@ -846,70 +1110,86 @@ function escapeHtml(str) {
     subEl.appendChild(span);
   });
 
+  // 时钟
+  const coordEl = document.getElementById('introCoord');
+  clockTimer = setInterval(() => {
+    coordEl.textContent = new Date().toTimeString().slice(0, 8);
+  }, 1000);
+
   const letters = document.querySelectorAll('.intro-letter:not(.space)');
   const subChars = document.querySelectorAll('.intro-sub .char');
   const fill = document.getElementById('introFill');
   const percent = document.getElementById('introPercent');
 
-  // 时间线
+  // ===== 随机故障闪烁 =====
+  function startGlitch() {
+    glitchTimer = setInterval(() => {
+      if (Math.random() > 0.7 && !skipped) {
+        const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+        randomLetter.classList.add('glitch');
+        setTimeout(() => randomLetter.classList.remove('glitch'), 300);
+      }
+    }, 400);
+  }
+
+  // ===== anime.js 时间线 =====
   const tl = anime.timeline({
     easing: 'easeOutExpo',
-    complete: () => {
-      anime({
-        targets: overlay,
-        opacity: 0,
-        duration: 300,
-        easing: 'easeInQuad',
-        complete: () => overlay.remove()
-      });
-      // 页面入场
-      setTimeout(() => animatePageIn(), 100);
-    }
+    complete: () => { if (!skipped) finishIntro(); }
   });
 
   tl
-  // 标题字母逐个淡入上移
+  // 字母逐个弹入 (3D翻转)
   .add({
     targets: letters,
     opacity: [0, 1],
-    translateY: [20, 0],
-    duration: 600,
-    delay: anime.stagger(60),
-    easing: 'easeOutExpo'
+    translateY: [80, 0],
+    rotateX: [-90, 0],
+    scale: [0.3, 1],
+    duration: 700,
+    delay: anime.stagger(70, {start: 300}),
+    easing: 'easeOutBack'
   })
-  // 副标题打字机式淡入
+  // 字母持续浮动
+  .add({
+    targets: letters,
+    translateY: -5,
+    duration: 1500,
+    delay: anime.stagger(60),
+    loop: true,
+    direction: 'alternate',
+    easing: 'easeInOutSine'
+  }, '-=200')
+  // 副标题打字机
   .add({
     targets: subChars,
     opacity: [0, 1],
     duration: 30,
-    delay: anime.stagger(30)
-  }, '-=400')
+    delay: anime.stagger(35)
+  }, '-=900')
+  // 启动故障
+  .add({
+    duration: 1,
+    complete: startGlitch
+  }, '-=500')
   // 进度条
   .add({
     targets: fill,
     width: ['0%', '100%'],
-    duration: 1200,
+    duration: 2200,
     easing: 'easeInOutQuad',
     update: function(anim) {
       percent.textContent = Math.round(anim.progress) + '%';
     }
-  }, '-=200')
-  // 标题整体淡出
+  }, '-=1800')
+  // 完成前大故障
   .add({
-    targets: [letters, subChars],
-    opacity: 0,
-    translateY: -10,
-    duration: 300,
-    delay: anime.stagger(20),
-    easing: 'easeInQuad'
-  }, '+=100')
-  // 进度条淡出
-  .add({
-    targets: '.intro-progress-wrap',
-    opacity: 0,
-    duration: 200,
-    easing: 'easeInQuad'
-  }, '-=200');
+    duration: 1,
+    complete: () => {
+      letters.forEach(l => l.classList.add('glitch'));
+      setTimeout(() => letters.forEach(l => l.classList.remove('glitch')), 400);
+    }
+  }, '-=400');
 })();
 
 // 页面元素入场动画
