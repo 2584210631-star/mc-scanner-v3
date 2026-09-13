@@ -298,29 +298,13 @@ tbody tr:last-child td { border-bottom: none; }
 </head>
 <body>
 <div id="intro-overlay">
-  <canvas id="intro-matrix"></canvas>
-  <div class="intro-grid"></div>
-  <div class="intro-glow"></div>
-  <div class="intro-scanline"></div>
-  <div class="intro-radar">
-    <div class="intro-radar-sweep"></div>
-  </div>
-  <div class="intro-particles" id="introParticles"></div>
-  <div class="intro-corner tl"></div>
-  <div class="intro-corner tr"></div>
-  <div class="intro-corner bl"></div>
-  <div class="intro-corner br"></div>
-  <div class="intro-coord tl">SYS://INIT</div>
-  <div class="intro-coord tr">v3.3.2</div>
-  <div class="intro-coord bl">SCANNING...</div>
-  <div class="intro-coord br" id="introCoord">00:00:00</div>
   <div class="intro-center">
     <div class="intro-title-wrap" id="introTitle"></div>
     <div class="intro-sub" id="introSub"></div>
   </div>
   <div class="intro-progress-wrap">
     <div class="intro-progress-label">
-      <span>LOADING SYSTEM</span>
+      <span>LOADING</span>
       <span id="introPercent">0%</span>
     </div>
     <div class="intro-progress-bar">
@@ -823,6 +807,7 @@ Protect your server NOW!</textarea></div>
 
 </body>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 // HTML转义，防止XSS
@@ -836,62 +821,12 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// 开场动画 - 赛博科技风 Pro
+// 开场动画 - VoltAgent极简风
 (function() {
   const overlay = document.getElementById('intro-overlay');
-  if (!overlay || typeof gsap === 'undefined') { overlay.remove(); return; }
+  if (!overlay || typeof anime === 'undefined') { if(overlay) overlay.remove(); return; }
 
-  // ===== 数字雨 =====
-  const matrixCanvas = document.getElementById('intro-matrix');
-  const mctx = matrixCanvas.getContext('2d');
-  let mW, mH, mCols, mDrops;
-  const mChars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ<>/\\|{}[]=+*#$%&';
-  function initMatrix() {
-    mW = matrixCanvas.width = overlay.offsetWidth;
-    mH = matrixCanvas.height = overlay.offsetHeight;
-    mCols = Math.floor(mW / 16);
-    mDrops = Array(mCols).fill(0).map(() => Math.random() * -100);
-  }
-  initMatrix();
-  let matrixAnimId;
-  function drawMatrix() {
-    mctx.fillStyle = 'rgba(3,6,13,0.08)';
-    mctx.fillRect(0, 0, mW, mH);
-    mctx.font = '14px monospace';
-    for (let i = 0; i < mCols; i++) {
-      const ch = mChars[Math.floor(Math.random() * mChars.length)];
-      const x = i * 16, y = mDrops[i] * 16;
-      mctx.fillStyle = Math.random() > 0.975 ? '#fff' : 'rgba(34,211,238,0.7)';
-      mctx.fillText(ch, x, y);
-      if (y > mH && Math.random() > 0.975) mDrops[i] = 0;
-      mDrops[i]++;
-    }
-    matrixAnimId = requestAnimationFrame(drawMatrix);
-  }
-  drawMatrix();
-
-  // ===== 漂浮粒子 =====
-  const pContainer = document.getElementById('introParticles');
-  for (let i = 0; i < 30; i++) {
-    const p = document.createElement('div');
-    p.className = 'intro-particle';
-    p.style.left = Math.random() * 100 + '%';
-    p.style.top = Math.random() * 100 + '%';
-    p.style.opacity = Math.random() * 0.5 + 0.2;
-    pContainer.appendChild(p);
-    gsap.to(p, {
-      y: (Math.random() - 0.5) * 200,
-      x: (Math.random() - 0.5) * 100,
-      opacity: 0,
-      duration: 3 + Math.random() * 4,
-      repeat: -1,
-      yoyo: true,
-      ease: "sine.inOut",
-      delay: Math.random() * 3
-    });
-  }
-
-  // ===== 构建标题字母 =====
+  // 构建标题字母
   const titleEl = document.getElementById('introTitle');
   const titleText = 'MC SCANNER';
   titleText.split('').forEach((ch, i) => {
@@ -911,85 +846,127 @@ function escapeHtml(str) {
     subEl.appendChild(span);
   });
 
-  // 时钟
-  const coordEl = document.getElementById('introCoord');
-  const clockTimer = setInterval(() => {
-    coordEl.textContent = new Date().toTimeString().slice(0, 8);
-  }, 1000);
-
   const letters = document.querySelectorAll('.intro-letter:not(.space)');
   const subChars = document.querySelectorAll('.intro-sub .char');
   const fill = document.getElementById('introFill');
   const percent = document.getElementById('introPercent');
 
-  // ===== 随机故障闪烁 =====
-  let glitchTimer;
-  function startGlitch() {
-    glitchTimer = setInterval(() => {
-      if (Math.random() > 0.7) {
-        const randomLetter = letters[Math.floor(Math.random() * letters.length)];
-        randomLetter.classList.add('glitch');
-        setTimeout(() => randomLetter.classList.remove('glitch'), 300);
-      }
-    }, 400);
-  }
-
-  // ===== GSAP 时间线 =====
-  const tl = gsap.timeline({
-    onComplete: () => {
-      clearInterval(clockTimer);
-      clearInterval(glitchTimer);
-      cancelAnimationFrame(matrixAnimId);
-      overlay.remove();
+  // 时间线
+  const tl = anime.timeline({
+    easing: 'easeOutExpo',
+    complete: () => {
+      anime({
+        targets: overlay,
+        opacity: 0,
+        duration: 300,
+        easing: 'easeInQuad',
+        complete: () => overlay.remove()
+      });
+      // 页面入场
+      setTimeout(() => animatePageIn(), 100);
     }
   });
 
-  // 字母逐个弹入
-  tl.fromTo(letters,
-    { opacity: 0, y: 80, rotateX: -90, scale: 0.3 },
-    { opacity: 1, y: 0, rotateX: 0, scale: 1,
-      duration: 0.7, stagger: 0.07, ease: "back.out(2)" },
-    0.3
-  )
-  // 字母持续浮动
-  .to(letters, { y: -5, duration: 1.5, stagger: 0.06, yoyo: true, repeat: -1, ease: "sine.inOut" }, "-=0.2")
-  // 副标题打字机
-  .to(subChars, { opacity: 1, duration: 0.03, stagger: 0.035 }, "-=0.9")
-  // 启动故障效果
-  .call(startGlitch, null, "-=0.5")
+  tl
+  // 标题字母逐个淡入上移
+  .add({
+    targets: letters,
+    opacity: [0, 1],
+    translateY: [20, 0],
+    duration: 600,
+    delay: anime.stagger(60),
+    easing: 'easeOutExpo'
+  })
+  // 副标题打字机式淡入
+  .add({
+    targets: subChars,
+    opacity: [0, 1],
+    duration: 30,
+    delay: anime.stagger(30)
+  }, '-=400')
   // 进度条
-  .to(fill, {
-    width: "100%", duration: 2.2, ease: "power2.inOut",
-    onUpdate: function() {
-      const p = Math.round(gsap.getProperty(fill, "width") / parseFloat(getComputedStyle(fill.parentElement).width) * 100);
-      percent.textContent = p + '%';
+  .add({
+    targets: fill,
+    width: ['0%', '100%'],
+    duration: 1200,
+    easing: 'easeInOutQuad',
+    update: function(anim) {
+      percent.textContent = Math.round(anim.progress) + '%';
     }
-  }, "-=1.8")
-  // 完成前大故障
-  .call(() => {
-    letters.forEach(l => l.classList.add('glitch'));
-    setTimeout(() => letters.forEach(l => l.classList.remove('glitch')), 400);
-  }, null, "-=0.4")
-  // 退出：每个字母向不同方向炸飞
-  .to(letters, {
-    x: () => (Math.random() - 0.5) * 400,
-    y: () => (Math.random() - 0.5) * 300,
-    rotation: () => (Math.random() - 0.5) * 720,
-    opacity: 0, scale: 0,
-    duration: 0.6, stagger: 0.03, ease: "power3.in"
-  }, "-=0.1")
-  // 副标题消失
-  .to(".intro-sub", { opacity: 0, y: 20, duration: 0.3 }, "-=0.5")
-  // 进度条消失
-  .to(".intro-progress-wrap", { opacity: 0, scaleX: 0, duration: 0.3, transformOrigin: "left" }, "-=0.4")
-  // 雷达环放大消失
-  .to(".intro-radar", { scale: 2, opacity: 0, duration: 0.5, ease: "power2.in" }, "-=0.3")
-  // overlay 横向切割消失
-  .to(overlay, {
-    clipPath: "inset(0 50% 0 50%)",
-    duration: 0.5, ease: "power4.inOut"
-  }, "-=0.2");
+  }, '-=200')
+  // 标题整体淡出
+  .add({
+    targets: [letters, subChars],
+    opacity: 0,
+    translateY: -10,
+    duration: 300,
+    delay: anime.stagger(20),
+    easing: 'easeInQuad'
+  }, '+=100')
+  // 进度条淡出
+  .add({
+    targets: '.intro-progress-wrap',
+    opacity: 0,
+    duration: 200,
+    easing: 'easeInQuad'
+  }, '-=200');
 })();
+
+// 页面元素入场动画
+function animatePageIn() {
+  if (typeof anime === 'undefined') return;
+  anime({
+    targets: '.topbar',
+    opacity: [0, 1],
+    translateY: [-12, 0],
+    duration: 500,
+    easing: 'easeOutExpo'
+  });
+  anime({
+    targets: '.tabs .tab',
+    opacity: [0, 1],
+    translateY: [8, 0],
+    duration: 400,
+    delay: anime.stagger(50, {start: 150}),
+    easing: 'easeOutExpo'
+  });
+  anime({
+    targets: '.container .panel, .container .stats-grid .stat-card',
+    opacity: [0, 1],
+    translateY: [16, 0],
+    duration: 500,
+    delay: anime.stagger(60, {start: 200}),
+    easing: 'easeOutExpo'
+  });
+}
+
+// Tab切换动画
+function animateTabIn(tabId) {
+  if (typeof anime === 'undefined') return;
+  const panel = document.getElementById(tabId);
+  if (!panel) return;
+  anime({
+    targets: panel.querySelectorAll('.panel, .stats-grid .stat-card'),
+    opacity: [0, 1],
+    translateY: [10, 0],
+    duration: 350,
+    delay: anime.stagger(40),
+    easing: 'easeOutExpo'
+  });
+}
+
+// Modal弹出动画
+function animateModalIn(modalEl) {
+  if (typeof anime === 'undefined') return;
+  anime({
+    targets: modalEl.querySelector('.modal'),
+    opacity: [0, 1],
+    scale: [0.96, 1],
+    translateY: [8, 0],
+    duration: 250,
+    easing: 'easeOutExpo'
+  });
+}
 
 let currentPage = 1, totalResults = 0, dbCurrentPage = 1, dbTotal = 0;
 let statusTimer = null, warnIp = null, warnPort = null, versionChart = null;
@@ -1000,7 +977,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     this.classList.add('active');
     document.querySelectorAll('[id^="tab-"]').forEach(t => t.classList.add('hidden'));
-    document.getElementById('tab-' + this.dataset.tab).classList.remove('hidden');
+    const target = document.getElementById('tab-' + this.dataset.tab);
+    target.classList.remove('hidden');
+    animateTabIn('tab-' + this.dataset.tab);
     if (this.dataset.tab === 'results') loadResults(1);
     if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
     if (this.dataset.tab === 'favorites') loadFavorites();
@@ -1255,7 +1234,7 @@ function openWarnModal(ip, port) {
   document.getElementById('warnTarget').textContent = ip + ':' + port;
   document.getElementById('warnMessages').value = '您好，我是安全扫描机器人\n检测到您的服务器处于离线模式，建议设置 online-mode=true';
   document.getElementById('warnResult').innerHTML = '';
-  document.getElementById('warnModal').classList.remove('hidden');
+  document.getElementById('warnModal').classList.remove('hidden'); animateModalIn(document.getElementById('warnModal'));
 }
 function closeWarnModal() { document.getElementById('warnModal').classList.add('hidden'); }
 
@@ -1264,7 +1243,7 @@ function openMultiWarnModal() {
   if (selected.length === 0) { alert('请先在表格中勾选要警告的服务器'); return; }
   document.getElementById('multiWarnCount').textContent = selected.length;
   document.getElementById('multiWarnResult').innerHTML = '';
-  document.getElementById('multiWarnModal').classList.remove('hidden');
+  document.getElementById('multiWarnModal').classList.remove('hidden'); animateModalIn(document.getElementById('multiWarnModal'));
 }
 function closeMultiWarnModal() {
   document.getElementById('multiWarnModal').classList.add('hidden');
@@ -1353,7 +1332,7 @@ function openBatchWarnModal() {
   if (selected.length === 0) { alert('请先在表格中勾选要警告的服务器'); return; }
   document.getElementById('batchWarnCount').textContent = selected.length;
   document.getElementById('batchWarnResult').innerHTML = '';
-  document.getElementById('batchWarnModal').classList.remove('hidden');
+  document.getElementById('batchWarnModal').classList.remove('hidden'); animateModalIn(document.getElementById('batchWarnModal'));
 }
 function closeBatchWarnModal() { document.getElementById('batchWarnModal').classList.add('hidden'); window._warnSource = null; }
 
@@ -1362,7 +1341,7 @@ function openCmdModal(ip, port) {
   document.getElementById('cmdTarget').textContent = ip + ':' + port;
   document.getElementById('cmdCommand').value = '';
   document.getElementById('cmdResult').innerHTML = '';
-  document.getElementById('cmdModal').classList.remove('hidden');
+  document.getElementById('cmdModal').classList.remove('hidden'); animateModalIn(document.getElementById('cmdModal'));
 }
 function closeCmdModal() { document.getElementById('cmdModal').classList.add('hidden'); }
 
@@ -1539,7 +1518,7 @@ function openDbWarnModal() {
   if (selected.length === 0) { alert('请先勾选要警告的服务器'); return; }
   document.getElementById('batchWarnCount').textContent = selected.length;
   document.getElementById('batchWarnResult').innerHTML = '';
-  document.getElementById('batchWarnModal').classList.remove('hidden');
+  document.getElementById('batchWarnModal').classList.remove('hidden'); animateModalIn(document.getElementById('batchWarnModal'));
   // 标记来源为数据库，确认时调用/api/db/warn
   window._warnSource = 'db';
 }
@@ -1723,7 +1702,7 @@ function openFavBatchWarnModal() {
   window._warnSource = 'fav';
   document.getElementById('batchWarnCount').textContent = selected.length;
   document.getElementById('batchWarnResult').innerHTML = '';
-  document.getElementById('batchWarnModal').classList.remove('hidden');
+  document.getElementById('batchWarnModal').classList.remove('hidden'); animateModalIn(document.getElementById('batchWarnModal'));
 }
 function openFavBatchObserverModal() {
   const selected = getSelectedFavServers();
@@ -1731,7 +1710,7 @@ function openFavBatchObserverModal() {
   window._obsSource = 'fav';
   document.getElementById('batchObsCount').textContent = selected.length;
   document.getElementById('batchObserverResult').innerHTML = '';
-  document.getElementById('batchObserverModal').classList.remove('hidden');
+  document.getElementById('batchObserverModal').classList.remove('hidden'); animateModalIn(document.getElementById('batchObserverModal'));
 }
 async function toggleFavorite(ip, port, btn) {
   const key = ip + ':' + port;
@@ -1867,7 +1846,7 @@ function openBatchObserverModal() {
   if (selected.length === 0) { alert('请先在表格中勾选要观察的服务器'); return; }
   document.getElementById('batchObsCount').textContent = selected.length;
   document.getElementById('batchObserverResult').innerHTML = '';
-  document.getElementById('batchObserverModal').classList.remove('hidden');
+  document.getElementById('batchObserverModal').classList.remove('hidden'); animateModalIn(document.getElementById('batchObserverModal'));
 }
 function closeBatchObserverModal() { document.getElementById('batchObserverModal').classList.add('hidden'); window._obsSource = null; }
 
