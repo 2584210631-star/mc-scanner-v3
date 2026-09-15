@@ -12,6 +12,24 @@ from datetime import datetime
 from core.bot import MCBot
 from core.ai_generator import generate_content, split_for_minecraft
 
+# 全局API请求限流：避免多个AI同时调用触发429
+_api_lock = threading.Lock()
+_last_api_time = 0.0
+API_MIN_INTERVAL = 1.5  # 两次API请求最小间隔（秒）
+
+def _acquire_api_slot():
+    """获取API调用槽位，确保请求之间有最小间隔"""
+    global _last_api_time
+    _api_lock.acquire()
+    now = time.time()
+    wait = API_MIN_INTERVAL - (now - _last_api_time)
+    if wait > 0:
+        time.sleep(wait)
+    _last_api_time = time.time()
+
+def _release_api_slot():
+    _api_lock.release()
+
 
 class AIBotSession:
     """AI托管Bot会话：连接服务器，AI自动回复聊天"""
@@ -112,14 +130,18 @@ class AIBotSession:
         def _reply_worker():
             try:
                 prompt = f"{self.persona}\n玩家[{sender}]说：{text}\n请回复："
-                result = generate_content(
-                    topic=prompt,
-                    preset="custom",
-                    api_key=self.api_key,
-                    base_url=self.base_url,
-                    model=self.model,
-                    custom_prompt=prompt,
-                )
+                _acquire_api_slot()
+                try:
+                    result = generate_content(
+                        topic=prompt,
+                        preset="custom",
+                        api_key=self.api_key,
+                        base_url=self.base_url,
+                        model=self.model,
+                        custom_prompt=prompt,
+                    )
+                finally:
+                    _release_api_slot()
                 if result.get("success") and result.get("text"):
                     reply = result["text"].strip()
                     # 截断过长回复
@@ -149,13 +171,17 @@ class AIBotSession:
 
         def _talk_worker():
             try:
-                result = generate_content(
-                    topic="随机话题",
-                    preset=self.auto_talk_preset,
-                    api_key=self.api_key,
-                    base_url=self.base_url,
-                    model=self.model,
-                )
+                _acquire_api_slot()
+                try:
+                    result = generate_content(
+                        topic="随机话题",
+                        preset=self.auto_talk_preset,
+                        api_key=self.api_key,
+                        base_url=self.base_url,
+                        model=self.model,
+                    )
+                finally:
+                    _release_api_slot()
                 if result.get("success") and result.get("text"):
                     for line in split_for_minecraft(result["text"]):
                         if self.stop_event.is_set():
