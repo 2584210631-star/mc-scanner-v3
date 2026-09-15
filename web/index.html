@@ -514,6 +514,158 @@ tbody tr:last-child td { border-bottom: none; }
   th, td { font-size: 12px; padding: 8px 10px; }
   .panel { padding: 14px; }
 }
+
+/* ===== AI托管/自动扫描 美化 ===== */
+#tab-aibot .panel, #tab-autoscan .panel {
+  background: linear-gradient(145deg, #151515 0%, #0d0d0d 100%);
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+#tab-aibot .panel:hover, #tab-autoscan .panel:hover {
+  border-color: #00d992;
+  box-shadow: 0 4px 24px rgba(0,217,146,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+#tab-aibot h3, #tab-autoscan h3 {
+  color: #00d992;
+  font-size: 16px;
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#tab-aibot h3::before, #tab-autoscan h3::before {
+  content: '';
+  width: 4px; height: 18px;
+  background: linear-gradient(180deg, #00d992, #00a872);
+  border-radius: 2px;
+}
+#tab-aibot h4, #tab-autoscan h4 {
+  color: #e0e0e0;
+  font-size: 14px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2a2a2a;
+}
+#tab-aibot .hint, #tab-autoscan .hint {
+  color: #666;
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+#tab-aibot .form-row, #tab-autoscan .form-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+#tab-aibot input, #tab-autoscan input, #tab-aibot select, #tab-autoscan select {
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e0e0e0;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+#tab-aibot input:focus, #tab-autoscan input:focus {
+  border-color: #00d992;
+  box-shadow: 0 0 0 3px rgba(0,217,146,0.15);
+  outline: none;
+}
+#tab-aibot input::placeholder, #tab-autoscan input::placeholder {
+  color: #555;
+}
+#tab-aibot button, #tab-autoscan button {
+  background: linear-gradient(135deg, #00d992 0%, #00a872 100%);
+  color: #0a0a0a;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+#tab-aibot button:hover, #tab-autoscan button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,217,146,0.3);
+}
+#tab-aibot button:active, #tab-autoscan button:active {
+  transform: translateY(0);
+}
+#tab-aibot .btn-danger, #tab-autoscan .btn-danger {
+  background: linear-gradient(135deg, #e05b4e 0%, #b8433a 100%);
+}
+#tab-aibot .btn-danger:hover, #tab-autoscan .btn-danger:hover {
+  box-shadow: 0 4px 12px rgba(224,91,78,0.3);
+}
+#tab-aibot label, #tab-autoscan label {
+  color: #aaa;
+  font-size: 12px;
+  cursor: pointer;
+}
+#personaCheckboxes label {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 5px 10px;
+  transition: all 0.2s;
+}
+#personaCheckboxes label:hover {
+  border-color: #00d992;
+  background: #1a2a22;
+}
+#personaCheckboxes label:has(input:checked) {
+  border-color: #00d992;
+  background: rgba(0,217,146,0.1);
+  color: #00d992;
+}
+.server-item {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+.server-item:hover {
+  border-color: #00d992;
+  background: #151515;
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+.badge-online {
+  background: rgba(0,217,146,0.15);
+  color: #00d992;
+  border: 1px solid rgba(0,217,146,0.3);
+}
+.badge-offline {
+  background: rgba(224,91,78,0.15);
+  color: #e05b4e;
+  border: 1px solid rgba(224,91,78,0.3);
+}
+#aiBotChatLog, #multiAiChatLog, #autoScanLog {
+  border: 1px solid #2a2a2a !important;
+  border-radius: 8px !important;
+  line-height: 1.8;
+}
+#aiBotChatLog div, #multiAiChatLog div, #autoScanLog div {
+  padding: 2px 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+#multiAiChatLog strong {
+  color: #00d992;
+}
 </style>
 </head>
 <body>
@@ -968,7 +1120,7 @@ tbody tr:last-child td { border-bottom: none; }
       <input type="text" id="aiBotKeywords" placeholder="触发关键词(逗号分隔，空=回复所有)" style="flex:1">
     </div>
     <div class="form-row">
-      <input type="password" id="aiBotApiKey" placeholder="API Key" style="flex:1">
+      <input type="password" id="aiBotApiKey" placeholder="API Key(留空用设置里的)" style="flex:1">
       <input type="text" id="aiBotBaseUrl" placeholder="Base URL" value="https://api.openai.com/v1" style="flex:1">
       <input type="text" id="aiBotModel" placeholder="模型" value="gpt-3.5-turbo" style="width:120px">
     </div>
@@ -995,7 +1147,7 @@ tbody tr:last-child td { border-bottom: none; }
       <input type="password" id="multiAuthme" placeholder="AuthMe密码(可选)" style="width:150px">
     </div>
     <div class="form-row">
-      <input type="password" id="multiApiKey" placeholder="API Key" style="flex:1">
+      <input type="password" id="multiApiKey" placeholder="API Key(留空用设置里的)" style="flex:1">
       <input type="text" id="multiBaseUrl" placeholder="Base URL" value="https://api.openai.com/v1" style="flex:1">
       <input type="text" id="multiModel" placeholder="模型" value="gpt-3.5-turbo" style="width:120px">
     </div>
