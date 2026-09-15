@@ -95,15 +95,17 @@ def get_all() -> dict:
 
 
 def save_config(cfg: dict = None, path: str = None) -> bool:
-    """保存配置到文件。cfg为None则保存当前内存配置。"""
+    """保存配置到文件。cfg为None则保存当前内存配置；传入部分字段时自动合并到完整配置。"""
     if _GLOBAL_CFG is None:
         load_config()
-    data = cfg if cfg is not None else _GLOBAL_CFG
+    if cfg is not None:
+        # 合并到完整配置，避免部分保存覆盖其他字段
+        _GLOBAL_CFG.update(cfg)
+    data = dict(_GLOBAL_CFG)
     target = path or _CONFIG_PATH or "config.json"
     try:
         with open(target, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        _GLOBAL_CFG.update(data)
         return True
     except Exception as e:
         print(f"[!] 保存配置失败: {e}")
