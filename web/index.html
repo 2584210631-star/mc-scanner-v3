@@ -974,7 +974,10 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-info" onclick="openFavBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
         <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
-        <button class="btn btn-secondary" onclick="exportFavorites()">导出JSON</button>
+        <button class="btn btn-secondary" onclick="exportFavorites('txt')">导出TXT</button>
+        <button class="btn btn-secondary" onclick="exportFavorites('csv')">导出CSV</button>
+        <button class="btn btn-secondary" onclick="exportFavorites('html')">导出HTML</button>
+        <button class="btn btn-secondary" onclick="exportFavorites('json')">导出JSON</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -2773,8 +2776,10 @@ async function importFavorites(input) {
   else alert('导入失败: ' + (data.error || ''));
   input.value = '';
 }
-function exportFavorites() {
-  window.open('/api/favorites?tag=&search=');
+function exportFavorites(fmt) {
+  const tag = document.getElementById('favFilterTag').value || '';
+  const search = document.getElementById('favSearch').value || '';
+  window.open(`/api/favorites/export?format=${fmt}&tag=${encodeURIComponent(tag)}&search=${encodeURIComponent(search)}`);
 }
 
 // ===== 观察者终端 =====
