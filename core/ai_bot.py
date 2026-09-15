@@ -146,9 +146,8 @@ class AIBotSession:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
                     reply = result["text"].strip()
-                    # 截断过长回复，MC聊天要短
-                    if len(reply) > 25:
-                        reply = reply[:25]
+                    # 去掉引号和换行，按MC聊天长度自动分段发送
+                    reply = reply.replace('"', '').replace('"', '').replace('「', '').replace('」', '')
                     for line in split_for_minecraft(reply):
                         if self.stop_event.is_set():
                             break
