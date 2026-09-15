@@ -1077,6 +1077,8 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="obs-terminal-header">
           <span id="obsCurrentTitle">未选择会话</span>
           <span style="margin-left:auto;">
+            <button class="obs-btn" onclick="exportObserver('txt')" title="导出TXT">导出TXT</button>
+            <button class="obs-btn" onclick="exportObserver('html')" title="导出HTML">导出HTML</button>
             <button class="obs-btn" onclick="obsSendInput()">发送</button>
             <button class="obs-btn obs-btn-danger" onclick="stopCurrentObserver()">断开</button>
           </span>
@@ -2944,6 +2946,12 @@ function stopCurrentObserver() {
     document.getElementById('obsCurrentTitle').textContent='未选择会话';
     loadObserverSessions();
   });
+}
+
+function exportObserver(fmt) {
+  if (!currentObsSid) { alert('请先选择一个观察者会话'); return; }
+  const url = `/api/observer/export?session_id=${encodeURIComponent(currentObsSid)}&format=${fmt}`;
+  window.open(url, '_blank');
 }
 
 // 切换到观察者tab时刷新列表
