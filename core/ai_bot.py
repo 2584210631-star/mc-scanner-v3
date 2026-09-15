@@ -67,15 +67,20 @@ class AIBotSession:
             with self.lock:
                 self.chat_log.append((self._next_seq(), self._ts(), sender, text))
             # 触发AI回复
-            if self.reply_enabled and self.bot and self.bot.state == "play":
+            state = getattr(self.bot, "state", "unknown")
+            print(f"[AI Bot {self.username}] _on_chat state={state} reply_enabled={self.reply_enabled} sender={sender} text={text[:40]}")
+            if self.reply_enabled and self.bot and state == "play":
                 self._maybe_reply(sender, text)
-        except Exception:
-            pass
+            else:
+                print(f"[AI Bot {self.username}] 不回复: state={state} reply_enabled={self.reply_enabled}")
+        except Exception as e:
+            print(f"[AI Bot {self.username}] _on_chat异常: {e}")
 
     def _should_reply(self, sender, text):
         """判断是否应该回复这条消息"""
         now = time.time()
         if now - self._last_reply_time < self.reply_cooldown:
+            print(f"[AI Bot {self.username}] 冷却中，跳过: {text[:20]}")
             return False
         # 不回复自己
         if sender == self.username:
@@ -85,6 +90,7 @@ class AIBotSession:
             return False
         system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战", "被", "淹死", "摔死", "烧死", "炸死"]
         if any(p in text for p in system_patterns):
+            print(f"[AI Bot {self.username}] 系统消息，跳过: {text[:20]}")
             return False
         # 过滤纯命令输出
         if text.startswith('/') or text.startswith('Unknown command'):
@@ -93,10 +99,12 @@ class AIBotSession:
         if self.trigger_keywords:
             if not any(kw in text for kw in self.trigger_keywords):
                 return False
+        print(f"[AI Bot {self.username}] 准备回复 sender={sender} text={text[:30]}")
         return True
 
     def _maybe_reply(self, sender, text):
         """异步线程中生成AI回复并发送"""
+        print(f"[AI Bot {self.username}] 收到消息 sender={sender} text={text[:40]}")
         if not self._should_reply(sender, text):
             return
         self._last_reply_time = time.time()
@@ -319,13 +327,20 @@ class MultiAIBot:
 
         # 启动后等第一个bot连接成功，主动发开场消息引爆讨论
         def _kickoff():
-            time.sleep(5)  # 等连接稳定
-            if bots and bots[0].bot and bots[0].bot.state == "play":
+            # 等第一个bot进入play状态，最多等30秒
+            for _ in range(30):
+                if bots and bots[0].bot and getattr(bots[0].bot, "state", None) == "play":
+                    break
+                time.sleep(1)
+            if bots and bots[0].bot and getattr(bots[0].bot, "state", None) == "play":
                 opener = topic or "大家觉得这个服务器怎么样？"
                 try:
                     bots[0].bot.send_chat(opener)
-                except Exception:
-                    pass
+                    print(f"[MultiAI] 开场消息已发送: {opener}")
+                except Exception as e:
+                    print(f"[MultiAI] 开场消息发送失败: {e}")
+            else:
+                print(f"[MultiAI] 第一个bot未进入play状态，跳过开场")
 
         t = threading.Thread(target=_kickoff, daemon=True)
         t.start()
