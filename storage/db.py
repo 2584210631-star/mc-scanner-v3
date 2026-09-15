@@ -76,14 +76,6 @@ QUERY_COLS = ["ip", "port", "version", "proto", "motd", "is_modded",
               "last_updated", "core_type", "mods", "forge_channels", "fingerprint"]
 
 
-def get_conn(db_path: str):
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA temp_store=MEMORY")
-    return conn
-
-
 def _migrate(conn):
     """检查并添加缺失的列（旧数据库自动升级）。"""
     existing = {row[1] for row in conn.execute("PRAGMA table_info(servers)").fetchall()}
