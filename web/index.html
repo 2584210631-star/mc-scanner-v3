@@ -1155,6 +1155,34 @@ tbody tr:last-child td { border-bottom: none; }
     <h4>多AI群聊组</h4>
     <div id="multiAiList" class="server-list"><p class="hint">暂无群聊组</p></div>
   </div>
+  <div class="panel">
+    <h4>AI讲故事</h4>
+    <p class="hint">AI生成故事后自动分段发送到服务器，适合整活/刷屏/氛围组</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:1"><label>故事类型</label>
+        <select id="storyType">
+          <option value="novel">小说故事</option>
+          <option value="fairy">童话</option>
+          <option value="horror">恐怖故事</option>
+          <option value="funny">搞笑段子</option>
+          <option value="epic">史诗传奇</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:2"><label>主题</label><input type="text" id="storyTopic" placeholder="例如: 史蒂夫的冒险 / 末影龙的秘密"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label>服务器地址</label><input type="text" id="storyIp" placeholder="1.2.3.4"></div>
+      <div class="form-group"><label>端口</label><input type="number" id="storyPort" value="25565" style="width:100px"></div>
+      <div class="form-group"><label>用户名</label><input type="text" id="storyUser" value="StoryBot" style="width:120px"></div>
+      <div class="form-group"><label>AuthMe</label><input type="password" id="storyAuthme" placeholder="可选" style="width:100px"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button class="btn btn-primary" onclick="storyGenerate()">仅生成预览</button>
+      <button class="btn btn-success" onclick="storyGenerateAndSend()">生成并发到服务器</button>
+    </div>
+    <div id="storyResult" style="margin-top:12px;"></div>
+  </div>
   <div class="panel" id="multiAiChatPanel" style="display:none">
     <h4>群聊记录 <span id="multiAiCurrentId"></span></h4>
     <div id="multiAiChatLog" style="height:250px;overflow-y:auto;background:#0a0a0a;padding:10px;border-radius:6px;font-family:monospace;font-size:12px"></div>
@@ -2227,6 +2255,56 @@ async function aiGenerateAndSend() {
     if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${data.error}</div>`; return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
     html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
+    if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${data.error}</div>`;
+    div.innerHTML = html;
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+}
+
+// ===== AI讲故事 =====
+async function storyGenerate() {
+  const preset = document.getElementById('storyType').value;
+  const topic = document.getElementById('storyTopic').value.trim();
+  if (!topic && preset !== 'custom') { alert('请输入故事主题'); return; }
+  const div = document.getElementById('storyResult');
+  div.innerHTML = '<div style="color:var(--text-secondary);">AI写故事中，请稍候...</div>';
+  try {
+    const res = await fetch('/api/ai/generate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({preset, topic})
+    });
+    const data = await res.json();
+    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${data.error}</div>`; return; }
+    let html = `<div style="color:#48bb78;margin-bottom:8px;">生成成功，共 ${data.segments.length} 段（自动适配MC聊天长度）</div>`;
+    html += '<div style="background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(data.text) + '</div>';
+    html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">分段预览:</div>';
+    data.segments.forEach((s, i) => {
+      html += `<div style="font-size:12px;padding:4px 8px;margin:2px 0;background:var(--bg-secondary);border-radius:4px;">[${i+1}] ${escapeHtml(s)}</div>`;
+    });
+    div.innerHTML = html;
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+}
+async function storyGenerateAndSend() {
+  const preset = document.getElementById('storyType').value;
+  const topic = document.getElementById('storyTopic').value.trim();
+  const ip = document.getElementById('storyIp').value.trim();
+  if (!topic && preset !== 'custom') { alert('请输入故事主题'); return; }
+  if (!ip) { alert('请输入服务器地址'); return; }
+  const div = document.getElementById('storyResult');
+  div.innerHTML = '<div style="color:var(--text-secondary);">AI写故事中，写完自动进服发送...</div>';
+  try {
+    const res = await fetch('/api/ai/send', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        preset, topic, ip,
+        port: parseInt(document.getElementById('storyPort').value) || 25565,
+        username: document.getElementById('storyUser').value || 'StoryBot',
+        authme_password: document.getElementById('storyAuthme').value || null,
+      })
+    });
+    const data = await res.json();
+    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${data.error}</div>`; return; }
+    let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
+    html += '<div style="background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
     if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${data.error}</div>`;
     div.innerHTML = html;
   } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
