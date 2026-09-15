@@ -80,8 +80,14 @@ class AIBotSession:
         # 不回复自己
         if sender == self.username:
             return False
-        # 过滤系统消息
-        if not text or text.startswith('[') or text.startswith('【'):
+        # 过滤明显的系统消息（加入/离开/成就等）
+        if not text:
+            return False
+        system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战", "被", "淹死", "摔死", "烧死", "炸死"]
+        if any(p in text for p in system_patterns):
+            return False
+        # 过滤纯命令输出
+        if text.startswith('/') or text.startswith('Unknown command'):
             return False
         # 关键词触发
         if self.trigger_keywords:
@@ -106,8 +112,8 @@ class AIBotSession:
                     model=self.model,
                     custom_prompt=prompt,
                 )
-                if result.get("success") and result.get("content"):
-                    reply = result["content"].strip()
+                if result.get("success") and result.get("text"):
+                    reply = result["text"].strip()
                     # 截断过长回复
                     if len(reply) > 80:
                         reply = reply[:80]
@@ -116,8 +122,10 @@ class AIBotSession:
                             break
                         self.bot.send_chat(line)
                         time.sleep(0.5)
-            except Exception:
-                pass
+                elif not result.get("success"):
+                    print(f"[AI Bot] 生成失败: {result.get('error', '未知错误')}")
+            except Exception as e:
+                print(f"[AI Bot] 回复异常: {e}")
 
         t = threading.Thread(target=_reply_worker, daemon=True)
         t.start()
@@ -140,8 +148,8 @@ class AIBotSession:
                     base_url=self.base_url,
                     model=self.model,
                 )
-                if result.get("success") and result.get("content"):
-                    for line in split_for_minecraft(result["content"]):
+                if result.get("success") and result.get("text"):
+                    for line in split_for_minecraft(result["text"]):
                         if self.stop_event.is_set():
                             break
                         self.bot.send_chat(line)
