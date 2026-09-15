@@ -8,6 +8,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
+from email.utils import formataddr
 from datetime import datetime
 
 
@@ -34,7 +35,10 @@ def send_email(subject, body, html=False, cfg=None):
 
     try:
         msg = MIMEMultipart()
-        msg["From"] = Header(cfg["from"] or cfg["username"], "utf-8")
+        # 发件人格式：显示名 <邮箱地址>，163/QQ等要求From必须包含真实邮箱
+        from_name = cfg.get("from") or cfg["username"]
+        from_addr = cfg["username"]
+        msg["From"] = formataddr((from_name, from_addr))
         msg["To"] = Header(cfg["to"], "utf-8")
         msg["Subject"] = Header(subject, "utf-8")
 
@@ -49,7 +53,7 @@ def send_email(subject, body, html=False, cfg=None):
 
         server.login(cfg["username"], cfg["password"])
         recipients = [r.strip() for r in cfg["to"].split(",") if r.strip()]
-        server.sendmail(cfg["from"] or cfg["username"], recipients, msg.as_string())
+        server.sendmail(cfg["username"], recipients, msg.as_string())
         server.quit()
         return True, ""
     except Exception as e:
