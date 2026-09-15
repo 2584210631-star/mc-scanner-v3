@@ -288,13 +288,15 @@ class MultiAIBot:
             cfg = dict(base_config)
             cfg["persona"] = persona["persona"]
             if topic:
-                cfg["persona"] += f"\n当前讨论话题：{topic}。请围绕这个话题和其他玩家讨论。"
+                cfg["persona"] += f"\n当前讨论话题：{topic}。请围绕这个话题和其他玩家讨论，主动挑衅其他玩家引发争论。"
+            else:
+                cfg["persona"] += "\n主动和其他玩家搭话、挑衅，引发讨论和争论，不要冷场。"
             # 每个bot回复冷却错开但很短，疯狂吵架模式
-            cfg["reply_cooldown"] = 1.5 + i * 0.8
+            cfg["reply_cooldown"] = 1.2 + i * 0.6
             cfg["reply_enabled"] = True
             cfg["trigger_keywords"] = []  # 回复所有消息（包括其他AI）
             cfg["auto_talk_enabled"] = True  # 吵架模式也主动发言挑衅
-            cfg["auto_talk_interval"] = 20.0 + i * 5.0  # 主动挑衅间隔
+            cfg["auto_talk_interval"] = 12.0 + i * 4.0  # 主动挑衅间隔缩短
 
             bot = AIBotSession(
                 host=host, port=port, username=persona["name"],
@@ -314,6 +316,20 @@ class MultiAIBot:
             "port": port,
             "created_at": datetime.now().isoformat(),
         }
+
+        # 启动后等第一个bot连接成功，主动发开场消息引爆讨论
+        def _kickoff():
+            time.sleep(5)  # 等连接稳定
+            if bots and bots[0].bot and bots[0].bot.state == "play":
+                opener = topic or "大家觉得这个服务器怎么样？"
+                try:
+                    bots[0].bot.send_chat(opener)
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_kickoff, daemon=True)
+        t.start()
+
         return group_id
 
     def stop_group(self, group_id):
