@@ -1621,6 +1621,117 @@ def commands_run():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)[:200]})
 
+
+# ============ AI托管Bot ============
+_ai_bots = {}  # session_id -> AIBotSession
+_ai_bot_seq = 0
+
+@app.route('/api/ai_bot/start', methods=['POST'])
+def ai_bot_start():
+    global _ai_bot_seq
+    data = request.json or {}
+    host = data.get("host")
+    port = int(data.get("port") or 25565)
+    username = data.get("username", "AI助手")
+    if not host:
+        return jsonify({"success": False, "error": "请指定服务器地址"}), 400
+    _ai_bot_seq += 1
+    session_id = f"aibot_{_ai_bot_seq}"
+    from core.ai_bot import AIBotSession
+    session = AIBotSession(
+        host=host, port=port, username=username,
+        authme_password=data.get("authme_password"),
+        timeout=float(data.get("timeout", 20.0)),
+        duration=float(data.get("duration", 0) or 0),
+        protocol_version=data.get("protocol_version"),
+        ai_config=data.get("ai_config", {}),
+    )
+    session.session_id = session_id
+    session.start()
+    _ai_bots[session_id] = session
+    return jsonify({"success": True, "session_id": session_id})
+
+@app.route('/api/ai_bot/stop', methods=['POST'])
+def ai_bot_stop():
+    data = request.json or {}
+    sid = data.get("session_id")
+    if sid in _ai_bots:
+        _ai_bots[sid].stop()
+        del _ai_bots[sid]
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "会话不存在"}), 404
+
+@app.route('/api/ai_bot/list')
+def ai_bot_list():
+    return jsonify({"sessions": [s.get_status() for s in _ai_bots.values()]})
+
+@app.route('/api/ai_bot/chat')
+def ai_bot_chat():
+    sid = request.args.get("session_id")
+    since = int(request.args.get("since", 0))
+    if sid in _ai_bots:
+        return jsonify({"messages": _ai_bots[sid].get_chat(since)})
+    return jsonify({"messages": []})
+
+@app.route('/api/ai_bot/send', methods=['POST'])
+def ai_bot_send():
+    data = request.json or {}
+    sid = data.get("session_id")
+    msg = data.get("message", "")
+    if sid in _ai_bots and msg:
+        ok = _ai_bots[sid].send_message(msg)
+        return jsonify({"success": ok})
+    return jsonify({"success": False, "error": "会话不存在或消息为空"}), 400
+
+
+# ============ 自动扫描警告 ============
+@app.route('/api/auto_scan/tasks')
+def auto_scan_tasks():
+    from core.auto_scanner import auto_scanner
+    return jsonify({"tasks": auto_scanner.list_tasks()})
+
+@app.route('/api/auto_scan/add', methods=['POST'])
+def auto_scan_add():
+    data = request.json or {}
+    if not data.get("targets"):
+        return jsonify({"success": False, "error": "请指定扫描目标"}), 400
+    from core.auto_scanner import auto_scanner
+    task_id = auto_scanner.add_task(data)
+    if data.get("auto_start", True):
+        auto_scanner.start_task(task_id)
+    return jsonify({"success": True, "task_id": task_id})
+
+@app.route('/api/auto_scan/start', methods=['POST'])
+def auto_scan_start():
+    data = request.json or {}
+    tid = data.get("task_id")
+    from core.auto_scanner import auto_scanner
+    ok = auto_scanner.start_task(tid)
+    return jsonify({"success": ok})
+
+@app.route('/api/auto_scan/stop', methods=['POST'])
+def auto_scan_stop():
+    data = request.json or {}
+    tid = data.get("task_id")
+    from core.auto_scanner import auto_scanner
+    auto_scanner.stop_task(tid)
+    return jsonify({"success": True})
+
+@app.route('/api/auto_scan/remove', methods=['POST'])
+def auto_scan_remove():
+    data = request.json or {}
+    tid = data.get("task_id")
+    from core.auto_scanner import auto_scanner
+    auto_scanner.remove_task(tid)
+    return jsonify({"success": True})
+
+@app.route('/api/auto_scan/logs')
+def auto_scan_logs():
+    tid = request.args.get("task_id")
+    from core.auto_scanner import auto_scanner
+    return jsonify({"logs": auto_scanner.get_logs(tid)})
+
+
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
     db.init_db(db_path)

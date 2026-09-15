@@ -606,6 +606,8 @@ tbody tr:last-child td { border-bottom: none; }
   <div class="tab" data-tab="history">历史</div>
   <div class="tab" data-tab="tools">工具</div>
   <div class="tab" data-tab="observer">观察者</div>
+  <div class="tab" data-tab="aibot">AI托管</div>
+  <div class="tab" data-tab="autoscan">自动扫描</div>
   <div class="tab" data-tab="settings">设置</div>
 </nav>
 
@@ -936,6 +938,87 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- AI托管标签页 -->
+<div id="tab-aibot" class="hidden">
+  <div class="panel">
+    <h3>AI托管Bot</h3>
+    <p class="hint">连接服务器后AI自动回复玩家聊天，支持定时主动发言</p>
+    <div class="form-row">
+      <input type="text" id="aiBotHost" placeholder="服务器地址（IP或域名）" style="flex:2">
+      <input type="number" id="aiBotPort" placeholder="端口(默认25565)" style="width:120px">
+      <input type="text" id="aiBotName" placeholder="Bot名字" value="AI助手" style="width:100px">
+    </div>
+    <div class="form-row">
+      <input type="password" id="aiBotAuthme" placeholder="AuthMe密码(可选)" style="flex:1">
+      <input type="number" id="aiBotDuration" placeholder="时长秒(0=无限)" value="0" style="width:120px">
+    </div>
+    <div class="form-row">
+      <input type="text" id="aiBotPersona" placeholder="AI人设" value="你是一个友好的MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。" style="flex:1">
+    </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="aiBotReply" checked> 自动回复</label>
+      <input type="number" id="aiBotCooldown" value="5" style="width:80px" title="回复冷却秒数">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="aiBotAutoTalk"> 定时发言</label>
+      <input type="number" id="aiBotTalkInterval" value="120" style="width:80px" title="发言间隔秒数">
+    </div>
+    <div class="form-row">
+      <input type="text" id="aiBotKeywords" placeholder="触发关键词(逗号分隔，空=回复所有)" style="flex:1">
+    </div>
+    <div class="form-row">
+      <input type="password" id="aiBotApiKey" placeholder="API Key" style="flex:1">
+      <input type="text" id="aiBotBaseUrl" placeholder="Base URL" value="https://api.openai.com/v1" style="flex:1">
+      <input type="text" id="aiBotModel" placeholder="模型" value="gpt-3.5-turbo" style="width:120px">
+    </div>
+    <button onclick="startAiBot()" class="btn-primary">启动AI托管</button>
+  </div>
+  <div class="panel">
+    <h4>运行中的AI Bot</h4>
+    <div id="aiBotList" class="server-list"><p class="hint">暂无运行中的Bot</p></div>
+  </div>
+  <div class="panel" id="aiBotChatPanel" style="display:none">
+    <h4>聊天记录 <span id="aiBotCurrentName"></span></h4>
+    <div id="aiBotChatLog" style="height:200px;overflow-y:auto;background:#0a0a0a;padding:10px;border-radius:6px;font-family:monospace;font-size:12px"></div>
+    <div class="form-row">
+      <input type="text" id="aiBotMsgInput" placeholder="手动发送消息..." style="flex:1" onkeypress="if(event.key==='Enter')sendAiBotMsg()">
+      <button onclick="sendAiBotMsg()">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- 自动扫描标签页 -->
+<div id="tab-autoscan" class="hidden">
+  <div class="panel">
+    <h3>自动扫描+警告</h3>
+    <p class="hint">定时扫描指定IP段，发现有人的服务器自动发警告/挂观察者</p>
+    <div class="form-row">
+      <input type="text" id="autoTargets" placeholder="目标(逗号分隔，支持CIDR和范围，如 1.2.3.0/24)" style="flex:2">
+      <input type="text" id="autoPorts" placeholder="端口" value="25565" style="width:120px">
+    </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px">间隔(秒)<input type="number" id="autoInterval" value="300" style="width:80px"></label>
+      <label style="display:flex;align-items:center;gap:6px">最少人数<input type="number" id="autoMinPlayers" value="1" style="width:60px"></label>
+      <label style="display:flex;align-items:center;gap:6px">并发<input type="number" id="autoConcurrency" value="200" style="width:80px"></label>
+    </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="autoWarn" checked> 自动警告</label>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="autoObserve"> 自动观察</label>
+      <input type="number" id="autoObserveDuration" value="60" style="width:80px" title="观察时长秒">
+    </div>
+    <div class="form-row">
+      <input type="text" id="autoWarnMsg" placeholder="警告内容" value="【安全提示】本服务器已被扫描，请确保服务器安全。" style="flex:1">
+    </div>
+    <button onclick="addAutoScan()" class="btn-primary">创建任务</button>
+  </div>
+  <div class="panel">
+    <h4>自动扫描任务</h4>
+    <div id="autoScanList" class="server-list"><p class="hint">暂无任务</p></div>
+  </div>
+  <div class="panel" id="autoScanLogPanel" style="display:none">
+    <h4>任务日志 <span id="autoScanCurrentId"></span></h4>
+    <div id="autoScanLog" style="height:200px;overflow-y:auto;background:#0a0a0a;padding:10px;border-radius:6px;font-family:monospace;font-size:12px"></div>
   </div>
 </div>
 
@@ -1482,6 +1565,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (this.dataset.tab === 'favorites') loadFavorites();
     if (this.dataset.tab === 'history') loadHistory();
     if (this.dataset.tab === 'tools') checkMasscan();
+    if (this.dataset.tab === 'aibot') loadAiBotList();
+    if (this.dataset.tab === 'autoscan') loadAutoScanList();
     if (this.dataset.tab === 'settings') loadSettings();
   };
 });
@@ -2483,6 +2568,178 @@ document.addEventListener('click', e=>{
     loadObserverSessions();
   }
 });
+
+// ============ AI托管Bot ============
+let currentAiBotId = null;
+let aiBotPollTimer = null;
+
+function startAiBot() {
+  const host = document.getElementById('aiBotHost').value.trim();
+  if (!host) { alert('请输入服务器地址'); return; }
+  const keywords = document.getElementById('aiBotKeywords').value.trim();
+  fetch('/api/ai_bot/start', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      host, port: document.getElementById('aiBotPort').value || 25565,
+      username: document.getElementById('aiBotName').value || 'AI助手',
+      authme_password: document.getElementById('aiBotAuthme').value || null,
+      duration: parseInt(document.getElementById('aiBotDuration').value) || 0,
+      ai_config: {
+        api_key: document.getElementById('aiBotApiKey').value,
+        base_url: document.getElementById('aiBotBaseUrl').value,
+        model: document.getElementById('aiBotModel').value,
+        persona: document.getElementById('aiBotPersona').value,
+        reply_enabled: document.getElementById('aiBotReply').checked,
+        reply_cooldown: parseFloat(document.getElementById('aiBotCooldown').value) || 5,
+        trigger_keywords: keywords ? keywords.split(',').map(s=>s.trim()).filter(Boolean) : [],
+        auto_talk_enabled: document.getElementById('aiBotAutoTalk').checked,
+        auto_talk_interval: parseFloat(document.getElementById('aiBotTalkInterval').value) || 120,
+      }
+    })
+  }).then(r=>r.json()).then(d=>{
+    if (d.success) { alert('AI Bot已启动'); loadAiBotList(); }
+    else alert('启动失败: ' + d.error);
+  });
+}
+
+function loadAiBotList() {
+  fetch('/api/ai_bot/list').then(r=>r.json()).then(d=>{
+    const el = document.getElementById('aiBotList');
+    if (!d.sessions || d.sessions.length===0) { el.innerHTML='<p class="hint">暂无运行中的Bot</p>'; return; }
+    el.innerHTML = d.sessions.map(s=>`
+      <div class="server-item">
+        <div><strong>${s.username}</strong> @ ${s.host}:${s.port}
+          <span class="badge ${s.status==='connected'?'badge-online':'badge-offline'}">${s.status}</span>
+          <span class="hint">${s.version} | 在线${s.uptime}s | ${s.chat_count}条消息</span>
+        </div>
+        <div style="margin-top:6px">
+          <button onclick="viewAiBotChat('${s.session_id}','${s.username}')">查看聊天</button>
+          <button onclick="stopAiBot('${s.session_id}')" class="btn-danger">停止</button>
+        </div>
+      </div>`).join('');
+  });
+}
+
+function viewAiBotChat(sid, name) {
+  currentAiBotId = sid;
+  document.getElementById('aiBotChatPanel').style.display = 'block';
+  document.getElementById('aiBotCurrentName').textContent = name;
+  if (aiBotPollTimer) clearInterval(aiBotPollTimer);
+  aiBotPollTimer = setInterval(()=>{ if(currentAiBotId) fetchAiBotChat(); }, 2000);
+  fetchAiBotChat();
+}
+
+function fetchAiBotChat() {
+  if (!currentAiBotId) return;
+  fetch(`/api/ai_bot/chat?session_id=${currentAiBotId}&since=0`).then(r=>r.json()).then(d=>{
+    const el = document.getElementById('aiBotChatLog');
+    el.innerHTML = d.messages.map(m=>`<div>[${m.time}] <strong>${m.sender}</strong>: ${m.text}</div>`).join('');
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+function sendAiBotMsg() {
+  const input = document.getElementById('aiBotMsgInput');
+  const msg = input.value.trim();
+  if (!msg || !currentAiBotId) return;
+  fetch('/api/ai_bot/send', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({session_id: currentAiBotId, message: msg})
+  }).then(r=>r.json()).then(d=>{
+    if (d.success) input.value = '';
+    else alert('发送失败');
+  });
+}
+
+function stopAiBot(sid) {
+  if (!confirm('确定停止这个AI Bot？')) return;
+  fetch('/api/ai_bot/stop', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({session_id: sid})
+  }).then(r=>r.json()).then(()=>{ loadAiBotList(); });
+}
+
+// ============ 自动扫描 ============
+let currentAutoScanId = null;
+let autoScanPollTimer = null;
+
+function addAutoScan() {
+  const targets = document.getElementById('autoTargets').value.trim();
+  if (!targets) { alert('请输入扫描目标'); return; }
+  fetch('/api/auto_scan/add', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      targets: targets.split(',').map(s=>s.trim()).filter(Boolean),
+      ports: document.getElementById('autoPorts').value || '25565',
+      interval: parseInt(document.getElementById('autoInterval').value) || 300,
+      min_players: parseInt(document.getElementById('autoMinPlayers').value) || 1,
+      concurrency: parseInt(document.getElementById('autoConcurrency').value) || 200,
+      warn_enabled: document.getElementById('autoWarn').checked,
+      warn_message: document.getElementById('autoWarnMsg').value,
+      observe_enabled: document.getElementById('autoObserve').checked,
+      observe_duration: parseInt(document.getElementById('autoObserveDuration').value) || 60,
+      auto_start: true,
+    })
+  }).then(r=>r.json()).then(d=>{
+    if (d.success) { alert('任务已创建并启动'); loadAutoScanList(); }
+    else alert('创建失败: ' + d.error);
+  });
+}
+
+function loadAutoScanList() {
+  fetch('/api/auto_scan/tasks').then(r=>r.json()).then(d=>{
+    const el = document.getElementById('autoScanList');
+    if (!d.tasks || d.tasks.length===0) { el.innerHTML='<p class="hint">暂无任务</p>'; return; }
+    el.innerHTML = d.tasks.map(t=>`
+      <div class="server-item">
+        <div><strong>${t.task_id}</strong>
+          <span class="badge ${t.status==='running'?'badge-online':'badge-offline'}">${t.status}</span>
+          <span class="hint">${t.targets.join(',')} :${t.ports} | 间隔${t.interval}s | 最少${t.min_players}人</span>
+        </div>
+        <div class="hint" style="margin-top:4px">运行${t.run_count}次 | 发现${t.total_found}服 | 警告${t.total_warned}服 | 上次:${t.last_run||'未运行'}</div>
+        <div style="margin-top:6px">
+          <button onclick="viewAutoScanLog('${t.task_id}')">日志</button>
+          ${t.status==='running'
+            ? `<button onclick="stopAutoScan('${t.task_id}')" class="btn-danger">停止</button>`
+            : `<button onclick="startAutoScan('${t.task_id}')">启动</button>`}
+          <button onclick="removeAutoScan('${t.task_id}')" class="btn-danger">删除</button>
+        </div>
+      </div>`).join('');
+  });
+}
+
+function viewAutoScanLog(tid) {
+  currentAutoScanId = tid;
+  document.getElementById('autoScanLogPanel').style.display = 'block';
+  document.getElementById('autoScanCurrentId').textContent = tid;
+  if (autoScanPollTimer) clearInterval(autoScanPollTimer);
+  autoScanPollTimer = setInterval(()=>{ if(currentAutoScanId) fetchAutoScanLog(); }, 3000);
+  fetchAutoScanLog();
+}
+
+function fetchAutoScanLog() {
+  if (!currentAutoScanId) return;
+  fetch(`/api/auto_scan/logs?task_id=${currentAutoScanId}`).then(r=>r.json()).then(d=>{
+    const el = document.getElementById('autoScanLog');
+    el.innerHTML = d.logs.map(l=>`<div>${l}</div>`).join('');
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+function startAutoScan(tid) {
+  fetch('/api/auto_scan/start', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({task_id: tid})
+  }).then(r=>r.json()).then(()=>loadAutoScanList());
+}
+
+function stopAutoScan(tid) {
+  fetch('/api/auto_scan/stop', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({task_id: tid})
+  }).then(r=>r.json()).then(()=>loadAutoScanList());
+}
+
+function removeAutoScan(tid) {
+  if (!confirm('确定删除这个任务？')) return;
+  fetch('/api/auto_scan/remove', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({task_id: tid})
+  }).then(r=>r.json()).then(()=>loadAutoScanList());
+}
 </script>
 
 </html>
