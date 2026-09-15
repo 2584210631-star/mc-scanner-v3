@@ -81,8 +81,17 @@ def build_scan_report(results, targets_count, duration_sec, task_id=None):
         players = f"{r.get('players_online', 0)}/{r.get('players_max', 0)}"
         motd = (r.get("motd") or "")[:40]
         auth = r.get("auth", "?")
+        # 玩家列表
+        sample = r.get("sample") or []
+        if sample:
+            names = [p.get("name", "") for p in sample if p.get("name")][:10]
+            player_str = ", ".join(names)
+            if len(sample) > 10:
+                player_str += f" 等{len(sample)}人"
+        else:
+            player_str = "-"
         online_rows += f"""<tr>
-            <td>{ip}:{port}</td><td>{ver}</td><td>{players}</td><td>{auth}</td><td>{motd}</td>
+            <td>{ip}:{port}</td><td>{ver}</td><td>{players}</td><td>{auth}</td><td>{motd}</td><td style="font-size:11px;color:#666;max-width:200px;word-break:break-all;">{player_str}</td>
         </tr>"""
 
     duration_str = f"{int(duration_sec//60)}分{int(duration_sec%60)}秒" if duration_sec > 60 else f"{int(duration_sec)}秒"
@@ -115,7 +124,7 @@ tr:hover{{background:#f9f9f9}}
 """
     if online_rows:
         html += f"""<h3 style="margin-top:20px;">有人的服务器（前30）</h3>
-<table><tr><th>地址</th><th>版本</th><th>人数</th><th>验证</th><th>MOTD</th></tr>{online_rows}</table>"""
+<table><tr><th>地址</th><th>版本</th><th>人数</th><th>验证</th><th>MOTD</th><th>在线玩家</th></tr>{online_rows}</table>"""
     else:
         html += "<p style='color:#999;margin-top:16px;'>本次扫描未发现有人的服务器。</p>"
 
