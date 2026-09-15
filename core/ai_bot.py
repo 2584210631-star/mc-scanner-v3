@@ -66,6 +66,7 @@ class AIBotSession:
         self.auto_talk_enabled = cfg.get("auto_talk_enabled", False)
         self.auto_talk_interval = float(cfg.get("auto_talk_interval", 120.0))  # 主动发言间隔
         self.auto_talk_preset = cfg.get("auto_talk_preset", "novel")  # 主动发言类型
+        self.topic = cfg.get("topic", "")  # 讨论话题（多AI群聊模式用）
 
         self.chat_log = deque(maxlen=500)
         self._last_reply_time = 0
@@ -173,13 +174,25 @@ class AIBotSession:
             try:
                 _acquire_api_slot()
                 try:
-                    result = generate_content(
-                        topic="随机话题",
-                        preset=self.auto_talk_preset,
-                        api_key=self.api_key,
-                        base_url=self.base_url,
-                        model=self.model,
-                    )
+                    if self.topic:
+                        # 有话题时，围绕话题主动发言挑衅
+                        prompt = f"{self.persona}\n当前讨论话题：{self.topic}\n请主动发表一句关于这个话题的观点，挑衅其他玩家参与讨论。"
+                        result = generate_content(
+                            topic=self.topic,
+                            preset="custom",
+                            api_key=self.api_key,
+                            base_url=self.base_url,
+                            model=self.model,
+                            custom_prompt=prompt,
+                        )
+                    else:
+                        result = generate_content(
+                            topic="随机话题",
+                            preset=self.auto_talk_preset,
+                            api_key=self.api_key,
+                            base_url=self.base_url,
+                            model=self.model,
+                        )
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
@@ -331,6 +344,7 @@ class MultiAIBot:
             cfg["trigger_keywords"] = []  # 回复所有消息（包括其他AI）
             cfg["auto_talk_enabled"] = True  # 吵架模式也主动发言挑衅
             cfg["auto_talk_interval"] = 12.0 + i * 4.0  # 主动挑衅间隔缩短
+            cfg["topic"] = topic  # 把话题传给每个bot，主动发言时围绕话题
 
             bot = AIBotSession(
                 host=host, port=port, username=persona["name"],
