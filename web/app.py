@@ -1638,6 +1638,14 @@ def ai_bot_start():
     _ai_bot_seq += 1
     session_id = f"aibot_{_ai_bot_seq}"
     from core.ai_bot import AIBotSession
+    ai_cfg = data.get("ai_config", {})
+    # 空值回退到全局设置
+    if not ai_cfg.get("api_key"):
+        ai_cfg["api_key"] = config.get("ai_api_key", "")
+    if not ai_cfg.get("base_url"):
+        ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
+    if not ai_cfg.get("model"):
+        ai_cfg["model"] = config.get("ai_model", "gpt-3.5-turbo")
     session = AIBotSession(
         host=host, port=port, username=username,
         authme_password=data.get("authme_password"),
@@ -1695,6 +1703,14 @@ def ai_multi_start():
     bot_count = int(data.get("bot_count", 3))
     bot_count = max(2, min(8, bot_count))
     from core.ai_bot import multi_ai_bot
+    ai_cfg = data.get("ai_config", {})
+    # 空值回退到全局设置
+    if not ai_cfg.get("api_key"):
+        ai_cfg["api_key"] = config.get("ai_api_key", "")
+    if not ai_cfg.get("base_url"):
+        ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
+    if not ai_cfg.get("model"):
+        ai_cfg["model"] = config.get("ai_model", "gpt-3.5-turbo")
     group_id = multi_ai_bot.start_group(
         host=host, port=port,
         bot_count=bot_count,
