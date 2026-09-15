@@ -1763,6 +1763,13 @@ def auto_scan_tasks():
     from core.auto_scanner import auto_scanner
     return jsonify({"tasks": auto_scanner.list_tasks()})
 
+@app.route('/api/auto_scan/types')
+def auto_scan_types():
+    from core.auto_scanner import AutoScanner
+    return jsonify({"types": [
+        {"value": k, "label": v} for k, v in AutoScanner.TASK_TYPES.items()
+    ]})
+
 @app.route('/api/auto_scan/add', methods=['POST'])
 def auto_scan_add():
     data = request.json or {}
