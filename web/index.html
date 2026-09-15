@@ -1288,6 +1288,45 @@ tbody tr:last-child td { border-bottom: none; }
       <span id="setPanelStatus" style="font-size:13px;"></span>
     </div>
   </div>
+  <div class="panel">
+    <h2>邮件通知</h2>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">扫描完成后自动发送结果摘要到邮箱，支持QQ邮箱、163邮箱等。</p>
+    <div class="form-row">
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+        <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
+          <input type="checkbox" id="setEmailEnabled"> 启用扫描完成邮件通知
+        </label>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;"><label>SMTP服务器</label><input type="text" id="setEmailSmtpHost" placeholder="smtp.qq.com"></div>
+      <div class="form-group"><label>端口</label><input type="number" id="setEmailSmtpPort" value="465" style="width:100px"></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;">
+        <label style="display:flex;align-items:center;gap:6px;white-space:nowrap;">
+          <input type="checkbox" id="setEmailSsl" checked> SSL
+        </label>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;"><label>发件邮箱</label><input type="text" id="setEmailUsername" placeholder="xxx@qq.com"></div>
+      <div class="form-group" style="flex:1;"><label>授权码/密码</label><input type="password" id="setEmailPassword" placeholder="邮箱授权码"></div>
+      <div class="form-group" style="flex:1;"><label>发件人显示名</label><input type="text" id="setEmailFrom" placeholder="MC扫描器（可选）"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;"><label>收件邮箱（多个用逗号分隔）</label><input type="text" id="setEmailTo" placeholder="xxx@qq.com,yyy@163.com"></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-primary" onclick="saveEmailConfig()">保存邮件配置</button>
+      <button class="btn btn-secondary" onclick="testEmail()">发送测试邮件</button>
+      <span id="setEmailStatus" style="font-size:13px;"></span>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
+      <b>常用SMTP：</b><br>
+      QQ邮箱: smtp.qq.com:465 (SSL)，需在QQ邮箱设置→账户里开启SMTP并获取授权码<br>
+      163邮箱: smtp.163.com:465 (SSL)，需开启客户端授权密码<br>
+      Gmail: smtp.gmail.com:465 (SSL)，需使用应用专用密码
+    </div>
+  </div>
 </div>
 
 <!-- 单独警告弹窗 -->
@@ -2452,6 +2491,15 @@ async function loadSettings() {
     document.getElementById('setWebToken').value = cfg.web_token || '';
     document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
     document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
+    // 邮件配置
+    document.getElementById('setEmailEnabled').checked = !!cfg.email_enabled;
+    document.getElementById('setEmailSmtpHost').value = cfg.email_smtp_host || '';
+    document.getElementById('setEmailSmtpPort').value = cfg.email_smtp_port || 465;
+    document.getElementById('setEmailSsl').checked = cfg.email_smtp_ssl !== false;
+    document.getElementById('setEmailUsername').value = cfg.email_username || '';
+    document.getElementById('setEmailPassword').value = cfg.email_password || '';
+    document.getElementById('setEmailFrom').value = cfg.email_from || '';
+    document.getElementById('setEmailTo').value = cfg.email_to || '';
   } catch(e) { console.error('加载配置失败', e); }
 }
 async function saveAiConfig() {
@@ -2500,8 +2548,61 @@ async function savePanelConfig() {
     }
   } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
 }
-
-// ===== 收藏管理 =====
+async function saveEmailConfig() {
+  const status = document.getElementById('setEmailStatus');
+  status.textContent = '保存中...';
+  status.style.color = 'var(--text-secondary)';
+  try {
+    const res = await fetch('/api/config/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        email_enabled: document.getElementById('setEmailEnabled').checked,
+        email_smtp_host: document.getElementById('setEmailSmtpHost').value,
+        email_smtp_port: parseInt(document.getElementById('setEmailSmtpPort').value) || 465,
+        email_smtp_ssl: document.getElementById('setEmailSsl').checked,
+        email_username: document.getElementById('setEmailUsername').value,
+        email_password: document.getElementById('setEmailPassword').value,
+        email_from: document.getElementById('setEmailFrom').value,
+        email_to: document.getElementById('setEmailTo').value,
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      status.textContent = '✓ 已保存';
+      status.style.color = '#48bb78';
+    } else {
+      status.textContent = '保存失败';
+      status.style.color = '#f56565';
+    }
+  } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
+}
+async function testEmail() {
+  const status = document.getElementById('setEmailStatus');
+  status.textContent = '发送测试邮件中...';
+  status.style.color = 'var(--text-secondary)';
+  try {
+    const res = await fetch('/api/email/test', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        smtp_host: document.getElementById('setEmailSmtpHost').value,
+        smtp_port: parseInt(document.getElementById('setEmailSmtpPort').value) || 465,
+        smtp_ssl: document.getElementById('setEmailSsl').checked,
+        username: document.getElementById('setEmailUsername').value,
+        password: document.getElementById('setEmailPassword').value,
+        from_addr: document.getElementById('setEmailFrom').value,
+        to: document.getElementById('setEmailTo').value,
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      status.textContent = '✓ 测试邮件已发送，请查收';
+      status.style.color = '#48bb78';
+    } else {
+      status.textContent = '发送失败: ' + (data.error || '未知错误');
+      status.style.color = '#f56565';
+    }
+  } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
+}
 let favCache = {};
 async function loadFavorites() {
   const tag = document.getElementById('favFilterTag').value;

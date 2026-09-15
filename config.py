@@ -38,6 +38,15 @@ DEFAULT_CONFIG = {
     "ai_api_key": "",          # AI API Key（OpenAI兼容）
     "ai_base_url": "https://api.openai.com/v1",  # AI API 地址
     "ai_model": "gpt-3.5-turbo",  # AI 模型名
+    # 邮件通知
+    "email_enabled": False,     # 扫描完成邮件通知开关
+    "email_smtp_host": "",      # SMTP服务器地址，如 smtp.qq.com
+    "email_smtp_port": 465,     # SMTP端口，465=SSL, 587=TLS
+    "email_smtp_ssl": True,     # 是否使用SSL
+    "email_username": "",       # 发件邮箱账号
+    "email_password": "",       # 发件邮箱授权码/密码
+    "email_from": "",           # 发件人显示名，空=用邮箱地址
+    "email_to": "",             # 收件邮箱，多个用逗号分隔
 }
 
 _GLOBAL_CFG = None

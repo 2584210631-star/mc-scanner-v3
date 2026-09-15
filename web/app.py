@@ -214,6 +214,17 @@ def _scan_worker(targets_list, config):
                 scan_state["progress"] = len(all_results)
                 scan_state["total"] = len(all_results)
             _log(f"连续扫描完成，共 {len(all_results)} 个服务器")
+            # 邮件通知
+            try:
+                from core.notifier import notify_scan_complete
+                duration = time.time() - scan_state.get("start_time", time.time())
+                ok, err = notify_scan_complete(all_results, len(targets_list), duration, task_counter)
+                if ok:
+                    _log("扫描完成邮件已发送")
+                elif err and "未启用" not in err:
+                    _log(f"邮件通知失败: {err}")
+            except Exception as e:
+                _log(f"邮件通知异常: {e}")
             history_entry = {
                 "id": task_counter,
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -324,6 +335,18 @@ def _scan_worker(targets_list, config):
             scan_state["progress"] = 100
             scan_state["total"] = len(results)
         _log(f"扫描完成，共发现 {len(results)} 个服务器")
+
+        # 邮件通知
+        try:
+            from core.notifier import notify_scan_complete
+            duration = time.time() - scan_state.get("start_time", time.time())
+            ok, err = notify_scan_complete(results, len(targets_list), duration, task_counter)
+            if ok:
+                _log("扫描完成邮件已发送")
+            elif err and "未启用" not in err:
+                _log(f"邮件通知失败: {err}")
+        except Exception as e:
+            _log(f"邮件通知异常: {e}")
 
         with scan_lock:
             history_entry = {
@@ -1262,15 +1285,44 @@ def config_save():
     data = request.json or {}
     # 只允许保存白名单字段
     allowed = {"ai_api_key", "ai_base_url", "ai_model", "web_token", "web_host", "web_port",
-               "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level"}
+               "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level",
+               "email_enabled", "email_smtp_host", "email_smtp_port", "email_smtp_ssl",
+               "email_username", "email_password", "email_from", "email_to"}
     to_save = {k: v for k, v in data.items() if k in allowed}
     # api_key如果是打码状态（含****），不覆盖原值
     if "ai_api_key" in to_save and "****" in str(to_save["ai_api_key"]):
         del to_save["ai_api_key"]
     if "web_token" in to_save and "****" in str(to_save["web_token"]):
         del to_save["web_token"]
+    if "email_password" in to_save and "****" in str(to_save["email_password"]):
+        del to_save["email_password"]
     ok = config.save_config(to_save)
     return jsonify({"success": ok, "saved": list(to_save.keys())})
+
+
+@app.route('/api/email/test', methods=['POST'])
+def email_test():
+    """发送测试邮件"""
+    data = request.json or {}
+    cfg = {
+        "smtp_host": data.get("smtp_host") or config.get("email_smtp_host", ""),
+        "smtp_port": data.get("smtp_port") or config.get("email_smtp_port", 465),
+        "smtp_ssl": data.get("smtp_ssl", config.get("email_smtp_ssl", True)),
+        "username": data.get("username") or config.get("email_username", ""),
+        "password": data.get("password") or config.get("email_password", ""),
+        "from": data.get("from_addr") or config.get("email_from", "") or config.get("email_username", ""),
+        "to": data.get("to") or config.get("email_to", ""),
+    }
+    from core.notifier import send_email
+    subject = "[MC扫描] 邮件测试"
+    body = f"""<html><body>
+<h2>MC扫描器邮件测试</h2>
+<p>如果你收到这封邮件，说明邮件配置正确！</p>
+<p>扫描完成后会自动发送结果摘要到这里。</p>
+<p style="color:#999;font-size:12px;">发送时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+</body></html>"""
+    ok, err = send_email(subject, body, html=True, cfg=cfg)
+    return jsonify({"success": ok, "error": err})
 
 
 # ===== AI 内容生成 API =====
