@@ -1684,6 +1684,63 @@ def ai_bot_send():
     return jsonify({"success": False, "error": "会话不存在或消息为空"}), 400
 
 
+# ============ 多AI群聊/吵架 ============
+@app.route('/api/ai_multi/start', methods=['POST'])
+def ai_multi_start():
+    data = request.json or {}
+    host = data.get("host")
+    port = int(data.get("port") or 25565)
+    if not host:
+        return jsonify({"success": False, "error": "请指定服务器地址"}), 400
+    bot_count = int(data.get("bot_count", 3))
+    bot_count = max(2, min(8, bot_count))
+    from core.ai_bot import multi_ai_bot
+    group_id = multi_ai_bot.start_group(
+        host=host, port=port,
+        bot_count=bot_count,
+        topic=data.get("topic", ""),
+        duration=float(data.get("duration", 0) or 0),
+        authme_password=data.get("authme_password"),
+        ai_config=data.get("ai_config", {}),
+        persona_indices=data.get("persona_indices"),
+    )
+    return jsonify({"success": True, "group_id": group_id})
+
+@app.route('/api/ai_multi/stop', methods=['POST'])
+def ai_multi_stop():
+    data = request.json or {}
+    gid = data.get("group_id")
+    from core.ai_bot import multi_ai_bot
+    ok = multi_ai_bot.stop_group(gid)
+    return jsonify({"success": ok})
+
+@app.route('/api/ai_multi/list')
+def ai_multi_list():
+    from core.ai_bot import multi_ai_bot
+    return jsonify({"groups": multi_ai_bot.list_groups()})
+
+@app.route('/api/ai_multi/chat')
+def ai_multi_chat():
+    gid = request.args.get("group_id")
+    since = int(request.args.get("since", 0))
+    from core.ai_bot import multi_ai_bot
+    return jsonify({"messages": multi_ai_bot.get_group_chat(gid, since)})
+
+@app.route('/api/ai_multi/send', methods=['POST'])
+def ai_multi_send():
+    data = request.json or {}
+    gid = data.get("group_id")
+    msg = data.get("message", "")
+    from core.ai_bot import multi_ai_bot
+    ok = multi_ai_bot.send_to_all(gid, msg)
+    return jsonify({"success": ok})
+
+@app.route('/api/ai_multi/personas')
+def ai_multi_personas():
+    from core.ai_bot import PRESET_PERSONAS
+    return jsonify({"personas": [{"name": p["name"], "persona": p["persona"]} for p in PRESET_PERSONAS]})
+
+
 # ============ 自动扫描警告 ============
 @app.route('/api/auto_scan/tasks')
 def auto_scan_tasks():

@@ -224,3 +224,129 @@ class AIBotSession:
         with self.lock:
             return [{"seq": s, "time": t, "sender": sd, "text": tx}
                     for s, t, sd, tx in self.chat_log if s > since]
+
+
+# 预设人设（用于多AI吵架模式）
+PRESET_PERSONAS = [
+    {"name": "杠精小王", "persona": "你是一个喜欢抬杠的人，别人说什么你都要反驳，说话犀利但不骂人，喜欢用'但是'、'不见得'开头。每次回复不超过30字。"},
+    {"name": "舔狗小李", "persona": "你是一个喜欢附和别人的人，别人说什么你都觉得对，喜欢用'说得对'、'没错'开头，偶尔拍马屁。每次回复不超过30字。"},
+    {"name": "哲学家老张", "persona": "你是一个喜欢讲大道理的哲学家，说话深沉，喜欢引用名言，动不动就上升到人生高度。每次回复不超过30字。"},
+    {"name": "段子手小赵", "persona": "你是一个幽默的段子手，喜欢开玩笑和玩梗，说话搞笑，经常冷幽默。每次回复不超过30字。"},
+    {"name": "暴躁老哥", "persona": "你是一个脾气暴躁的人，说话直接，容易激动，喜欢用感叹号，但不骂人。每次回复不超过30字。"},
+    {"name": "佛系青年", "persona": "你是一个佛系青年，对什么都无所谓，说话淡定，喜欢用'都行'、'随便'、'随缘'。每次回复不超过30字。"},
+    {"name": "学霸小陈", "persona": "你是一个学霸，喜欢科普和纠正别人错误，说话严谨，喜欢用数据和事实说话。每次回复不超过30字。"},
+    {"name": "吃瓜群众", "persona": "你是一个喜欢看热闹的吃瓜群众，喜欢煽风点火，经常说'然后呢'、'继续继续'。每次回复不超过30字。"},
+]
+
+
+class MultiAIBot:
+    """多AI群聊/吵架管理器：多个AI bot进同一个服务器互相对话"""
+
+    def __init__(self):
+        self.groups = {}  # group_id -> {bots: [AIBotSession], topic: str, config: dict}
+        self._seq = 0
+
+    def _next_id(self):
+        self._seq += 1
+        return f"multi_{self._seq}"
+
+    def start_group(self, host, port, bot_count=3, topic="", duration=0,
+                    authme_password=None, ai_config=None, persona_indices=None):
+        """启动一组AI bot进同一个服务器
+        bot_count: 2-8个AI
+        topic: 讨论话题（空=随机聊天）
+        persona_indices: 指定人设索引列表，空=随机选
+        """
+        group_id = self._next_id()
+        base_config = ai_config or {}
+        bots = []
+
+        # 选择人设
+        if persona_indices:
+            selected = [PRESET_PERSONAS[i % len(PRESET_PERSONAS)] for i in persona_indices]
+        else:
+            import random
+            selected = random.sample(PRESET_PERSONAS, min(bot_count, len(PRESET_PERSONAS)))
+
+        for i, persona in enumerate(selected[:bot_count]):
+            cfg = dict(base_config)
+            cfg["persona"] = persona["persona"]
+            if topic:
+                cfg["persona"] += f"\n当前讨论话题：{topic}。请围绕这个话题和其他玩家讨论。"
+            # 每个bot回复冷却错开，避免同时说话
+            cfg["reply_cooldown"] = 3.0 + i * 1.5
+            cfg["reply_enabled"] = True
+            cfg["trigger_keywords"] = []  # 回复所有消息（包括其他AI）
+            cfg["auto_talk_enabled"] = False  # 群聊模式不靠定时发言，靠互相触发
+
+            bot = AIBotSession(
+                host=host, port=port, username=persona["name"],
+                authme_password=authme_password,
+                timeout=20.0, duration=duration,
+                ai_config=cfg,
+            )
+            bot.session_id = f"{group_id}_{i}"
+            bot.start()
+            bots.append(bot)
+            time.sleep(2.0)  # 错开连接，避免服务器限流
+
+        self.groups[group_id] = {
+            "bots": bots,
+            "topic": topic,
+            "host": host,
+            "port": port,
+            "created_at": datetime.now().isoformat(),
+        }
+        return group_id
+
+    def stop_group(self, group_id):
+        if group_id in self.groups:
+            for bot in self.groups[group_id]["bots"]:
+                bot.stop()
+            del self.groups[group_id]
+            return True
+        return False
+
+    def list_groups(self):
+        result = []
+        for gid, g in self.groups.items():
+            bots_status = [b.get_status() for b in g["bots"]]
+            connected = sum(1 for s in bots_status if s["status"] == "connected")
+            result.append({
+                "group_id": gid,
+                "host": g["host"],
+                "port": g["port"],
+                "topic": g["topic"],
+                "bot_count": len(g["bots"]),
+                "connected": connected,
+                "created_at": g["created_at"],
+                "bots": bots_status,
+            })
+        return result
+
+    def get_group_chat(self, group_id, since=0):
+        """合并所有bot的聊天记录"""
+        if group_id not in self.groups:
+            return []
+        all_msgs = []
+        for bot in self.groups[group_id]["bots"]:
+            all_msgs.extend(bot.get_chat(since))
+        all_msgs.sort(key=lambda x: x["seq"])
+        return all_msgs
+
+    def send_to_all(self, group_id, message):
+        """让所有bot同时发消息（用于触发话题）"""
+        if group_id not in self.groups:
+            return False
+        for bot in self.groups[group_id]["bots"]:
+            try:
+                bot.send_message(message)
+                time.sleep(0.5)
+            except Exception:
+                pass
+        return True
+
+
+# 全局单例
+multi_ai_bot = MultiAIBot()
+
