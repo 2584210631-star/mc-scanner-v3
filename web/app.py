@@ -18,6 +18,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import logger
 
+# 关闭 Flask/Werkzeug 默认的 HTTP 请求访问日志（避免轮询刷屏）
+import logging
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
 from storage import db
 from storage import favorites
 from scanner.engine import ScanEngine
