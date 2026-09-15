@@ -975,6 +975,46 @@ tbody tr:last-child td { border-bottom: none; }
     <button onclick="startAiBot()" class="btn-primary">启动AI托管</button>
   </div>
   <div class="panel">
+    <h4>多AI群聊/吵架模式</h4>
+    <p class="hint">一键启动多个AI进同一个服务器，不同人设互相对话/吵架</p>
+    <div class="form-row">
+      <input type="text" id="multiHost" placeholder="服务器地址" style="flex:2">
+      <input type="number" id="multiPort" placeholder="端口" value="25565" style="width:100px">
+      <label style="display:flex;align-items:center;gap:6px">AI数量
+        <select id="multiCount" style="width:60px">
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <input type="text" id="multiTopic" placeholder="讨论话题（如：MC好不好玩），空=随机聊天" style="flex:1">
+      <input type="password" id="multiAuthme" placeholder="AuthMe密码(可选)" style="width:150px">
+    </div>
+    <div class="form-row">
+      <input type="password" id="multiApiKey" placeholder="API Key" style="flex:1">
+      <input type="text" id="multiBaseUrl" placeholder="Base URL" value="https://api.openai.com/v1" style="flex:1">
+      <input type="text" id="multiModel" placeholder="模型" value="gpt-3.5-turbo" style="width:120px">
+    </div>
+    <div id="personaCheckboxes" style="margin:8px 0;display:flex;flex-wrap:wrap;gap:8px"></div>
+    <button onclick="startMultiAi()" class="btn-primary">启动多AI群聊</button>
+  </div>
+  <div class="panel">
+    <h4>多AI群聊组</h4>
+    <div id="multiAiList" class="server-list"><p class="hint">暂无群聊组</p></div>
+  </div>
+  <div class="panel" id="multiAiChatPanel" style="display:none">
+    <h4>群聊记录 <span id="multiAiCurrentId"></span></h4>
+    <div id="multiAiChatLog" style="height:250px;overflow-y:auto;background:#0a0a0a;padding:10px;border-radius:6px;font-family:monospace;font-size:12px"></div>
+    <div class="form-row">
+      <input type="text" id="multiAiMsgInput" placeholder="输入话题让所有AI讨论..." style="flex:1" onkeypress="if(event.key==='Enter')sendMultiAiMsg()">
+      <button onclick="sendMultiAiMsg()">全员发言</button>
+    </div>
+  </div>
+  <div class="panel">
     <h4>运行中的AI Bot</h4>
     <div id="aiBotList" class="server-list"><p class="hint">暂无运行中的Bot</p></div>
   </div>
@@ -2655,6 +2695,110 @@ function stopAiBot(sid) {
     body: JSON.stringify({session_id: sid})
   }).then(r=>r.json()).then(()=>{ loadAiBotList(); });
 }
+
+// ============ 多AI群聊/吵架 ============
+let currentMultiAiId = null;
+let multiAiPollTimer = null;
+
+// 加载人设复选框
+function loadPersonas() {
+  fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
+    const el = document.getElementById('personaCheckboxes');
+    el.innerHTML = d.personas.map((p,i)=>
+      `<label style="display:flex;align-items:center;gap:4px;font-size:12px">
+        <input type="checkbox" class="persona-cb" value="${i}" title="${p.persona}"> ${p.name}
+      </label>`
+    ).join('');
+  });
+}
+loadPersonas();
+
+function startMultiAi() {
+  const host = document.getElementById('multiHost').value.trim();
+  if (!host) { alert('请输入服务器地址'); return; }
+  const checked = Array.from(document.querySelectorAll('.persona-cb:checked')).map(cb=>parseInt(cb.value));
+  fetch('/api/ai_multi/start', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      host, port: document.getElementById('multiPort').value || 25565,
+      bot_count: parseInt(document.getElementById('multiCount').value) || 3,
+      topic: document.getElementById('multiTopic').value,
+      authme_password: document.getElementById('multiAuthme').value || null,
+      persona_indices: checked.length > 0 ? checked : null,
+      ai_config: {
+        api_key: document.getElementById('multiApiKey').value,
+        base_url: document.getElementById('multiBaseUrl').value,
+        model: document.getElementById('multiModel').value,
+      }
+    })
+  }).then(r=>r.json()).then(d=>{
+    if (d.success) { alert('多AI群聊已启动！它们会自动互相对话'); loadMultiAiList(); }
+    else alert('启动失败: ' + d.error);
+  });
+}
+
+function loadMultiAiList() {
+  fetch('/api/ai_multi/list').then(r=>r.json()).then(d=>{
+    const el = document.getElementById('multiAiList');
+    if (!d.groups || d.groups.length===0) { el.innerHTML='<p class="hint">暂无群聊组</p>'; return; }
+    el.innerHTML = d.groups.map(g=>`
+      <div class="server-item">
+        <div><strong>${g.group_id}</strong> @ ${g.host}:${g.port}
+          <span class="badge ${g.connected>0?'badge-online':'badge-offline'}">${g.connected}/${g.bot_count}在线</span>
+          <span class="hint">话题: ${g.topic||'随机'}</span>
+        </div>
+        <div class="hint" style="margin-top:4px">${g.bots.map(b=>`${b.username}(${b.status})`).join(' | ')}</div>
+        <div style="margin-top:6px">
+          <button onclick="viewMultiAiChat('${g.group_id}')">查看群聊</button>
+          <button onclick="stopMultiAi('${g.group_id}')" class="btn-danger">全部停止</button>
+        </div>
+      </div>`).join('');
+  });
+}
+
+function viewMultiAiChat(gid) {
+  currentMultiAiId = gid;
+  document.getElementById('multiAiChatPanel').style.display = 'block';
+  document.getElementById('multiAiCurrentId').textContent = gid;
+  if (multiAiPollTimer) clearInterval(multiAiPollTimer);
+  multiAiPollTimer = setInterval(()=>{ if(currentMultiAiId) fetchMultiAiChat(); }, 2000);
+  fetchMultiAiChat();
+}
+
+function fetchMultiAiChat() {
+  if (!currentMultiAiId) return;
+  fetch(`/api/ai_multi/chat?group_id=${currentMultiAiId}&since=0`).then(r=>r.json()).then(d=>{
+    const el = document.getElementById('multiAiChatLog');
+    el.innerHTML = d.messages.map(m=>`<div>[${m.time}] <strong style="color:#00d992">${m.sender}</strong>: ${m.text}</div>`).join('');
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+function sendMultiAiMsg() {
+  const input = document.getElementById('multiAiMsgInput');
+  const msg = input.value.trim();
+  if (!msg || !currentMultiAiId) return;
+  fetch('/api/ai_multi/send', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({group_id: currentMultiAiId, message: msg})
+  }).then(r=>r.json()).then(d=>{
+    if (d.success) input.value = '';
+    else alert('发送失败');
+  });
+}
+
+function stopMultiAi(gid) {
+  if (!confirm('确定停止整个群聊组？')) return;
+  fetch('/api/ai_multi/stop', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({group_id: gid})
+  }).then(r=>r.json()).then(()=>{ loadMultiAiList(); });
+}
+
+// 切换到AI托管tab时刷新
+document.addEventListener('click', e=>{
+  if (e.target.classList.contains('tab') && e.target.dataset.tab==='aibot') {
+    loadAiBotList();
+    loadMultiAiList();
+  }
+});
 
 // ============ 自动扫描 ============
 let currentAutoScanId = null;
