@@ -1754,7 +1754,7 @@ def ai_multi_send():
 @app.route('/api/ai_multi/personas')
 def ai_multi_personas():
     from core.ai_bot import PRESET_PERSONAS
-    return jsonify({"personas": [{"name": p["name"], "persona": p["persona"]} for p in PRESET_PERSONAS]})
+    return jsonify({"personas": [{"name": p["name"], "label": p.get("label", p["name"]), "persona": p["persona"]} for p in PRESET_PERSONAS]})
 
 
 # ============ 自动扫描警告 ============

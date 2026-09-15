@@ -1101,7 +1101,7 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="form-row">
       <input type="text" id="aiBotHost" placeholder="服务器地址（IP或域名）" style="flex:2">
       <input type="number" id="aiBotPort" placeholder="端口(默认25565)" style="width:120px">
-      <input type="text" id="aiBotName" placeholder="Bot名字" value="AI助手" style="width:100px">
+      <input type="text" id="aiBotName" placeholder="英文名" value="AIBot" style="width:100px">
     </div>
     <div class="form-row">
       <input type="password" id="aiBotAuthme" placeholder="AuthMe密码(可选)" style="flex:1">
@@ -2857,8 +2857,8 @@ function loadPersonas() {
   fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
     const el = document.getElementById('personaCheckboxes');
     el.innerHTML = d.personas.map((p,i)=>
-      `<label style="display:flex;align-items:center;gap:4px;font-size:12px">
-        <input type="checkbox" class="persona-cb" value="${i}" title="${p.persona}"> ${p.name}
+      `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${p.persona}">
+        <input type="checkbox" class="persona-cb" value="${i}"> ${p.label || p.name}
       </label>`
     ).join('');
   });
