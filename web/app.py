@@ -1652,7 +1652,7 @@ def ai_bot_start():
         timeout=float(data.get("timeout", 20.0)),
         duration=float(data.get("duration", 0) or 0),
         protocol_version=data.get("protocol_version"),
-        ai_config=data.get("ai_config", {}),
+        ai_config=ai_cfg,
     )
     session.session_id = session_id
     session.start()
@@ -1717,7 +1717,7 @@ def ai_multi_start():
         topic=data.get("topic", ""),
         duration=float(data.get("duration", 0) or 0),
         authme_password=data.get("authme_password"),
-        ai_config=data.get("ai_config", {}),
+        ai_config=ai_cfg,
         persona_indices=data.get("persona_indices"),
     )
     return jsonify({"success": True, "group_id": group_id})
