@@ -1180,24 +1180,40 @@ tbody tr:last-child td { border-bottom: none; }
 <!-- 自动扫描标签页 -->
 <div id="tab-autoscan" class="hidden">
   <div class="panel">
-    <h3>自动扫描+警告</h3>
-    <p class="hint">定时扫描指定IP段，发现有人的服务器自动发警告/挂观察者</p>
+    <h3>自动扫描任务</h3>
+    <p class="hint">支持6种任务类型，定时自动执行</p>
     <div class="form-row">
-      <input type="text" id="autoTargets" placeholder="目标(逗号分隔，支持CIDR和范围，如 1.2.3.0/24)" style="flex:2">
+      <label style="display:flex;align-items:center;gap:6px">任务类型
+        <select id="autoTaskType" onchange="onTaskTypeChange()" style="width:200px">
+          <option value="scan_warn">扫描+自动警告/观察</option>
+          <option value="monitor_status">服务器状态监控</option>
+          <option value="monitor_players">玩家数监控+阈值警告</option>
+          <option value="scheduled_warn">定时警告指定服务器</option>
+          <option value="discover_new">发现新服务器+自动收藏</option>
+          <option value="ai_hijack">发现有人服自动AI托管</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <input type="text" id="autoTargets" placeholder="目标(逗号分隔，支持IP/CIDR/范围/IP:端口，如 1.2.3.0/24 或 1.2.3.4:25565)" style="flex:2">
       <input type="text" id="autoPorts" placeholder="端口" value="25565" style="width:120px">
     </div>
     <div class="form-row">
       <label style="display:flex;align-items:center;gap:6px">间隔(秒)<input type="number" id="autoInterval" value="300" style="width:80px"></label>
-      <label style="display:flex;align-items:center;gap:6px">最少人数<input type="number" id="autoMinPlayers" value="1" style="width:60px"></label>
+      <label id="minPlayersLabel" style="display:flex;align-items:center;gap:6px">最少人数<input type="number" id="autoMinPlayers" value="1" style="width:60px"></label>
+      <label id="playerThresholdLabel" style="display:none;align-items:center;gap:6px">玩家阈值<input type="number" id="autoPlayerThreshold" value="5" style="width:60px"></label>
       <label style="display:flex;align-items:center;gap:6px">并发<input type="number" id="autoConcurrency" value="200" style="width:80px"></label>
     </div>
-    <div class="form-row">
+    <div class="form-row" id="warnOptionsRow">
       <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="autoWarn" checked> 自动警告</label>
       <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="autoObserve"> 自动观察</label>
       <input type="number" id="autoObserveDuration" value="60" style="width:80px" title="观察时长秒">
     </div>
-    <div class="form-row">
+    <div class="form-row" id="warnMsgRow">
       <input type="text" id="autoWarnMsg" placeholder="警告内容" value="【安全提示】本服务器已被扫描，请确保服务器安全。" style="flex:1">
+    </div>
+    <div class="form-row" id="discoverOptionsRow" style="display:none">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="autoFavorite" checked> 自动加入收藏</label>
     </div>
     <button onclick="addAutoScan()" class="btn-primary">创建任务</button>
   </div>
@@ -2968,22 +2984,74 @@ document.addEventListener('click', e=>{
 let currentAutoScanId = null;
 let autoScanPollTimer = null;
 
+function onTaskTypeChange() {
+  const t = document.getElementById('autoTaskType').value;
+  const minPlayersLabel = document.getElementById('minPlayersLabel');
+  const thresholdLabel = document.getElementById('playerThresholdLabel');
+  const warnRow = document.getElementById('warnOptionsRow');
+  const warnMsgRow = document.getElementById('warnMsgRow');
+  const discoverRow = document.getElementById('discoverOptionsRow');
+
+  // 默认显示
+  minPlayersLabel.style.display = 'flex';
+  thresholdLabel.style.display = 'none';
+  warnRow.style.display = 'flex';
+  warnMsgRow.style.display = 'flex';
+  discoverRow.style.display = 'none';
+
+  if (t === 'monitor_status') {
+    minPlayersLabel.style.display = 'none';
+    warnRow.style.display = 'none';
+    warnMsgRow.style.display = 'none';
+  } else if (t === 'monitor_players') {
+    minPlayersLabel.style.display = 'none';
+    thresholdLabel.style.display = 'flex';
+  } else if (t === 'scheduled_warn') {
+    minPlayersLabel.style.display = 'none';
+    warnRow.style.display = 'none';
+  } else if (t === 'discover_new') {
+    minPlayersLabel.style.display = 'none';
+    warnRow.style.display = 'none';
+    warnMsgRow.style.display = 'none';
+    discoverRow.style.display = 'flex';
+  } else if (t === 'ai_hijack') {
+    warnRow.style.display = 'none';
+    warnMsgRow.style.display = 'none';
+  }
+}
+
 function addAutoScan() {
   const targets = document.getElementById('autoTargets').value.trim();
   if (!targets) { alert('请输入扫描目标'); return; }
+  const taskType = document.getElementById('autoTaskType').value;
+  const payload = {
+    task_type: taskType,
+    targets: targets.split(',').map(s=>s.trim()).filter(Boolean),
+    ports: document.getElementById('autoPorts').value || '25565',
+    interval: parseInt(document.getElementById('autoInterval').value) || 300,
+    concurrency: parseInt(document.getElementById('autoConcurrency').value) || 200,
+    auto_start: true,
+  };
+  if (taskType === 'scan_warn' || taskType === 'ai_hijack') {
+    payload.min_players = parseInt(document.getElementById('autoMinPlayers').value) || 1;
+  }
+  if (taskType === 'monitor_players') {
+    payload.player_threshold = parseInt(document.getElementById('autoPlayerThreshold').value) || 5;
+  }
+  if (taskType === 'scan_warn' || taskType === 'monitor_players') {
+    payload.warn_enabled = document.getElementById('autoWarn').checked;
+    payload.warn_message = document.getElementById('autoWarnMsg').value;
+    payload.observe_enabled = document.getElementById('autoObserve').checked;
+    payload.observe_duration = parseInt(document.getElementById('autoObserveDuration').value) || 60;
+  }
+  if (taskType === 'scheduled_warn') {
+    payload.warn_message = document.getElementById('autoWarnMsg').value;
+  }
+  if (taskType === 'discover_new') {
+    payload.auto_favorite = document.getElementById('autoFavorite').checked;
+  }
   fetch('/api/auto_scan/add', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      targets: targets.split(',').map(s=>s.trim()).filter(Boolean),
-      ports: document.getElementById('autoPorts').value || '25565',
-      interval: parseInt(document.getElementById('autoInterval').value) || 300,
-      min_players: parseInt(document.getElementById('autoMinPlayers').value) || 1,
-      concurrency: parseInt(document.getElementById('autoConcurrency').value) || 200,
-      warn_enabled: document.getElementById('autoWarn').checked,
-      warn_message: document.getElementById('autoWarnMsg').value,
-      observe_enabled: document.getElementById('autoObserve').checked,
-      observe_duration: parseInt(document.getElementById('autoObserveDuration').value) || 60,
-      auto_start: true,
-    })
+    body: JSON.stringify(payload)
   }).then(r=>r.json()).then(d=>{
     if (d.success) { alert('任务已创建并启动'); loadAutoScanList(); }
     else alert('创建失败: ' + d.error);
@@ -2997,8 +3065,9 @@ function loadAutoScanList() {
     el.innerHTML = d.tasks.map(t=>`
       <div class="server-item">
         <div><strong>${t.task_id}</strong>
+          <span class="badge" style="background:#2a1a0a;color:#ffaa00">${t.task_type_name||t.task_type}</span>
           <span class="badge ${t.status==='running'?'badge-online':'badge-offline'}">${t.status}</span>
-          <span class="hint">${t.targets.join(',')} :${t.ports} | 间隔${t.interval}s | 最少${t.min_players}人</span>
+          <span class="hint">${t.targets.join(',')} :${t.ports} | 间隔${t.interval}s</span>
         </div>
         <div class="hint" style="margin-top:4px">运行${t.run_count}次 | 发现${t.total_found}服 | 警告${t.total_warned}服 | 上次:${t.last_run||'未运行'}</div>
         <div style="margin-top:6px">
