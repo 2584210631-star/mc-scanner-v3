@@ -948,6 +948,10 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
         <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
         <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
+        <button class="btn btn-secondary" onclick="exportDb('txt')">导出TXT</button>
+        <button class="btn btn-secondary" onclick="exportDb('csv')">导出CSV</button>
+        <button class="btn btn-secondary" onclick="exportDb('html')">导出HTML</button>
+        <button class="btn btn-secondary" onclick="exportDb('json')">导出JSON</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -2396,6 +2400,14 @@ async function loadDbResults(page) {
     </tr>`;
   }).join('');
   renderPagination('dbPagination', page, data.total, 50, loadDbResults);
+}
+
+function exportDb(fmt) {
+  const auth = document.getElementById('dbFilterAuth').value || '';
+  const modded = document.getElementById('dbFilterModded').value || '';
+  const search = document.getElementById('dbFilterSearch').value || '';
+  const onlyOnline = document.getElementById('dbOnlyOnline') ? (document.getElementById('dbOnlyOnline').checked ? '1' : '0') : '0';
+  window.open(`/api/db/export?format=${fmt}&auth=${encodeURIComponent(auth)}&modded=${encodeURIComponent(modded)}&search=${encodeURIComponent(search)}&only_online=${onlyOnline}`);
 }
 
 // ===== 数据库批量操作 =====
