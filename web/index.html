@@ -1108,7 +1108,10 @@ tbody tr:last-child td { border-bottom: none; }
       <input type="number" id="aiBotDuration" placeholder="时长秒(0=无限)" value="0" style="width:120px">
     </div>
     <div class="form-row">
-      <input type="text" id="aiBotPersona" placeholder="AI人设" value="你是一个友好的MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。" style="flex:1">
+      <select id="aiBotPersonaSelect" onchange="applyPresetPersona()" style="width:150px">
+        <option value="">选择预设人格...</option>
+      </select>
+      <input type="text" id="aiBotPersona" placeholder="自定义人设(可选)" style="flex:1">
     </div>
     <div class="form-row">
       <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="aiBotReply" checked> 自动回复</label>
@@ -2854,18 +2857,41 @@ function stopAiBot(sid) {
 let currentMultiAiId = null;
 let multiAiPollTimer = null;
 
-// 加载人设复选框
+// 加载人设复选框和下拉框
 function loadPersonas() {
   fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
+    // 多AI群聊的复选框
     const el = document.getElementById('personaCheckboxes');
     el.innerHTML = d.personas.map((p,i)=>
       `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${p.persona}">
         <input type="checkbox" class="persona-cb" value="${i}"> ${p.label || p.name}
       </label>`
     ).join('');
+    // 单AI托管的下拉框
+    const sel = document.getElementById('aiBotPersonaSelect');
+    if (sel) {
+      d.personas.forEach((p,i)=>{
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = p.label || p.name;
+        sel.appendChild(opt);
+      });
+    }
   });
 }
 loadPersonas();
+
+// 选择预设人格后填充到文本框
+function applyPresetPersona() {
+  const sel = document.getElementById('aiBotPersonaSelect');
+  const idx = sel.value;
+  if (idx === '') return;
+  fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
+    if (d.personas[idx]) {
+      document.getElementById('aiBotPersona').value = d.personas[idx].persona;
+    }
+  });
+}
 
 function startMultiAi() {
   const host = document.getElementById('multiHost').value.trim();
