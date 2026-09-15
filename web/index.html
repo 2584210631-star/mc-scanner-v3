@@ -902,6 +902,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-danger" onclick="openBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-info" onclick="openBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
+        <button class="btn btn-primary" onclick="openBatchAiModal()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
       </div>
@@ -948,6 +949,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
         <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
         <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
+        <button class="btn btn-primary" onclick="openBatchAiModal('db')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="exportDb('txt')">导出TXT</button>
         <button class="btn btn-secondary" onclick="exportDb('csv')">导出CSV</button>
         <button class="btn btn-secondary" onclick="exportDb('html')">导出HTML</button>
@@ -976,6 +978,7 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn btn-success" onclick="rescanAllFavorites()">全部重查</button>
         <button class="btn btn-danger" onclick="openFavBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-info" onclick="openFavBatchObserverModal()">批量观察选中</button>
+        <button class="btn btn-primary" onclick="openBatchAiModal('fav')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
         <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
         <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
         <button class="btn btn-secondary" onclick="exportFavorites('txt')">导出TXT</button>
@@ -1376,6 +1379,42 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="btn btn-danger" onclick="confirmBatchWarn()">开始警告</button>
     </div>
     <div id="batchWarnResult" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- 批量AI托管弹窗 -->
+<div class="modal-overlay hidden" id="batchAiModal">
+  <div class="modal" style="max-width:600px;">
+    <h3>批量AI托管选中服务器</h3>
+    <div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">
+      已选择 <span id="batchAiCount" style="color:var(--primary);font-weight:600;">0</span> 台服务器，每台启动一个AI Bot
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Bot名称前缀</label><input type="text" id="batchAiName" value="AIBot" style="width:120px"></div>
+      <div class="form-group"><label>人格预设</label>
+        <select id="batchAiPersonaSelect" style="width:150px">
+          <option value="">随机/自定义</option>
+        </select>
+      </div>
+      <div class="form-group"><label>时长(秒,0=无限)</label><input type="number" id="batchAiDuration" value="300" style="width:100px"></div>
+    </div>
+    <div class="form-group"><label>自定义人设（可选，覆盖预设）</label><input type="text" id="batchAiPersona" placeholder="留空则用预设人格"></div>
+    <div class="form-row">
+      <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="batchAiAuthme" placeholder="留空不启用"></div>
+      <div class="form-group"><label>回复冷却(秒)</label><input type="number" id="batchAiCooldown" value="5" style="width:80px"></div>
+      <div class="form-group"><label>并发上限</label><input type="number" id="batchAiWorkers" value="5" min="1" max="20" style="width:80px"></div>
+    </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="batchAiReply" checked> 自动回复</label>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="batchAiAutoTalk"> 定时发言</label>
+      <input type="number" id="batchAiTalkInterval" value="120" style="width:80px" title="发言间隔秒">
+    </div>
+    <p class="hint" style="color:#00d992;font-size:12px;">API Key/模型在「设置」页配置，批量启动会消耗API额度</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeBatchAiModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmBatchAi()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">开始批量托管</button>
+    </div>
+    <div id="batchAiResult" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -2479,6 +2518,122 @@ async function confirmBatchWarn() {
     resultDiv.innerHTML = html;
     window._warnSource = null;
   } catch(e) { resultDiv.innerHTML = '<div style="color:#f56565;">请求失败: ' + e.message + '</div>'; }
+}
+
+// ============ 批量AI托管 ============
+function openBatchAiModal(source) {
+  let selected;
+  if (source === 'fav') selected = getSelectedFavServers();
+  else if (source === 'db') selected = getDbSelectedServers();
+  else selected = getSelectedServers();
+  if (!selected.length) { alert('请先勾选服务器'); return; }
+  window._aiSource = source || 'results';
+  document.getElementById('batchAiCount').textContent = selected.length;
+  document.getElementById('batchAiResult').innerHTML = '';
+  // 加载人格预设
+  fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
+    const sel = document.getElementById('batchAiPersonaSelect');
+    sel.innerHTML = '<option value="">随机/自定义</option>';
+    if (d.personas) d.personas.forEach(p=>{
+      sel.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+    });
+  }).catch(()=>{});
+  document.getElementById('batchAiModal').classList.remove('hidden');
+  animateModalIn(document.getElementById('batchAiModal'));
+}
+function closeBatchAiModal() { document.getElementById('batchAiModal').classList.add('hidden'); }
+
+async function confirmBatchAi() {
+  let selected;
+  if (window._aiSource === 'fav') selected = getSelectedFavServers();
+  else if (window._aiSource === 'db') selected = getDbSelectedServers();
+  else selected = getSelectedServers();
+  const resultDiv = document.getElementById('batchAiResult');
+  const workers = parseInt(document.getElementById('batchAiWorkers').value) || 5;
+  const namePrefix = document.getElementById('batchAiName').value || 'AIBot';
+  const personaSelect = document.getElementById('batchAiPersonaSelect').value;
+  const customPersona = document.getElementById('batchAiPersona').value.trim();
+  const duration = parseInt(document.getElementById('batchAiDuration').value) || 0;
+  const authme = document.getElementById('batchAiAuthme').value || null;
+  const cooldown = parseFloat(document.getElementById('batchAiCooldown').value) || 5;
+  const reply = document.getElementById('batchAiReply').checked;
+  const autoTalk = document.getElementById('batchAiAutoTalk').checked;
+  const talkInterval = parseFloat(document.getElementById('batchAiTalkInterval').value) || 120;
+
+  resultDiv.innerHTML = '<div style="color:var(--text-secondary);">正在启动...</div>';
+
+  // 获取人格列表（用于随机选择）
+  let personas = [];
+  try {
+    const pres = await fetch('/api/ai_multi/personas').then(r=>r.json());
+    if (pres.personas) personas = pres.personas;
+  } catch(e) {}
+
+  let success = 0, fail = 0;
+  const results = [];
+  const semaphore = { active: 0, queue: [] };
+  function runTask(task) {
+    return new Promise((resolve) => {
+      if (semaphore.active < workers) {
+        semaphore.active++;
+        task().then(resolve).finally(() => {
+          semaphore.active--;
+          if (semaphore.queue.length) semaphore.queue.shift()();
+        });
+      } else {
+        semaphore.queue.push(() => {
+          semaphore.active++;
+          task().then(resolve).finally(() => {
+            semaphore.active--;
+            if (semaphore.queue.length) semaphore.queue.shift()();
+          });
+        });
+      }
+    });
+  }
+
+  const tasks = selected.map((srv, i) => runTask(async () => {
+    // 每个人格：如果选了预设就用预设，否则随机
+    let persona = customPersona;
+    if (!persona) {
+      if (personaSelect && personas.find(p=>p.name===personaSelect)) {
+        persona = personas.find(p=>p.name===personaSelect).prompt;
+      } else if (personas.length) {
+        persona = personas[Math.floor(Math.random()*personas.length)].prompt;
+      }
+    }
+    const username = `${namePrefix}_${(i+1).toString().padStart(2,'0')}`;
+    try {
+      const res = await fetch('/api/ai_bot/start', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          host: srv.ip, port: srv.port,
+          username, authme_password: authme, duration,
+          ai_config: {
+            persona, reply_enabled: reply, reply_cooldown: cooldown,
+            trigger_keywords: [], auto_talk_enabled: autoTalk, auto_talk_interval: talkInterval
+          }
+        })
+      });
+      const data = await res.json();
+      if (data.success) { success++; results.push({...srv, username, ok:true}); }
+      else { fail++; results.push({...srv, username, ok:false, error:data.error||'未知'}); }
+    } catch(e) { fail++; results.push({...srv, username, ok:false, error:e.message}); }
+    // 更新进度
+    resultDiv.innerHTML = `<div style="color:var(--text-secondary);margin-bottom:8px;">进度: ${success+fail}/${selected.length} | 成功: ${success} | 失败: ${fail}</div>`;
+  }));
+
+  await Promise.all(tasks);
+
+  let html = `<div style="color:#48bb78;margin-bottom:8px;">完成：成功 ${success} 台，失败 ${fail} 台</div>`;
+  html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+  html += '<tr><th style="text-align:left;padding:4px;">服务器</th><th style="text-align:left;padding:4px;">Bot名</th><th style="text-align:left;padding:4px;">状态</th></tr>';
+  results.forEach(r => {
+    const status = r.ok ? '<span style="color:#48bb78;">已启动</span>' : `<span style="color:#f56565;">失败</span> ${r.error?r.error.substring(0,30):''}`;
+    html += `<tr><td style="padding:4px;border-top:1px solid var(--hairline);">${r.ip}:${r.port}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${r.username}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${status}</td></tr>`;
+  });
+  html += '</table>';
+  resultDiv.innerHTML = html;
 }
 
 async function loadHistory() {
