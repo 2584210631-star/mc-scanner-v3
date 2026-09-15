@@ -31,7 +31,9 @@ from core.protocol import get_version_name
 
 
 def parse_ports_spec(ports_spec):
-    """解析端口规格，支持单个端口、逗号分隔、范围(25565-25575)、混合"""
+    """解析端口规格，支持单个端口、逗号分隔、范围(25565-25575)、混合。空值默认[25565]"""
+    if ports_spec is None or (isinstance(ports_spec, str) and not ports_spec.strip()):
+        return [25565]
     if isinstance(ports_spec, list):
         result = []
         for p in ports_spec:
@@ -524,7 +526,7 @@ observer_lock = threading.Lock()
 def observer_start():
     data = request.json or {}
     host = data.get("host")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     username = data.get("username", "Observer")
     authme = data.get("authme_password") or None
     timeout = float(data.get("timeout", 20.0))
@@ -862,7 +864,7 @@ def export_results():
 def warn_single():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     username = data.get("username", "SecurityBot")
     messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
     authme_password = data.get("authme_password")
@@ -1041,7 +1043,7 @@ def import_masscan_results():
 def bot_command():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     username = data.get("username", "SecurityBot")
     command = data.get("command", "")
     authme_password = data.get("authme_password")
@@ -1324,11 +1326,11 @@ def ai_send():
     """AI生成内容并发送到指定服务器"""
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     username = data.get("username", "StoryBot")
     authme_password = data.get("authme_password")
     if not ip:
-        return jsonify({"success": False, "error": "请指定服务器IP"}), 400
+        return jsonify({"success": False, "error": "请指定服务器地址"}), 400
     # 先生成
     from core.ai_generator import generate_content
     gen = generate_content(
@@ -1366,7 +1368,7 @@ def fav_list():
 def fav_add():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     tags = data.get("tags", [])
     note = data.get("note", "")
     info = data.get("info")
@@ -1380,7 +1382,7 @@ def fav_add():
 def fav_remove():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     ok = favorites.remove_favorite(ip, port)
     if ok:
         _log(f"收藏移除: {ip}:{port}")
@@ -1390,7 +1392,7 @@ def fav_remove():
 def fav_tags():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     tags = data.get("tags", [])
     fav = favorites.update_tags(ip, port, tags)
     return jsonify({"success": fav is not None, "favorite": fav})
@@ -1399,7 +1401,7 @@ def fav_tags():
 def fav_note():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     note = data.get("note", "")
     fav = favorites.update_note(ip, port, note)
     return jsonify({"success": fav is not None, "favorite": fav})
@@ -1419,7 +1421,7 @@ def fav_rescan():
 def fav_rescan_one():
     data = request.json or {}
     ip = data.get("ip")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     info = favorites.rescan_one(ip, port, timeout=float(data.get("timeout", 5.0)))
     return jsonify({"success": True, "info": info})
 
@@ -1565,7 +1567,7 @@ def rcon_execute_api():
 def plugins_capture():
     data = request.json or {}
     host = data.get("host")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     username = data.get("username", "PluginScanner")
     if not host:
         return jsonify({"error": "host 不能为空"}), 400
@@ -1592,7 +1594,7 @@ def plugins_capture():
 def commands_run():
     data = request.json or {}
     host = data.get("host")
-    port = int(data.get("port", 25565))
+    port = int(data.get("port") or 25565)
     username = data.get("username", "CommandBot")
     commands = data.get("commands", [])
     if not host or not commands:

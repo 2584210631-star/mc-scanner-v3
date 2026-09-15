@@ -1543,7 +1543,7 @@ async function startScan() {
   const targets = document.getElementById('scanTargets').value.trim();
   if (!targets) { alert('请输入目标'); return; }
   const mode = document.getElementById('scanMode').value;
-  const ports = document.getElementById('scanPorts').value.trim();
+  const ports = document.getElementById('scanPorts').value.trim() || '25565';
   const res = await fetch('/api/scan/start', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1868,7 +1868,7 @@ async function sendToolCommand() {
   const res = await fetch('/api/bot/command', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      ip, port: parseInt(document.getElementById('toolCmdPort').value),
+      ip, port: parseInt(document.getElementById('toolCmdPort').value) || 25565,
       username: document.getElementById('toolCmdUser').value,
       command: cmd,
       authme_password: document.getElementById('toolCmdAuthme').value || null,
@@ -1896,7 +1896,7 @@ function _aiParams() {
     topic: document.getElementById('aiTopic').value,
     api_key: document.getElementById('aiApiKey').value || null,
     ip: document.getElementById('aiIp').value,
-    port: parseInt(document.getElementById('aiPort').value),
+    port: parseInt(document.getElementById('aiPort').value) || 25565,
     username: document.getElementById('aiUsername').value,
     authme_password: document.getElementById('aiAuthme').value || null,
   };
