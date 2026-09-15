@@ -850,7 +850,7 @@ tbody tr:last-child td { border-bottom: none; }
       <h3>给服务器发命令</h3>
       <p>登录指定服务器并发送聊天命令（如 op、gamemode 等）。仅限授权服务器使用。</p>
       <div class="form-row">
-        <div class="form-group"><label>服务器 IP</label><input type="text" id="toolCmdIp" placeholder="1.2.3.4"></div>
+        <div class="form-group"><label>服务器地址</label><input type="text" id="toolCmdIp" placeholder="1.2.3.4 或 mc.example.com"></div>
         <div class="form-group"><label>端口</label><input type="number" id="toolCmdPort" value="25565"></div>
         <div class="form-group"><label>机器人用户名</label><input type="text" id="toolCmdUser" value="SecurityBot"></div>
       </div>
@@ -890,7 +890,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="form-group" style="flex:2;"><label>主题</label><input type="text" id="aiTopic" placeholder="例如: 李白 / 人工智能的未来"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>服务器 IP</label><input type="text" id="aiIp" placeholder="1.2.3.4"></div>
+        <div class="form-group"><label>服务器地址</label><input type="text" id="aiIp" placeholder="1.2.3.4 或 mc.example.com"></div>
         <div class="form-group"><label>端口</label><input type="number" id="aiPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="aiUsername" value="StoryBot"></div>
         <div class="form-group"><label>AuthMe密码</label><input type="text" id="aiAuthme" placeholder="可选"></div>
@@ -909,7 +909,7 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="panel">
       <h2>观察者终端</h2>
       <div class="form-row">
-        <div class="form-group"><label>服务器 IP</label><input type="text" id="obsIp" placeholder="例如: 103.85.86.51"></div>
+        <div class="form-group"><label>服务器地址</label><input type="text" id="obsIp" placeholder="103.85.86.51 或 play.example.com"></div>
         <div class="form-group"><label>端口</label><input type="number" id="obsPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="obsUser" value="WatchDog"></div>
         <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" placeholder="留空不启用"></div>
@@ -1863,7 +1863,7 @@ async function confirmCmd() {
 async function sendToolCommand() {
   const ip = document.getElementById('toolCmdIp').value.trim();
   const cmd = document.getElementById('toolCmdCmd').value.trim();
-  if (!ip || !cmd) { alert('请填写 IP 和命令'); return; }
+  if (!ip || !cmd) { alert('请填写服务器地址和命令'); return; }
   document.getElementById('toolCmdResult').innerHTML = '发送中...';
   const res = await fetch('/api/bot/command', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -2316,7 +2316,7 @@ function startObserver() {
   const port = parseInt(document.getElementById('obsPort').value) || 25565;
   const username = document.getElementById('obsUser').value.trim() || 'WatchDog';
   const authme = document.getElementById('obsAuthme').value.trim();
-  if (!ip) { alert('请输入服务器IP'); return; }
+  if (!ip) { alert('请输入服务器地址'); return; }
   fetch('/api/observer/start', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({host:ip, port, username, authme_password: authme || undefined})
