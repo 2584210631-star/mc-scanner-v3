@@ -249,7 +249,7 @@ class AIBotSession:
         self.stop_event.set()
         try:
             if self.bot:
-                self.bot.disconnect()
+                self.bot.close()
         except Exception:
             pass
 
