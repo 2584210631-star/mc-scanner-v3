@@ -1122,11 +1122,7 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="form-row">
       <input type="text" id="aiBotKeywords" placeholder="触发关键词(逗号分隔，空=回复所有)" style="flex:1">
     </div>
-    <div class="form-row">
-      <input type="password" id="aiBotApiKey" placeholder="API Key(留空用设置里的)" style="flex:1">
-      <input type="text" id="aiBotBaseUrl" placeholder="Base URL" value="https://api.openai.com/v1" style="flex:1">
-      <input type="text" id="aiBotModel" placeholder="模型" value="gpt-3.5-turbo" style="width:120px">
-    </div>
+    <p class="hint" style="color:#00d992">API Key/地址/模型在「设置」页配置，这里直接用</p>
     <button onclick="startAiBot()" class="btn-primary">启动AI托管</button>
   </div>
   <div class="panel">
@@ -1151,12 +1147,8 @@ tbody tr:last-child td { border-bottom: none; }
       <input type="text" id="multiTopic" placeholder="讨论话题（如：MC好不好玩），空=随机聊天" style="flex:1">
       <input type="password" id="multiAuthme" placeholder="AuthMe密码(可选)" style="width:150px">
     </div>
-    <div class="form-row">
-      <input type="password" id="multiApiKey" placeholder="API Key(留空用设置里的)" style="flex:1">
-      <input type="text" id="multiBaseUrl" placeholder="Base URL" value="https://api.openai.com/v1" style="flex:1">
-      <input type="text" id="multiModel" placeholder="模型" value="gpt-3.5-turbo" style="width:120px">
-    </div>
     <div id="personaCheckboxes" style="margin:8px 0;display:flex;flex-wrap:wrap;gap:8px"></div>
+    <p class="hint" style="color:#00d992">API Key/地址/模型在「设置」页配置，这里直接用</p>
     <button onclick="startMultiAi()" class="btn-primary">启动多AI群聊</button>
   </div>
   <div class="panel">
@@ -2777,13 +2769,10 @@ function startAiBot() {
   fetch('/api/ai_bot/start', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       host, port: document.getElementById('aiBotPort').value || 25565,
-      username: document.getElementById('aiBotName').value || 'AI助手',
+      username: document.getElementById('aiBotName').value || 'AIBot',
       authme_password: document.getElementById('aiBotAuthme').value || null,
       duration: parseInt(document.getElementById('aiBotDuration').value) || 0,
       ai_config: {
-        api_key: document.getElementById('aiBotApiKey').value,
-        base_url: document.getElementById('aiBotBaseUrl').value,
-        model: document.getElementById('aiBotModel').value,
         persona: document.getElementById('aiBotPersona').value,
         reply_enabled: document.getElementById('aiBotReply').checked,
         reply_cooldown: parseFloat(document.getElementById('aiBotCooldown').value) || 5,
@@ -2904,11 +2893,6 @@ function startMultiAi() {
       topic: document.getElementById('multiTopic').value,
       authme_password: document.getElementById('multiAuthme').value || null,
       persona_indices: checked.length > 0 ? checked : null,
-      ai_config: {
-        api_key: document.getElementById('multiApiKey').value,
-        base_url: document.getElementById('multiBaseUrl').value,
-        model: document.getElementById('multiModel').value,
-      }
     })
   }).then(r=>r.json()).then(d=>{
     if (d.success) { alert('多AI群聊已启动！它们会自动互相对话'); loadMultiAiList(); }
