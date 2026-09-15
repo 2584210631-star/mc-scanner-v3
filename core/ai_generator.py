@@ -120,7 +120,12 @@ def generate_content(
         "max_tokens": 1024,
     }
 
-    url = base_url.rstrip("/") + "/chat/completions"
+    base = base_url.rstrip("/")
+    # 兼容用户填了完整地址（已带/chat/completions）的情况，避免路径重复
+    if base.endswith("/chat/completions"):
+        url = base
+    else:
+        url = base + "/chat/completions"
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
