@@ -2222,22 +2222,23 @@ def _health_monitor_loop():
                         # 有人上线（从0到>0）触发推送
                         if prev_online == 0 and online > 0:
                             _log(f"[健康监控] {ip}:{port} 有人上线了! {online}人")
-                            # 尝试邮件推送
+                            # 尝试邮件推送（send_email不传cfg自动读全局配置）
                             try:
                                 from core.notifier import send_email
-                                cfg = _load_config()
-                                _log(f"[健康监控] 邮件配置: smtp_enabled={cfg.get('smtp_enabled')} notify_email={cfg.get('notify_email')}")
-                                if cfg.get('smtp_enabled') and cfg.get('notify_email'):
-                                    ok = send_email(
-                                        cfg['notify_email'],
+                                email_enabled = config.get("email_enabled", False)
+                                email_to = config.get("email_to", "")
+                                _log(f"[健康监控] 邮件配置: enabled={email_enabled} to={email_to}")
+                                if email_enabled and email_to:
+                                    ok, err = send_email(
                                         f"服务器有人上线了! {ip}:{port}",
                                         f"服务器 {ip}:{port} 当前有 {online} 人在线"
                                     )
-                                    _log(f"[健康监控] 邮件推送结果: {ok}")
+                                    _log(f"[健康监控] 邮件推送结果: success={ok} error={err}")
                                 else:
-                                    _log(f"[健康监控] 邮件未推送: smtp_enabled={cfg.get('smtp_enabled')} notify_email={cfg.get('notify_email')}")
+                                    _log(f"[健康监控] 邮件未推送: enabled={email_enabled} to={email_to}")
                             except Exception as e:
-                                _log(f"[健康监控] 邮件推送异常: {e}")
+                                import traceback
+                                _log(f"[健康监控] 邮件推送异常: {e}\n{traceback.format_exc()}")
                     health_monitor["status"][key] = {"online": bool(r), "players": online, "last_check": datetime.now().strftime('%H:%M:%S')}
                 except Exception:
                     pass
