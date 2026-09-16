@@ -476,6 +476,21 @@ class ObserverSession:
                     self.bot.close()
                 except Exception:
                     pass
+            # 会话结束前保存聊天记录到文件，被ban/踢后仍可导出
+            try:
+                os.makedirs('observer_logs', exist_ok=True)
+                safe_id = self.session_id.replace('/', '_').replace('\\', '_')
+                with open(f'observer_logs/{safe_id}.json', 'w', encoding='utf-8') as f:
+                    json.dump({
+                        'session_id': self.session_id,
+                        'host': self.host, 'port': self.port,
+                        'username': self.username,
+                        'status': self.status,
+                        'chat_log': list(self.chat_log),
+                        'saved_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }, f, ensure_ascii=False)
+            except Exception:
+                pass
             # 会话结束后从全局字典移除，防止内存泄漏
             try:
                 with observer_lock:
@@ -640,13 +655,26 @@ def observer_export():
     fmt = request.args.get("format", "txt").lower()
     with observer_lock:
         session = observer_sessions.get(sid)
-    if not session:
-        return jsonify({"error": "会话不存在或已过期"}), 404
-
-    messages = list(session.chat_log)
-    host = session.host
-    port = session.port
-    username = session.username
+    if session:
+        messages = list(session.chat_log)
+        host = session.host
+        port = session.port
+        username = session.username
+    else:
+        # 会话已结束（被ban/踢），从保存的文件读取
+        safe_id = sid.replace('/', '_').replace('\\', '_')
+        log_file = f'observer_logs/{safe_id}.json'
+        if not os.path.exists(log_file):
+            return jsonify({"error": "会话不存在或已过期"}), 404
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            messages = data.get('chat_log', [])
+            host = data.get('host', 'unknown')
+            port = data.get('port', 0)
+            username = data.get('username', 'unknown')
+        except Exception as e:
+            return jsonify({"error": f"读取记录失败: {e}"}), 500
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if fmt == "html":
@@ -1301,6 +1329,33 @@ tr:hover{{background:#161616}}
         lines.append("")
     return Response("\n".join(lines), mimetype="text/plain; charset=utf-8",
                     headers={"Content-Disposition": f"attachment; filename=scan_results_{ts}.txt"})
+
+
+@app.route('/api/server/popularity')
+def server_popularity():
+    """查询服务器人数历史趋势"""
+    ip = request.args.get("ip", "")
+    port = request.args.get("port", type=int)
+    hours = request.args.get("hours", type=int, default=24)
+    if not ip or not port:
+        return jsonify({"error": "ip和port必填"}), 400
+    db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    # 按小时聚合，取每小时最大人数
+    rows = conn.execute(
+        """SELECT strftime('%Y-%m-%d %H:00', recorded_at) as hour,
+                  MAX(players_online) as online, MAX(players_max) as max_p
+           FROM server_popularity
+           WHERE ip=? AND port=? AND recorded_at > datetime('now', ?)
+           GROUP BY hour ORDER BY hour ASC""",
+        (ip, port, f'-{hours} hours')
+    ).fetchall()
+    conn.close()
+    return jsonify({
+        "ip": ip, "port": port, "hours": hours,
+        "data": [{"time": r["hour"], "online": r["online"], "max": r["max_p"]} for r in rows]
+    })
 
 
 @app.route('/api/db/stats')
@@ -2060,6 +2115,124 @@ def ai_multi_personas():
     return jsonify({"personas": [{"name": p["name"], "label": p.get("label", p["name"]), "persona": p["persona"]} for p in PRESET_PERSONAS]})
 
 
+# ============ 服务器健康监控 ============
+health_monitor = {
+    "running": False,
+    "thread": None,
+    "stop_event": threading.Event(),
+    "interval": 300,  # 5分钟
+    "events": [],     # 监控事件日志
+    "last_check": None,
+    "status": {}      # ip:port -> {online, players, last_change}
+}
+
+def _health_monitor_loop():
+    """后台健康监控线程：定期检查收藏的服务器，人数变化时记录"""
+    _log("[健康监控] 启动，间隔5分钟")
+    while not health_monitor["stop_event"].is_set():
+        try:
+            # 从收藏列表获取服务器
+            fav_file = 'favorites.json'
+            targets = []
+            if os.path.exists(fav_file):
+                with open(fav_file, 'r', encoding='utf-8') as f:
+                    favs = json.load(f)
+                targets = [(f['ip'], f['port']) for f in favs.get('servers', [])]
+            # 也从数据库取有人过的服务器
+            try:
+                conn = sqlite3.connect('mcscanner.db')
+                rows = conn.execute("SELECT ip, port FROM servers WHERE players_online > 0 LIMIT 20").fetchall()
+                conn.close()
+                for ip, port in rows:
+                    if (ip, port) not in targets:
+                        targets.append((ip, port))
+            except Exception:
+                pass
+
+            for ip, port in targets:
+                if health_monitor["stop_event"].is_set():
+                    break
+                try:
+                    import asyncio
+                    from scanner.async_probe import async_slp_probe
+                    r = asyncio.run(async_slp_probe(ip, port, timeout=4))
+                    key = f"{ip}:{port}"
+                    online = r.get('players_online', 0) if r else 0
+                    prev = health_monitor["status"].get(key, {})
+                    prev_online = prev.get('players', 0)
+                    # 记录人数趋势
+                    if r and online > 0:
+                        try:
+                            conn = sqlite3.connect('mcscanner.db')
+                            conn.execute(
+                                'INSERT INTO server_popularity (ip, port, players_online, players_max, recorded_at) VALUES (?,?,?,?,?)',
+                                (ip, port, online, r.get('players_max', 0), datetime.now(timezone.utc).isoformat())
+                            )
+                            conn.commit()
+                            conn.close()
+                        except Exception:
+                            pass
+                    # 检测变化
+                    if online != prev_online:
+                        event = {
+                            "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            "ip": ip, "port": port,
+                            "from": prev_online, "to": online,
+                            "type": "up" if online > prev_online else "down"
+                        }
+                        health_monitor["events"].insert(0, event)
+                        health_monitor["events"] = health_monitor["events"][:100]
+                        # 有人上线（从0到>0）触发推送
+                        if prev_online == 0 and online > 0:
+                            _log(f"[健康监控] {ip}:{port} 有人上线了! {online}人")
+                            # 尝试邮件推送
+                            try:
+                                from core.notifier import send_email
+                                cfg = _load_config()
+                                if cfg.get('smtp_enabled') and cfg.get('notify_email'):
+                                    send_email(
+                                        cfg['notify_email'],
+                                        f"服务器有人上线了! {ip}:{port}",
+                                        f"服务器 {ip}:{port} 当前有 {online} 人在线"
+                                    )
+                            except Exception:
+                                pass
+                    health_monitor["status"][key] = {"online": bool(r), "players": online, "last_check": datetime.now().strftime('%H:%M:%S')}
+                except Exception:
+                    pass
+                time.sleep(0.5)
+            health_monitor["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        except Exception as e:
+            _log(f"[健康监控] 错误: {e}")
+        # 等待间隔，可被中断
+        health_monitor["stop_event"].wait(health_monitor["interval"])
+
+@app.route('/api/health/status')
+def health_status():
+    return jsonify({
+        "running": health_monitor["running"],
+        "interval": health_monitor["interval"],
+        "last_check": health_monitor["last_check"],
+        "monitored": len(health_monitor["status"]),
+        "online_servers": sum(1 for s in health_monitor["status"].values() if s.get("online")),
+        "events": health_monitor["events"][:30],
+        "status": health_monitor["status"]
+    })
+
+@app.route('/api/health/toggle', methods=['POST'])
+def health_toggle():
+    if health_monitor["running"]:
+        health_monitor["stop_event"].set()
+        health_monitor["running"] = False
+        return jsonify({"success": True, "running": False})
+    else:
+        health_monitor["stop_event"].clear()
+        health_monitor["thread"] = threading.Thread(target=_health_monitor_loop, daemon=True)
+        health_monitor["thread"].start()
+        health_monitor["running"] = True
+        return jsonify({"success": True, "running": True})
+
+
 # ============ 自动扫描警告 ============
 @app.route('/api/auto_scan/tasks')
 def auto_scan_tasks():
@@ -2133,6 +2306,12 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
         logger.warning(f"[!] 代理初始化失败: {e}")
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
     logger.info(f"[*] 数据库: {db_path}")
+    # 启动健康监控
+    if not health_monitor["running"]:
+        health_monitor["stop_event"].clear()
+        health_monitor["thread"] = threading.Thread(target=_health_monitor_loop, daemon=True)
+        health_monitor["thread"].start()
+        health_monitor["running"] = True
     # 安全警告：绑定公网且未设置token
     if host in ("0.0.0.0", "::") and not _get_web_token():
         logger.warning("=" * 60)

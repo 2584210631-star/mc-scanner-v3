@@ -115,6 +115,18 @@ def upsert_many(db_path: str, records: list) -> int:
     conn = get_conn(db_path)
     rows = [_record_to_tuple(r) for r in records]
     conn.executemany(UPSERT_SQL, rows)
+    # 记录人数趋势
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        pop_rows = [(r.get('ip'), r.get('port'), r.get('players_online', 0), r.get('players_max', 0), now)
+                    for r in records if r.get('players_online', 0) > 0]
+        if pop_rows:
+            conn.executemany(
+                'INSERT INTO server_popularity (ip, port, players_online, players_max, recorded_at) VALUES (?,?,?,?,?)',
+                pop_rows
+            )
+    except Exception:
+        pass
     conn.commit()
     return len(rows)
 
