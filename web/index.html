@@ -2234,7 +2234,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (mob) mob.classList.add('active');
     if (this.dataset.tab === 'results') loadResults(1);
     if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
-    if (this.dataset.tab === 'favorites') loadFavorites();
+    if (this.dataset.tab === 'favorites') { loadFavorites(); startFavRealtime(); } else { stopFavRealtime(); }
     if (this.dataset.tab === 'history') loadHistory();
     if (this.dataset.tab === 'tools') checkMasscan();
     if (this.dataset.tab === 'aibot') loadAiBotList();
@@ -3224,6 +3224,47 @@ document.addEventListener('click', e=>{
   }
 });
 
+// 收藏页实时状态
+let favRealtimeData = {};
+let favRealtimeTimer = null;
+
+async function refreshFavoritesRealtime() {
+  try {
+    const res = await fetch('/api/favorites/realtime');
+    const data = await res.json();
+    favRealtimeData = {};
+    data.servers.forEach(s => { favRealtimeData[s.ip + ':' + s.port] = s; });
+    // 更新表格中的人数列
+    document.querySelectorAll('#favoritesBody tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds.length < 5) return;
+      const addrTd = tds[1];
+      const addr = addrTd.textContent.trim();
+      const rt = favRealtimeData[addr];
+      if (rt) {
+        const playersTd = tds[4];
+        if (rt.online) {
+          const delta = rt.players - rt.prev_players;
+          const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
+          playersTd.innerHTML = `<span style="color:var(--green);">${rt.players}人</span>${deltaStr}`;
+          playersTd.title = `进${rt.joined}人 走${rt.left}人\n当前: ${(rt.player_names||[]).join(', ')}`;
+        } else {
+          playersTd.innerHTML = '<span style="color:var(--red);">离线</span>';
+        }
+      }
+    });
+  } catch(e) {}
+}
+
+function startFavRealtime() {
+  stopFavRealtime();
+  refreshFavoritesRealtime();
+  favRealtimeTimer = setInterval(refreshFavoritesRealtime, 30000); // 30秒刷新
+}
+function stopFavRealtime() {
+  if (favRealtimeTimer) { clearInterval(favRealtimeTimer); favRealtimeTimer = null; }
+}
+
 async function loadFavorites() {
   const tag = document.getElementById('favFilterTag').value;
   const search = document.getElementById('favSearch').value;
@@ -3253,16 +3294,28 @@ async function loadFavorites() {
     const stateColor = state === 'up' ? 'var(--green)' : (state === 'offline' ? 'var(--red)' : 'var(--mute)');
     const ip = escapeHtml(f.ip);
     const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
+    // 优先用实时监控数据
+    const rt = favRealtimeData[ip + ':' + f.port];
+    let playersHtml;
+    if (rt && rt.online) {
+      const delta = rt.players - rt.prev_players;
+      const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
+      playersHtml = `<span style="color:var(--green);">${rt.players}人</span>${deltaStr}`;
+    } else if (rt && !rt.online) {
+      playersHtml = '<span style="color:var(--red);">离线</span>';
+    } else {
+      playersHtml = state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-');
+    }
     return `<tr>
       <td><input type="checkbox" class="fav-server-check" data-ip="${ip}" data-port="${f.port}"></td>
       <td data-label="地址">${ip}:${f.port}</td>
       <td data-label="版本">${escapeHtml(info.version || '-')}</td>
       <td data-label="核心"><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
-      <td data-label="人数" style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
+      <td data-label="人数" style="color:${stateColor};">${playersHtml}</td>
       <td data-label="认证"><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
       <td data-label="标签">${tags || '-'}</td>
       <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
-      <td data-label="检查" style="font-size:11px;color:var(--mute);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
+      <td data-label="检查" style="font-size:11px;color:var(--mute);">${rt && rt.last_check ? rt.last_check : (f.last_check ? new Date(f.last_check).toLocaleString() : '-')}</td>
       <td data-label="操作"><div class="actions">
         <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
@@ -3274,6 +3327,8 @@ async function loadFavorites() {
       </div></td>
     </tr>`;
   }).join('');
+  // 加载后立即刷新一次实时状态
+  refreshFavoritesRealtime();
 }
 function toggleSelectAllFav(cb) {
   document.querySelectorAll('.fav-server-check').forEach(c => c.checked = cb.checked);
