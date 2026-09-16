@@ -1,9 +1,9 @@
 <div align="center">
 
-# MC Scanner v3.3.4
+# MC Scanner v3.4.0
 ### Minecraft 服务器扫描工具
 
-Python 3.8+ · 协议 340+ · Web 面板 · 离线检测 · 观察者模式
+Python 3.8+ · 协议 340+ · Web 面板 · 离线检测 · 观察者模式 · AI托管 · 多AI吵架
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -28,6 +28,7 @@ MC Scanner 是一个 Minecraft 服务器扫描与探测工具，支持端口扫�
 - 模组列表提取（Forge / NeoForge）
 - 协议指纹识别（被动 + 主动）
 - masscan 集成（可选，有则自动使用）
+- 自动扫描任务：定时扫描指定IP段，发现新服自动记录
 
 ### 机器人与警告
 - 登录服务器发送自定义消息
@@ -35,21 +36,56 @@ MC Scanner 是一个 Minecraft 服务器扫描与探测工具，支持端口扫�
 - 多版本聊天包适配（1.12.2 ~ 1.21.11+）
 - 多机器人并发警告（单台最多 50 个）
 
+### AI 托管 Bot
+- AI 驱动的聊天机器人，自动回复服务器玩家消息
+- 支持 DeepSeek / OpenAI / 通义千问等兼容 API
+- 16 种预设人格（毒舌、阴阳怪气、凡尔赛、键盘侠等）
+- AI 人格可视化编辑器（滑块调节性格、口癖、毒舌程度）
+- 聊天记忆功能（最近20条上下文）
+- 回复冷却可配置（设置页调节，默认2秒，填0关闭）
+- 主动发言模式，自动搭话挑衅
+
+### 多 AI 群聊吵架
+- 2-8 个 AI 同时进服互相对骂/讨论
+- 每个 AI 独立人格，自动引发争论
+- 疯狂吵架模式，低冷却高频互喷
+- 支持自定义话题
+
+### AI 助手浮窗
+- 右下角 🤖 悬浮按钮，自然语言对话控制
+- Agent 模式：AI 理解意图 → 调用工具 → 自然语言总结
+- 支持指令：扫描、停止、查进度、看结果、有人的服、数据库统计、健康监控、收藏、AI托管、多AI吵架、观察者
+- 无 API Key 时自动降级为关键词匹配
+
 ### 观察者模式
 - 以观察者身份挂入服务器
 - 实时捕获聊天消息和玩家进出
 - Web 面板终端式展示，可切换会话
 - 支持同时挂入多台服务器
 - 可从观察者会话直接发送消息
+- 聊天记录导出 TXT / HTML（被ban/踢后仍可下载，自动保存历史）
+
+### 服务器健康监控
+- 后台定时检查收藏的服务器（默认5分钟）
+- 人数变化实时记录：进了多少、走了多少、新增玩家名字、离开玩家名字
+- 邮件推送：一轮检查汇总一封邮件，每服显示人数变化和玩家列表
+- 人数历史曲线：记录每个服的人数变化趋势
 
 ### Web 控制面板
-- 浏览器可视化操作
+- 浏览器可视化操作，移动端适配（底部导航）
 - 实时扫描进度和日志
 - 结果筛选 + 搜索 + 版本分布图
-- 扫描结果勾选多服务器：批量警告 / 多机器人警告 / 批量观察
-- 收藏管理（标签、备注、导入导出、全部重查）
-- SQLite 数据库持久化，历史记录查询
+- 扫描结果勾选多服务器：批量警告 / 多机器人警告 / 批量观察 / 批量AI托管
+- 收藏管理（标签、备注、导入导出、全部重查、实时人数显示）
+- 收藏页实时显示当前在线人数 + 变化量，30秒自动刷新
+- SQLite 数据库持久化，历史记录查询，数据库导出
 - 玩家历史追踪
+- 人数趋势折线图
+
+### 邮件通知
+- SMTP 邮件推送（支持163/QQ/Gmail等）
+- 扫描完成报告、健康监控人数变化告警
+- 邮件包含服务器列表、在线人数、玩家名称
 
 ### 其他
 - 智能重扫队列（在线服高频、离线服低频）
@@ -142,9 +178,23 @@ python cli.py distributed shard 1.0.0.0/8 --shards 4
   "web_token": "",
   "warn_bot_max": 50,
   "discord_webhook": "",
-  "rescan_enabled": true
+  "rescan_enabled": true,
+  "ai_api_key": "",
+  "ai_base_url": "https://api.deepseek.com/v1",
+  "ai_model": "deepseek-chat",
+  "ai_reply_cooldown": 2.0,
+  "email_enabled": false,
+  "email_to": "",
+  "email_smtp_host": "smtp.163.com",
+  "email_smtp_port": 465,
+  "email_smtp_ssl": true,
+  "email_username": "",
+  "email_password": "",
+  "email_from": ""
 }
 ```
+
+> AI 配置和邮件配置也可以在 Web 面板的设置页里填写保存，不用手动改文件。
 
 ---
 
@@ -194,6 +244,10 @@ mc-scanner-v3/
 │   ├── packets_auto.py # 自动生成协议表（从 minecraft-data）
 │   ├── probe.py        # SLP 探测 + 认证检测
 │   ├── bot.py          # 机器人（登录/发消息/AuthMe）
+│   ├── ai_bot.py       # AI托管Bot + 多AI群聊
+│   ├── ai_generator.py # AI API 调用封装
+│   ├── auto_scanner.py # 自动扫描任务
+│   ├── notifier.py     # 邮件通知
 │   ├── fingerprint.py  # 协议指纹识别
 │   └── protocols/      # 按版本模块化的协议处理器
 │       ├── base.py     # 基类接口
@@ -205,6 +259,7 @@ mc-scanner-v3/
 │       └── v774.py     # 1.21.11+（继承v766）
 ├── scanner/            # 扫描引擎
 │   ├── engine.py       # 综合扫描引擎
+│   ├── async_probe.py  # 异步SLP探测
 │   ├── portscan.py     # 端口扫描
 │   ├── masscan.py      # masscan 集成
 │   ├── random_scan.py  # 随机扫描
@@ -214,8 +269,9 @@ mc-scanner-v3/
 │   ├── favorites.py    # 收藏管理
 │   └── player_history.py
 ├── web/
-│   ├── app.py          # Flask 后端
-│   └── index.html      # 前端
+│   ├── app.py          # Flask 后端（含健康监控、AI助手、邮件推送）
+│   └── index.html      # 前端（单文件，移动端适配）
+├── observer_logs/      # 观察者聊天记录自动保存
 ├── tools/
 │   └── gen_packets.py  # 协议表生成
 └── tests/              # 单元测试
