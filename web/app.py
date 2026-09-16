@@ -2460,7 +2460,8 @@ def _handle_assistant_command(msg):
 
     # 解析AI返回的JSON
     tool_call = _parse_tool_call(result.get("text", ""))
-    if not tool_call:
+    if not tool_call or not isinstance(tool_call, dict):
+        # 解析失败，直接返回AI原文
         return result.get("text", "没听懂")
 
     tool = tool_call.get("tool", "reply")
@@ -2491,14 +2492,30 @@ def _parse_tool_call(text):
     import re, json
     # 尝试直接解析
     try:
-        return json.loads(text.strip())
+        obj = json.loads(text.strip())
+        if isinstance(obj, list) and obj:
+            return obj[0]
+        if isinstance(obj, dict):
+            return obj
     except Exception:
         pass
     # 提取JSON块
     m = re.search(r'\{.*\}', text, re.DOTALL)
     if m:
         try:
-            return json.loads(m.group())
+            obj = json.loads(m.group())
+            if isinstance(obj, list) and obj:
+                return obj[0]
+            return obj
+        except Exception:
+            pass
+    # 提取JSON数组
+    m = re.search(r'\[.*\]', text, re.DOTALL)
+    if m:
+        try:
+            arr = json.loads(m.group())
+            if isinstance(arr, list) and arr:
+                return arr[0]
         except Exception:
             pass
     return None
