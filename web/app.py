@@ -2152,9 +2152,11 @@ health_monitor = {
 }
 
 def _health_monitor_loop():
-    """后台健康监控线程：定期检查收藏的服务器，人数变化时记录"""
+    """后台健康监控线程：定期检查收藏的服务器，人数变化时记录，一轮汇总发一封邮件"""
     _log("[健康监控] 启动，间隔5分钟")
     while not health_monitor["stop_event"].is_set():
+        # 本轮收集到的上线服务器（用于汇总邮件）
+        new_online_servers = []  # [{ip, port, players, player_names, new_players}]
         try:
             # 从收藏列表获取服务器
             targets = []
@@ -2197,6 +2199,12 @@ def _health_monitor_loop():
                     online = r.get('online', 0) if r else 0
                     prev = health_monitor["status"].get(key, {})
                     prev_online = prev.get('players', 0)
+                    # 获取玩家列表
+                    player_names = []
+                    if r:
+                        sample = r.get('sample', [])
+                        if isinstance(sample, list):
+                            player_names = [p.get('name', '') for p in sample if isinstance(p, dict) and p.get('name')]
                     # 记录人数趋势
                     if r and online > 0:
                         try:
@@ -2219,31 +2227,57 @@ def _health_monitor_loop():
                         }
                         health_monitor["events"].insert(0, event)
                         health_monitor["events"] = health_monitor["events"][:100]
-                        # 有人上线（从0到>0）触发推送
+                        # 有人上线（从0到>0）收集起来，一轮结束后汇总发邮件
                         if prev_online == 0 and online > 0:
                             _log(f"[健康监控] {ip}:{port} 有人上线了! {online}人")
-                            # 尝试邮件推送（send_email不传cfg自动读全局配置）
-                            try:
-                                from core.notifier import send_email
-                                email_enabled = config.get("email_enabled", False)
-                                email_to = config.get("email_to", "")
-                                _log(f"[健康监控] 邮件配置: enabled={email_enabled} to={email_to}")
-                                if email_enabled and email_to:
-                                    ok, err = send_email(
-                                        f"服务器有人上线了! {ip}:{port}",
-                                        f"服务器 {ip}:{port} 当前有 {online} 人在线"
-                                    )
-                                    _log(f"[健康监控] 邮件推送结果: success={ok} error={err}")
-                                else:
-                                    _log(f"[健康监控] 邮件未推送: enabled={email_enabled} to={email_to}")
-                            except Exception as e:
-                                import traceback
-                                _log(f"[健康监控] 邮件推送异常: {e}\n{traceback.format_exc()}")
+                            # 对比新增玩家
+                            prev_players = set(health_monitor.get("last_players", {}).get(key, []))
+                            curr_players = set(player_names)
+                            new_players = list(curr_players - prev_players)
+                            new_online_servers.append({
+                                "ip": ip, "port": port,
+                                "players": online,
+                                "player_names": player_names,
+                                "new_players": new_players,
+                            })
+                    # 更新上次玩家列表
+                    if "last_players" not in health_monitor:
+                        health_monitor["last_players"] = {}
+                    health_monitor["last_players"][key] = player_names
                     health_monitor["status"][key] = {"online": bool(r), "players": online, "last_check": datetime.now().strftime('%H:%M:%S')}
                 except Exception:
                     pass
                 time.sleep(0.5)
             health_monitor["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # 一轮检查结束，汇总发送一封邮件
+            if new_online_servers:
+                try:
+                    from core.notifier import send_email
+                    email_enabled = config.get("email_enabled", False)
+                    email_to = config.get("email_to", "")
+                    if email_enabled and email_to:
+                        # 构建邮件内容
+                        lines = [f"<h2>服务器上线通知（共{len(new_online_servers)}个）</h2>"]
+                        for s in new_online_servers:
+                            addr = f"{s['ip']}:{s['port']}"
+                            lines.append(f"<p><b>{addr}</b> - {s['players']}人在线</p>")
+                            if s['player_names']:
+                                lines.append(f"<p style='margin-left:20px;color:#666;'>全部玩家: {', '.join(s['player_names'])}</p>")
+                            if s['new_players']:
+                                lines.append(f"<p style='margin-left:20px;color:#e94560;'>新增玩家: {', '.join(s['new_players'])}</p>")
+                            lines.append("<hr style='border:none;border-top:1px solid #eee;'>")
+                        body = "\n".join(lines)
+                        ok, err = send_email(
+                            f"[MC监控] {len(new_online_servers)}个服务器有人上线了",
+                            body, html=True
+                        )
+                        _log(f"[健康监控] 汇总邮件推送: {len(new_online_servers)}个服, success={ok} error={err}")
+                    else:
+                        _log(f"[健康监控] 邮件未推送: enabled={email_enabled} to={email_to}")
+                except Exception as e:
+                    import traceback
+                    _log(f"[健康监控] 汇总邮件异常: {e}\n{traceback.format_exc()}")
         except Exception as e:
             _log(f"[健康监控] 错误: {e}")
         # 等待间隔，可被中断
