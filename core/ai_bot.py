@@ -131,7 +131,22 @@ class AIBotSession:
 
         def _reply_worker():
             try:
-                prompt = f"{self.persona}\n玩家[{sender}]说：{text}\n请回复："
+                # 构建带记忆的prompt：最近20条聊天记录作为上下文
+                history_text = ""
+                try:
+                    recent = list(self.chat_log)[-20:]
+                    if len(recent) > 1:
+                        history_lines = []
+                        for seq, ts, s, t in recent[:-1]:  # 排除当前这条
+                            history_lines.append(f"[{s}] {t}")
+                        history_text = "\n".join(history_lines)
+                except Exception:
+                    pass
+
+                if history_text:
+                    prompt = f"{self.persona}\n\n【最近聊天记录】\n{history_text}\n\n玩家[{sender}]说：{text}\n请结合上下文回复："
+                else:
+                    prompt = f"{self.persona}\n玩家[{sender}]说：{text}\n请回复："
                 _acquire_api_slot()
                 try:
                     result = generate_content(
@@ -172,11 +187,21 @@ class AIBotSession:
 
         def _talk_worker():
             try:
+                # 构建记忆上下文
+                history_text = ""
+                try:
+                    recent = list(self.chat_log)[-15:]
+                    if recent:
+                        history_lines = [f"[{s}] {t}" for seq, ts, s, t in recent]
+                        history_text = "\n".join(history_lines)
+                except Exception:
+                    pass
                 _acquire_api_slot()
                 try:
                     if self.topic:
                         # 有话题时，围绕话题主动发言挑衅
-                        prompt = f"{self.persona}\n当前讨论话题：{self.topic}\n请主动发表一句关于这个话题的观点，挑衅其他玩家参与讨论。"
+                        ctx = f"\n\n【最近聊天记录】\n{history_text}" if history_text else ""
+                        prompt = f"{self.persona}{ctx}\n当前讨论话题：{self.topic}\n请结合上下文主动发表一句关于这个话题的观点，挑衅其他玩家参与讨论。"
                         result = generate_content(
                             topic=self.topic,
                             preset="custom",
@@ -186,12 +211,15 @@ class AIBotSession:
                             custom_prompt=prompt,
                         )
                     else:
+                        ctx = f"\n\n【最近聊天记录】\n{history_text}" if history_text else ""
+                        prompt = f"{self.persona}{ctx}\n请结合当前聊天氛围，主动说一句话挑起话题。"
                         result = generate_content(
                             topic="随机话题",
-                            preset=self.auto_talk_preset,
+                            preset="custom",
                             api_key=self.api_key,
                             base_url=self.base_url,
                             model=self.model,
+                            custom_prompt=prompt,
                         )
                 finally:
                     _release_api_slot()

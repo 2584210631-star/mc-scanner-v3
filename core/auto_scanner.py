@@ -232,15 +232,16 @@ class AutoScanner:
                     try:
                         info = await async_slp_probe(ip, port, timeout=3)
                         if info and info.get('state') == 'up':
-                            pl = info.get('players', {})
-                            online = pl.get('online', 0) if isinstance(pl, dict) else 0
                             return {
                                 'ip': ip, 'port': port,
-                                'version': info.get('version', {}).get('name', '?'),
-                                'players': online,
-                                'max': pl.get('max', 0) if isinstance(pl, dict) else 0,
-                                'motd': str(info.get('description', ''))[:50],
-                                'proto': info.get('protocol', {}).get('version', 0) if isinstance(info.get('protocol'), dict) else info.get('protocol', 0),
+                                'version': info.get('version', '?'),
+                                'players': info.get('online', 0),
+                                'max': info.get('max', 0),
+                                'motd': str(info.get('motd', ''))[:50],
+                                'proto': info.get('proto', 0),
+                                'core_type': info.get('core_type', 'unknown'),
+                                'favicon': info.get('favicon', ''),
+                                'ping_ms': info.get('ping_ms', 0),
                             }
                     except Exception:
                         pass
