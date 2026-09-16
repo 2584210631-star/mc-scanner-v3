@@ -128,6 +128,8 @@ input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px
 .btn-info:hover { background: rgba(0,217,146,0.08); border-color: var(--primary); }
 .btn-secondary { background: var(--canvas-soft); color: var(--body); border-color: var(--hairline); }
 .btn-secondary:hover { color: var(--ink); background: var(--canvas-2); border-color: var(--faint); }
+.btn-violet { background: var(--canvas); color: var(--violet); border-color: rgba(167,139,250,0.3); }
+.btn-violet:hover { background: rgba(167,139,250,0.08); border-color: var(--violet); }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
 /* ===== Progress ===== */
 .progress-bar { background: var(--canvas-soft); border-radius: var(--radius-sm); height: 24px; overflow: hidden; margin: 12px 0; border: 1px solid var(--hairline); position: relative; }
@@ -1242,7 +1244,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group"><label>服务器地址</label><input type="text" id="obsIp" placeholder="103.85.86.51 或 play.example.com"></div>
         <div class="form-group"><label>端口</label><input type="number" id="obsPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="obsUser" value="WatchDog"></div>
-        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" placeholder="留空不启用"></div>
+        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" value="WatchDog123" placeholder="留空不启用"></div>
         <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" onclick="startObserver()">挂入观察者</button></div>
       </div>
     </div>
@@ -3005,6 +3007,7 @@ async function loadFavorites() {
         <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
         <button class="btn btn-info" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
+        <button class="btn btn-violet" onclick="quickAiBot('${ip}',${f.port})" title="AI托管">🤖</button>
         <button class="btn btn-warning" onclick="editFavTags('${ip}',${f.port})" title="标签">🏷</button>
         <button class="btn btn-warning" onclick="editFavNote('${ip}',${f.port})" title="备注">✎</button>
         <button class="btn btn-danger" onclick="removeFavorite('${ip}',${f.port})" title="删除">✕</button>
@@ -3163,8 +3166,21 @@ function quickObserver(ip, port) {
   // 自动填到观察者表单并启动
   document.getElementById('obsIp').value = ip;
   document.getElementById('obsPort').value = port;
+  if (!document.getElementById('obsAuthme').value) {
+    document.getElementById('obsAuthme').value = 'WatchDog123';
+  }
   document.querySelector('.tab[data-tab="observer"]').click();
   setTimeout(() => startObserver(), 300);
+}
+
+function quickAiBot(ip, port) {
+  // 跳转到AI托管页并预填
+  document.getElementById('aiBotHost').value = ip;
+  document.getElementById('aiBotPort').value = port;
+  if (!document.getElementById('aiBotAuthme').value) {
+    document.getElementById('aiBotAuthme').value = 'AIBot123456';
+  }
+  document.querySelector('.tab[data-tab="aibot"]').click();
 }
 
 function openBatchObserverModal() {
