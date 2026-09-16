@@ -267,6 +267,9 @@ class AIBotSession:
             with self.lock:
                 self.status = "error"
                 self.error = str(e)[:200]
+            print(f"[AI Bot {self.username}] 连接/运行失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True)
