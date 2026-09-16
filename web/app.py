@@ -2364,6 +2364,216 @@ def auto_scan_logs():
     return jsonify({"logs": auto_scanner.get_logs(tid)})
 
 
+# ============ AI助手浮窗 ============
+@app.route('/api/assistant/chat', methods=['POST'])
+def assistant_chat():
+    """AI助手：自然语言指令控制扫描器"""
+    data = request.json or {}
+    msg = (data.get("message", "") or "").strip()
+    if not msg:
+        return jsonify({"reply": "你说啥？"})
+
+    reply = _handle_assistant_command(msg)
+    return jsonify({"reply": reply})
+
+
+def _handle_assistant_command(msg):
+    """解析用户指令并执行，返回自然语言回复"""
+    low = msg.lower()
+    import re
+
+    # 帮助
+    if any(k in msg for k in ["帮助", "能干嘛", "会什么", "怎么用", "help"]):
+        return """我能帮你干这些：
+📡 扫描：说"扫1.2.3.4"或"扫1.2.3.4端口25565,25566"
+⏹ 停止：说"停"或"停止扫描"
+📊 进度：说"扫得怎么样"或"进度"
+📋 结果：说"结果"或"扫到什么了"
+👥 有人的服：说"有人的服务器"或"哪些服有人"
+🗄 数据库：说"数据库统计"或"多少个服"
+💚 健康监控：说"监控状态"
+⭐ 收藏：说"收藏列表"
+🤖 AI托管：说"托管1.2.3.4:25565"
+直接说就行，不用记命令"""
+
+    # 停止扫描
+    if any(k in msg for k in ["停止", "停下", "别扫了", "停"]) and "扫描" in msg or low in ["停", "stop"]:
+        try:
+            if scan_state["thread"] and scan_state["thread"].is_alive():
+                scan_state["stop_event"].set()
+                return "好，已停止扫描"
+            return "没在扫啊"
+        except Exception as e:
+            return f"停止失败: {e}"
+
+    # 扫描状态
+    if any(k in msg for k in ["进度", "怎么样", "状态", "扫完没"]):
+        try:
+            st = scan_state
+            total = st.get("total", 0)
+            done = st.get("done", 0)
+            found = st.get("found", 0)
+            pct = (done / total * 100) if total else 0
+            if st.get("running"):
+                return f"扫描中... {done}/{total} ({pct:.1f}%)，已发现 {found} 个MC服"
+            elif done > 0:
+                return f"扫描完成！共扫 {total} 个目标，发现 {found} 个MC服"
+            else:
+                return '没在扫描，说"扫IP"开始'
+        except Exception as e:
+            return f"查询失败: {e}"
+
+    # 扫描结果
+    if any(k in msg for k in ["结果", "扫到什么", "有哪些服", "发现了"]):
+        try:
+            results = scan_state.get("results", [])
+            if not results:
+                return "还没结果呢，先去扫"
+            lines = [f"共发现 {len(results)} 个MC服："]
+            for r in results[:15]:
+                players = r.get('players_online', 0)
+                ver = r.get('version', '')[:20]
+                lines.append(f"  {r['ip']}:{r['port']} | {players}人 | {ver}")
+            if len(results) > 15:
+                lines.append(f"  ...还有 {len(results)-15} 个，去结果页看")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"查询失败: {e}"
+
+    # 有人的服务器
+    if any(k in msg for k in ["有人", "活人", "哪些服有玩家", "玩家多的"]):
+        try:
+            conn = sqlite3.connect('mcscanner.db')
+            rows = conn.execute(
+                "SELECT ip, port, players_online, version FROM servers WHERE players_online > 0 ORDER BY players_online DESC LIMIT 15"
+            ).fetchall()
+            conn.close()
+            if not rows:
+                return "数据库里没人在线的服务器"
+            lines = [f"找到 {len(rows)} 个有人的服："]
+            for ip, port, players, ver in rows:
+                lines.append(f"  {ip}:{port} | {players}人 | {ver or '未知'}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"查询失败: {e}"
+
+    # 数据库统计
+    if any(k in msg for k in ["数据库", "多少个服", "统计", "db"]):
+        try:
+            conn = sqlite3.connect('mcscanner.db')
+            total = conn.execute("SELECT COUNT(*) FROM servers").fetchone()[0]
+            online = conn.execute("SELECT COUNT(*) FROM servers WHERE players_online > 0").fetchone()[0]
+            cracked = conn.execute("SELECT COUNT(*) FROM servers WHERE auth_mode='offline'").fetchone()[0]
+            conn.close()
+            return f"数据库共 {total} 个服务器，其中 {online} 个当前有人，{cracked} 个离线服"
+        except Exception as e:
+            return f"查询失败: {e}"
+
+    # 健康监控状态
+    if any(k in msg for k in ["监控", "健康", "推送"]):
+        try:
+            hm = health_monitor
+            events = hm.get("events", [])
+            status = hm.get("status", {})
+            running = hm.get("running", False)
+            lines = [f"健康监控: {'运行中' if running else '未启动'}"]
+            lines.append(f"监控 {len(status)} 个服务器，最近检查: {hm.get('last_check', '从未')}")
+            if events:
+                lines.append(f"最近事件: {events[0].get('time','')} {events[0].get('ip','')}:{events[0].get('port','')} {events[0].get('from','')}→{events[0].get('to','')}人")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"查询失败: {e}"
+
+    # 收藏列表
+    if any(k in msg for k in ["收藏", "favorites"]):
+        try:
+            from storage.favorites import filter_favorites
+            favs = filter_favorites()
+            if not favs:
+                return "收藏夹是空的"
+            lines = [f"共收藏 {len(favs)} 个："]
+            for f in favs[:15]:
+                lines.append(f"  {f['ip']}:{f['port']}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"查询失败: {e}"
+
+    # 启动扫描：匹配 "扫xxx" 模式
+    scan_match = re.search(r'扫[一一下]?\s*([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?:/[0-9]+)?)\s*(?:端口\s*([0-9, ]+))?', msg)
+    if scan_match or ("扫" in msg and re.search(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', msg)):
+        try:
+            ip_match = re.search(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?:/[0-9]+)?', msg)
+            target = ip_match.group()
+            port_match = re.search(r'端口\s*([0-9, ]+)', msg)
+            ports = [int(p.strip()) for p in port_match.group(1).split(',') if p.strip()] if port_match else [25565]
+            # 启动扫描（复用现有逻辑）
+            from core.engine import ScanEngine
+            scan_state["stop_event"].clear()
+            scan_state["results"] = []
+            scan_state["total"] = 0
+            scan_state["done"] = 0
+            scan_state["found"] = 0
+            scan_state["running"] = True
+            scan_state["start_time"] = time.time()
+
+            def _worker():
+                try:
+                    engine = ScanEngine(
+                        targets=[target],
+                        ports=ports,
+                        db_path="mcscanner.db",
+                        concurrency=200,
+                        timeout=4.0,
+                        result_callback=lambda r: scan_state["results"].append(r) or scan_state.__setitem__("found", scan_state["found"]+1),
+                        progress_callback=lambda d, t: (scan_state.__setitem__("done", d), scan_state.__setitem__("total", t)),
+                        stop_event=scan_state["stop_event"],
+                    )
+                    engine.run()
+                except Exception as e:
+                    print(f"[扫描错误] {e}")
+                finally:
+                    scan_state["running"] = False
+
+            scan_state["thread"] = threading.Thread(target=_worker, daemon=True)
+            scan_state["thread"].start()
+            return f'好，开始扫 {target} 端口 {",".join(map(str,ports))}，说"进度"查看'
+        except Exception as e:
+            return f"启动失败: {e}"
+
+    # AI托管
+    if any(k in msg for k in ["托管", "ai进", "bot进"]) and re.search(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', msg):
+        try:
+            ip_match = re.search(r'([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}):([0-9]+)', msg)
+            if not ip_match:
+                return "格式：托管1.2.3.4:25565"
+            host, port = ip_match.group(1), int(ip_match.group(2))
+            from core.ai_bot import AIBotSession
+            global _ai_bot_seq
+            _ai_bot_seq += 1
+            sid = f"assistant_{_ai_bot_seq}"
+            session = AIBotSession(
+                host=host, port=port, username="AssistantBot",
+                authme_password="""", timeout=20, duration=0,
+                ai_config={
+                    "api_key": config.get("ai_api_key", ""),
+                    "base_url": config.get("ai_base_url", "https://api.openai.com/v1"),
+                    "model": config.get("ai_model", "gpt-3.5-turbo"),
+                    "persona": "你是一个MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。",
+                    "reply_enabled": True, "reply_cooldown": 5,
+                    "trigger_keywords": [], "auto_talk_enabled": False,
+                }
+            )
+            session.session_id = sid
+            session.start()
+            _ai_bots[sid] = session
+            return f"好，AI已进 {host}:{port}，用户名AssistantBot"
+        except Exception as e:
+            return f"启动失败: {e}"
+
+    # 没匹配到
+    return f'没听懂你说啥。说"帮助"看看我能干嘛。'
+
+
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
     db.init_db(db_path)
