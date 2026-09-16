@@ -2029,6 +2029,8 @@ def ai_bot_start():
         ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
     if not ai_cfg.get("model"):
         ai_cfg["model"] = config.get("ai_model", "gpt-3.5-turbo")
+    if "reply_cooldown" not in ai_cfg or ai_cfg.get("reply_cooldown") is None:
+        ai_cfg["reply_cooldown"] = config.get("ai_reply_cooldown", 2.0)
     session = AIBotSession(
         host=host, port=port, username=username,
         authme_password=data.get("authme_password"),
@@ -2094,6 +2096,8 @@ def ai_multi_start():
         ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
     if not ai_cfg.get("model"):
         ai_cfg["model"] = config.get("ai_model", "gpt-3.5-turbo")
+    if "reply_cooldown" not in ai_cfg or ai_cfg.get("reply_cooldown") is None:
+        ai_cfg["reply_cooldown"] = config.get("ai_reply_cooldown", 2.0)
     group_id = multi_ai_bot.start_group(
         host=host, port=port,
         bot_count=bot_count,
@@ -2676,7 +2680,7 @@ def _execute_tool(tool, args):
                 ai_config={
                     "api_key": api_key, "base_url": base_url, "model": model,
                     "persona": "你是一个MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。",
-                    "reply_enabled": True, "reply_cooldown": 5,
+                    "reply_enabled": True, "reply_cooldown": config.get("ai_reply_cooldown", 2.0),
                     "trigger_keywords": [], "auto_talk_enabled": False,
                 }
             )
@@ -2882,7 +2886,7 @@ def _assistant_keyword_match(msg):
                 authme_password="""", timeout=20, duration=0,
                 ai_config={"api_key": config.get("ai_api_key",""), "base_url": config.get("ai_base_url","https://api.openai.com/v1"),
                     "model": config.get("ai_model","gpt-3.5-turbo"), "persona": "你是一个MC玩家，喜欢和人聊天，说话简短有趣。",
-                    "reply_enabled": True, "reply_cooldown": 5, "trigger_keywords": [], "auto_talk_enabled": False})
+                    "reply_enabled": True, "reply_cooldown": config.get("ai_reply_cooldown", 2.0), "trigger_keywords": [], "auto_talk_enabled": False})
             session.session_id = sid
             session.start()
             _ai_bots[sid] = session

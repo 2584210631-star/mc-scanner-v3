@@ -61,7 +61,7 @@ class AIBotSession:
         self.model = cfg.get("model", "gpt-3.5-turbo")
         self.persona = cfg.get("persona", "你是一个友好的MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。")
         self.reply_enabled = cfg.get("reply_enabled", True)
-        self.reply_cooldown = float(cfg.get("reply_cooldown", 5.0))  # 回复冷却秒数
+        self.reply_cooldown = float(cfg.get("reply_cooldown", 2.0))  # 回复冷却秒数
         self.trigger_keywords = cfg.get("trigger_keywords", [])  # 空=回复所有
         self.auto_talk_enabled = cfg.get("auto_talk_enabled", False)
         self.auto_talk_interval = float(cfg.get("auto_talk_interval", 120.0))  # 主动发言间隔
@@ -377,7 +377,7 @@ class MultiAIBot:
             else:
                 cfg["persona"] += "\n主动和其他玩家搭话、挑衅，引发讨论和争论，不要冷场。"
             # 每个bot回复冷却错开但很短，疯狂吵架模式
-            cfg["reply_cooldown"] = 1.2 + i * 0.6
+            cfg["reply_cooldown"] = 0.5 + i * 0.3
             cfg["reply_enabled"] = True
             cfg["trigger_keywords"] = []  # 回复所有消息（包括其他AI）
             cfg["auto_talk_enabled"] = True  # 吵架模式也主动发言挑衅
