@@ -2432,7 +2432,9 @@ def _handle_assistant_command(msg):
     # 第一轮：AI理解意图，返回JSON工具调用
     system_prompt = """你是一个Minecraft服务器扫描器的AI助手。用户会用自然语言下达指令，你需要理解意图并选择合适的工具执行。
 
-可用工具（返回JSON格式，不要返回其他内容）：
+【重要】只返回一个JSON对象，不要返回数组，不要返回markdown，不要解释，不要说多余的话。格式：{"tool":"工具名","args":{参数}}
+
+可用工具：
 1. {"tool":"scan","args":{"target":"1.2.3.4或1.2.3.4/24","ports":[25565,25566]}} - 启动扫描，ports可选默认[25565]
 2. {"tool":"stop_scan","args":{}} - 停止当前扫描
 3. {"tool":"scan_status","args":{}} - 查看扫描进度
@@ -2441,10 +2443,12 @@ def _handle_assistant_command(msg):
 6. {"tool":"db_stats","args":{}} - 数据库统计
 7. {"tool":"health_status","args":{}} - 健康监控状态
 8. {"tool":"favorites","args":{}} - 收藏列表
-9. {"tool":"ai_host","args":{"host":"1.2.3.4","port":25565}} - AI托管进服
-10. {"tool":"reply","args":{"text":"你的回复内容"}} - 不需要工具，直接回复用户（比如打招呼、解释功能）
+9. {"tool":"ai_host","args":{"host":"1.2.3.4","port":25565}} - 单个AI托管进服聊天
+10. {"tool":"multi_ai","args":{"host":"1.2.3.4","port":25565,"bot_count":3,"topic":"吵架"}} - 多个AI进服互相对骂/讨论，bot_count 2-8个
+11. {"tool":"observer","args":{"host":"1.2.3.4","port":25565,"username":"Observer"}} - 启动观察者进服监控聊天
+12. {"tool":"reply","args":{"text":"你的回复内容"}} - 不需要工具，直接回复用户
 
-只返回JSON，不要markdown，不要解释。"""
+只返回JSON，不要其他内容。"""
 
     from core.ai_generator import generate_content
     result = generate_content(
@@ -2523,6 +2527,10 @@ def _parse_tool_call(text):
 
 def _execute_tool(tool, args):
     """执行工具，返回结果字符串"""
+    api_key = config.get("ai_api_key", "")
+    base_url = config.get("ai_base_url", "https://api.openai.com/v1")
+    model = config.get("ai_model", "gpt-3.5-turbo")
+
     if tool == "scan":
         target = args.get("target", "")
         ports = args.get("ports", [25565])
@@ -2678,6 +2686,46 @@ def _execute_tool(tool, args):
             return f"AI托管已启动：{host}:{port}，用户名 AssistantBot，自动回复已开启"
         except Exception as e:
             return f"启动AI托管失败: {e}"
+
+    elif tool == "multi_ai":
+        host = args.get("host", "")
+        port = int(args.get("port", 25565))
+        bot_count = int(args.get("bot_count", 3))
+        bot_count = max(2, min(8, bot_count))
+        topic = args.get("topic", "随机话题吵架")
+        if not host:
+            return "错误：没有指定服务器地址"
+        if not api_key:
+            return "错误：未配置API Key，在设置里填写 ai_api_key"
+        try:
+            from core.ai_bot import multi_ai_bot
+            ai_cfg = {"api_key": api_key, "base_url": base_url, "model": model}
+            group_id = multi_ai_bot.start_group(
+                host=host, port=port, bot_count=bot_count,
+                topic=topic, duration=0,
+                authme_password="""",
+                ai_config=ai_cfg,
+            )
+            return f"多AI群聊已启动：{host}:{port}，{bot_count}个AI互喷，话题：{topic}，群ID：{group_id}"
+        except Exception as e:
+            return f"启动多AI群聊失败: {e}"
+
+    elif tool == "observer":
+        host = args.get("host", "")
+        port = int(args.get("port", 25565))
+        username = args.get("username", "Observer")
+        if not host:
+            return "错误：没有指定服务器地址"
+        try:
+            session = ObserverSession(host, port, username, authme_password="""", timeout=20, duration=0)
+            session.session_id = f"{int(time.time()*1000)}-{os.getpid()}-observer"
+            session.thread = threading.Thread(target=session.run, daemon=True)
+            with observer_lock:
+                observer_sessions[session.session_id] = session
+            session.thread.start()
+            return f"观察者已启动：{username} -> {host}:{port}，会话ID：{session.session_id[-6:]}"
+        except Exception as e:
+            return f"启动观察者失败: {e}"
 
     elif tool == "reply":
         return args.get("text", "好的")
