@@ -666,6 +666,172 @@ tbody tr:last-child td { border-bottom: none; }
 #multiAiChatLog strong {
   color: #00d992;
 }
+
+/* ===== 视觉升级 v2 ===== */
+body {
+  background: linear-gradient(180deg, #0d0d0d 0%, #101010 40%, #0d0d0d 100%);
+  background-attachment: fixed;
+}
+.topbar {
+  background: rgba(16,16,16,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(61,58,57,0.5);
+}
+.tabs {
+  background: rgba(16,16,16,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.panel {
+  background: linear-gradient(180deg, rgba(26,26,26,0.6) 0%, rgba(16,16,16,0.6) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(61,58,57,0.4);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.panel:hover { border-color: rgba(0,217,146,0.2); }
+.btn {
+  transition: all .15s cubic-bezier(.4,0,.2,1);
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+.btn-primary:hover { box-shadow: 0 4px 16px rgba(0,217,146,0.3); }
+.btn:active { transform: translateY(0); }
+table { border-radius: var(--radius); overflow: hidden; }
+thead th {
+  background: rgba(0,217,146,0.06) !important;
+  border-bottom: 1px solid rgba(0,217,146,0.15) !important;
+}
+tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
+.modal {
+  background: linear-gradient(180deg, #1e1e1e 0%, #161616 100%) !important;
+  border: 1px solid rgba(61,58,57,0.5) !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,217,146,0.1) !important;
+}
+.badge {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.server-item {
+  transition: all .15s;
+  border-radius: var(--radius);
+}
+.server-item:hover {
+  background: rgba(0,217,146,0.04);
+  border-color: rgba(0,217,146,0.2);
+}
+
+/* ===== 移动端底部导航 ===== */
+.mobile-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: rgba(13,13,13,0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--hairline);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  justify-content: space-around;
+  align-items: center;
+}
+.mobile-nav-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 8px; cursor: pointer; border-radius: 8px;
+  color: var(--mute); font-size: 9px; font-weight: 600;
+  transition: all .15s; min-width: 44px;
+}
+.mobile-nav-item .icon { font-size: 18px; line-height: 1; }
+.mobile-nav-item.active { color: var(--primary); }
+.mobile-nav-item.active .icon { transform: scale(1.1); }
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .topbar { padding: 10px 16px; }
+  .brand .subtitle { display: none; }
+  .status-pill { font-size: 10px; padding: 4px 8px; }
+  .tabs { display: none; }
+  .mobile-nav { display: flex; }
+  .container { padding: 16px 14px 80px; }
+  .panel { padding: 16px 14px; margin-bottom: 12px; border-radius: 12px; }
+  .panel h2 { font-size: 15px; margin-bottom: 12px; }
+  .form-row { flex-direction: column; gap: 10px; }
+  .form-group { min-width: 100%; }
+  .btn { padding: 10px 14px; font-size: 13px; justify-content: center; }
+  .form-row .btn { width: 100%; }
+
+  /* 表格转卡片 */
+  .table-wrap { overflow-x: visible; }
+  table { display: block; }
+  thead { display: none; }
+  tbody { display: block; }
+  tbody tr {
+    display: block;
+    background: var(--canvas-soft);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 12px;
+    position: relative;
+  }
+  tbody tr td {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0; border: none !important;
+    font-size: 12px; gap: 8px;
+  }
+  tbody tr td::before {
+    content: attr(data-label);
+    color: var(--mute); font-weight: 600; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+  tbody tr td:first-child {
+    position: absolute; top: 8px; right: 8px;
+    padding: 0;
+  }
+  tbody tr td:first-child::before { display: none; }
+
+  /* 弹窗适配 */
+  .modal { max-width: 95vw !important; max-height: 90vh; overflow-y: auto; margin: 5vh auto; }
+  .modal-actions { flex-direction: column; }
+  .modal-actions .btn { width: 100%; }
+
+  /* 聊天日志 */
+  #aiBotChatLog, #multiAiChatLog, #autoScanLog, #observerLog {
+    font-size: 11px; padding: 8px !important;
+  }
+
+  /* 统计卡片 */
+  .stat-card { padding: 12px; }
+  .stat-card .value { font-size: 20px; }
+
+  /* 扫描配置 */
+  #tab-scan .form-row { flex-direction: row; flex-wrap: wrap; }
+  #tab-scan .form-group { min-width: calc(50% - 6px); }
+
+  /* 观察者/AI聊天面板 */
+  #aiBotChatPanel, #multiAiChatPanel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 150; max-height: 60vh; }
+}
+
+@media (max-width: 480px) {
+  .container { padding: 12px 10px 75px; }
+  .panel { padding: 14px 12px; }
+  .btn { padding: 10px 12px; font-size: 12px; }
+  .topbar { padding: 8px 12px; }
+  .logo { width: 28px; height: 28px; font-size: 12px; }
+  .brand .title { font-size: 13px; }
+}
+
+/* ===== 滚动条美化 ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--mute); }
+
+/* ===== 动画 ===== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.panel { animation: fadeInUp .3s ease-out; }
+.tab-content { animation: fadeInUp .25s ease-out; }
 </style>
 </head>
 <body>
@@ -1483,6 +1649,16 @@ Protect your server NOW!</textarea></div>
   </div>
 </div>
 
+<!-- 移动端底部导航 -->
+<nav class="mobile-nav" id="mobileNav">
+  <div class="mobile-nav-item" data-tab="scan" onclick="switchTab('scan')"><span class="icon">⚡</span>扫描</div>
+  <div class="mobile-nav-item" data-tab="results" onclick="switchTab('results')"><span class="icon">📋</span>结果</div>
+  <div class="mobile-nav-item" data-tab="database" onclick="switchTab('database')"><span class="icon">🗄️</span>数据库</div>
+  <div class="mobile-nav-item" data-tab="favorites" onclick="switchTab('favorites')"><span class="icon">⭐</span>收藏</div>
+  <div class="mobile-nav-item" data-tab="aibot" onclick="switchTab('aibot')"><span class="icon">🤖</span>AI</div>
+  <div class="mobile-nav-item" data-tab="settings" onclick="switchTab('settings')"><span class="icon">⚙️</span>设置</div>
+</nav>
+
 </body>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
@@ -1880,6 +2056,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     const target = document.getElementById('tab-' + this.dataset.tab);
     target.classList.remove('hidden');
     animateTabIn('tab-' + this.dataset.tab);
+    // 同步移动端导航
+    document.querySelectorAll('.mobile-nav-item').forEach(m => m.classList.remove('active'));
+    const mob = document.querySelector('.mobile-nav-item[data-tab="'+this.dataset.tab+'"]');
+    if (mob) mob.classList.add('active');
     if (this.dataset.tab === 'results') loadResults(1);
     if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
     if (this.dataset.tab === 'favorites') loadFavorites();
@@ -1888,8 +2068,14 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (this.dataset.tab === 'aibot') loadAiBotList();
     if (this.dataset.tab === 'autoscan') loadAutoScanList();
     if (this.dataset.tab === 'settings') loadSettings();
+    window.scrollTo(0,0);
   };
 });
+
+function switchTab(name) {
+  const tab = document.querySelector('.tab[data-tab="'+name+'"]');
+  if (tab) tab.click();
+}
 
 function toggleMasscanOptions() {
   const mode = document.getElementById('scanMode').value;
@@ -2062,21 +2248,21 @@ async function loadResults(page) {
     }
     return `<tr>
       <td><input type="checkbox" class="server-check" data-ip="${ip}" data-port="${r.port}"></td>
-      <td>${ip}:${r.port}</td>
-      <td>${version}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
-      <td><span class="badge badge-${coreType}" style="text-transform:capitalize;">${escapeHtml(r.core_type || '-')}</span></td>
-      <td>${fpHtml}</td>
-      <td>${r.proto || '-'}</td>
-      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${motdTitle}">${motd}</td>
-      <td>${r.players_online || 0}/${r.players_max || 0}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${playersTitle}">${playersDisplay}</td>
-      <td><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
-      <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
-      <td><div class="actions">
+      <td data-label="地址">${ip}:${r.port}</td>
+      <td data-label="版本">${version}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td data-label="核心"><span class="badge badge-${coreType}" style="text-transform:capitalize;">${escapeHtml(r.core_type || '-')}</span></td>
+      <td data-label="指纹">${fpHtml}</td>
+      <td data-label="协议">${r.proto || '-'}</td>
+      <td data-label="MOTD" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${motdTitle}">${motd}</td>
+      <td data-label="人数">${r.players_online || 0}/${r.players_max || 0}</td>
+      <td data-label="玩家" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${playersTitle}">${playersDisplay}</td>
+      <td data-label="认证"><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
+      <td data-label="延迟">${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
+      <td data-label="操作"><div class="actions">
         <button class="btn btn-success" onclick="toggleFavorite('${ip}',${r.port}, this)" title="收藏">☆</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${r.port})">警告</button>
         <button class="btn btn-info" onclick="quickObserver('${ip}',${r.port})">观察</button>
-        <button class="btn btn-warning" onclick="openCmdModal('${ip}',${r.port})">发命令</button>
+        <button class="btn btn-warning" onclick="openCmdModal('${ip}',${r.port})">命令</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -2425,14 +2611,14 @@ async function loadDbResults(page) {
     const players = (r.player_list || []).map(escapeHtml);
     return `<tr>
       <td><input type="checkbox" class="db-server-check" data-ip="${r.ip}" data-port="${r.port}"></td>
-      <td>${ip}:${r.port}</td>
-      <td>${escapeHtml(r.version || '-')}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
-      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
-      <td>${r.players_online || 0}/${r.players_max || 0}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(players.join(', '))}">${players.slice(0,3).join(', ') + (players.length>3?' +'+(players.length-3):'')}</td>
-      <td><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
-      <td>${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
-      <td><div class="actions">
+      <td data-label="地址">${ip}:${r.port}</td>
+      <td data-label="版本">${escapeHtml(r.version || '-')}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td data-label="MOTD" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
+      <td data-label="人数">${r.players_online || 0}/${r.players_max || 0}</td>
+      <td data-label="玩家" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(players.join(', '))}">${players.slice(0,3).join(', ') + (players.length>3?' +'+(players.length-3):'')}</td>
+      <td data-label="认证"><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
+      <td data-label="更新">${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
+      <td data-label="操作"><div class="actions">
         <button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})" title="警告">⚠</button>
         <button class="btn btn-info" onclick="quickObserver('${r.ip}',${r.port})" title="观察">👁</button>
       </div></td>
@@ -2807,15 +2993,15 @@ async function loadFavorites() {
     const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
     return `<tr>
       <td><input type="checkbox" class="fav-server-check" data-ip="${ip}" data-port="${f.port}"></td>
-      <td>${ip}:${f.port}</td>
-      <td>${escapeHtml(info.version || '-')}</td>
-      <td><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
-      <td style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
-      <td><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
-      <td>${tags || '-'}</td>
-      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
-      <td style="font-size:11px;color:var(--mute);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
-      <td><div class="actions">
+      <td data-label="地址">${ip}:${f.port}</td>
+      <td data-label="版本">${escapeHtml(info.version || '-')}</td>
+      <td data-label="核心"><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
+      <td data-label="人数" style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
+      <td data-label="认证"><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
+      <td data-label="标签">${tags || '-'}</td>
+      <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
+      <td data-label="检查" style="font-size:11px;color:var(--mute);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
+      <td data-label="操作"><div class="actions">
         <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
         <button class="btn btn-info" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
