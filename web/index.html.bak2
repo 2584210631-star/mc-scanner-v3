@@ -128,8 +128,6 @@ input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px
 .btn-info:hover { background: rgba(0,217,146,0.08); border-color: var(--primary); }
 .btn-secondary { background: var(--canvas-soft); color: var(--body); border-color: var(--hairline); }
 .btn-secondary:hover { color: var(--ink); background: var(--canvas-2); border-color: var(--faint); }
-.btn-violet { background: var(--canvas); color: var(--violet); border-color: rgba(167,139,250,0.3); }
-.btn-violet:hover { background: rgba(167,139,250,0.08); border-color: var(--violet); }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
 /* ===== Progress ===== */
 .progress-bar { background: var(--canvas-soft); border-radius: var(--radius-sm); height: 24px; overflow: hidden; margin: 12px 0; border: 1px solid var(--hairline); position: relative; }
@@ -668,172 +666,6 @@ tbody tr:last-child td { border-bottom: none; }
 #multiAiChatLog strong {
   color: #00d992;
 }
-
-/* ===== 视觉升级 v2 ===== */
-body {
-  background: linear-gradient(180deg, #0d0d0d 0%, #101010 40%, #0d0d0d 100%);
-  background-attachment: fixed;
-}
-.topbar {
-  background: rgba(16,16,16,0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(61,58,57,0.5);
-}
-.tabs {
-  background: rgba(16,16,16,0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-.panel {
-  background: linear-gradient(180deg, rgba(26,26,26,0.6) 0%, rgba(16,16,16,0.6) 100%);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(61,58,57,0.4);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-}
-.panel:hover { border-color: rgba(0,217,146,0.2); }
-.btn {
-  transition: all .15s cubic-bezier(.4,0,.2,1);
-}
-.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.btn-primary:hover { box-shadow: 0 4px 16px rgba(0,217,146,0.3); }
-.btn:active { transform: translateY(0); }
-table { border-radius: var(--radius); overflow: hidden; }
-thead th {
-  background: rgba(0,217,146,0.06) !important;
-  border-bottom: 1px solid rgba(0,217,146,0.15) !important;
-}
-tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
-.modal {
-  background: linear-gradient(180deg, #1e1e1e 0%, #161616 100%) !important;
-  border: 1px solid rgba(61,58,57,0.5) !important;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,217,146,0.1) !important;
-}
-.badge {
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
-.server-item {
-  transition: all .15s;
-  border-radius: var(--radius);
-}
-.server-item:hover {
-  background: rgba(0,217,146,0.04);
-  border-color: rgba(0,217,146,0.2);
-}
-
-/* ===== 移动端底部导航 ===== */
-.mobile-nav {
-  display: none;
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
-  background: rgba(13,13,13,0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid var(--hairline);
-  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-  justify-content: space-around;
-  align-items: center;
-}
-.mobile-nav-item {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 8px; cursor: pointer; border-radius: 8px;
-  color: var(--mute); font-size: 9px; font-weight: 600;
-  transition: all .15s; min-width: 44px;
-}
-.mobile-nav-item .icon { font-size: 18px; line-height: 1; }
-.mobile-nav-item.active { color: var(--primary); }
-.mobile-nav-item.active .icon { transform: scale(1.1); }
-
-/* ===== 响应式适配 ===== */
-@media (max-width: 768px) {
-  .topbar { padding: 10px 16px; }
-  .brand .subtitle { display: none; }
-  .status-pill { font-size: 10px; padding: 4px 8px; }
-  .tabs { display: none; }
-  .mobile-nav { display: flex; }
-  .container { padding: 16px 14px 80px; }
-  .panel { padding: 16px 14px; margin-bottom: 12px; border-radius: 12px; }
-  .panel h2 { font-size: 15px; margin-bottom: 12px; }
-  .form-row { flex-direction: column; gap: 10px; }
-  .form-group { min-width: 100%; }
-  .btn { padding: 10px 14px; font-size: 13px; justify-content: center; }
-  .form-row .btn { width: 100%; }
-
-  /* 表格转卡片 */
-  .table-wrap { overflow-x: visible; }
-  table { display: block; }
-  thead { display: none; }
-  tbody { display: block; }
-  tbody tr {
-    display: block;
-    background: var(--canvas-soft);
-    border: 1px solid var(--hairline);
-    border-radius: 10px;
-    margin-bottom: 10px;
-    padding: 12px;
-    position: relative;
-  }
-  tbody tr td {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 5px 0; border: none !important;
-    font-size: 12px; gap: 8px;
-  }
-  tbody tr td::before {
-    content: attr(data-label);
-    color: var(--mute); font-weight: 600; font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.5px;
-    flex-shrink: 0;
-  }
-  tbody tr td:first-child {
-    position: absolute; top: 8px; right: 8px;
-    padding: 0;
-  }
-  tbody tr td:first-child::before { display: none; }
-
-  /* 弹窗适配 */
-  .modal { max-width: 95vw !important; max-height: 90vh; overflow-y: auto; margin: 5vh auto; }
-  .modal-actions { flex-direction: column; }
-  .modal-actions .btn { width: 100%; }
-
-  /* 聊天日志 */
-  #aiBotChatLog, #multiAiChatLog, #autoScanLog, #observerLog {
-    font-size: 11px; padding: 8px !important;
-  }
-
-  /* 统计卡片 */
-  .stat-card { padding: 12px; }
-  .stat-card .value { font-size: 20px; }
-
-  /* 扫描配置 */
-  #tab-scan .form-row { flex-direction: row; flex-wrap: wrap; }
-  #tab-scan .form-group { min-width: calc(50% - 6px); }
-
-  /* 观察者/AI聊天面板 */
-  #aiBotChatPanel, #multiAiChatPanel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 150; max-height: 60vh; }
-}
-
-@media (max-width: 480px) {
-  .container { padding: 12px 10px 75px; }
-  .panel { padding: 14px 12px; }
-  .btn { padding: 10px 12px; font-size: 12px; }
-  .topbar { padding: 8px 12px; }
-  .logo { width: 28px; height: 28px; font-size: 12px; }
-  .brand .title { font-size: 13px; }
-}
-
-/* ===== 滚动条美化 ===== */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--mute); }
-
-/* ===== 动画 ===== */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.panel { animation: fadeInUp .3s ease-out; }
-.tab-content { animation: fadeInUp .25s ease-out; }
 </style>
 </head>
 <body>
@@ -1071,7 +903,6 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-info" onclick="openBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
         <button class="btn btn-primary" onclick="openBatchAiModal()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
-        <button class="btn btn-violet" onclick="openMap()">🌍 地图</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
       </div>
@@ -1136,29 +967,6 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
 
   <!-- 收藏标签页 -->
   <div id="tab-favorites" class="hidden">
-    <div class="panel">
-      <h2>🩺 服务器健康监控</h2>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
-        <div class="stat-card" style="flex:1;min-width:120px;">
-          <div class="value" id="healthMonitored">0</div>
-          <div class="label">监控中</div>
-        </div>
-        <div class="stat-card" style="flex:1;min-width:120px;">
-          <div class="value" id="healthOnline" style="color:var(--green)">0</div>
-          <div class="label">在线</div>
-        </div>
-        <div class="stat-card" style="flex:1;min-width:120px;">
-          <div class="value" id="healthLastCheck">-</div>
-          <div class="label">最后检查</div>
-        </div>
-        <div style="display:flex;align-items:center;">
-          <button class="btn" id="healthToggleBtn" onclick="toggleHealthMonitor()">启动监控</button>
-        </div>
-      </div>
-      <div style="max-height:150px;overflow-y:auto;background:var(--canvas-soft);border-radius:8px;padding:8px;font-size:12px;font-family:var(--mono);" id="healthEvents">
-        <p style="color:var(--mute);">暂无事件</p>
-      </div>
-    </div>
     <div class="panel">
       <h2>收藏管理</h2>
       <div class="filter-bar">
@@ -1268,7 +1076,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group"><label>服务器地址</label><input type="text" id="obsIp" placeholder="103.85.86.51 或 play.example.com"></div>
         <div class="form-group"><label>端口</label><input type="number" id="obsPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="obsUser" value="WatchDog"></div>
-        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" value="WatchDog123" placeholder="留空不启用"></div>
+        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" placeholder="留空不启用"></div>
         <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" onclick="startObserver()">挂入观察者</button></div>
       </div>
     </div>
@@ -1328,47 +1136,6 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     </div>
     <p class="hint" style="color:#00d992">API Key/地址/模型在「设置」页配置，这里直接用</p>
     <button onclick="startAiBot()" class="btn-primary">启动AI托管</button>
-  </div>
-  <div class="panel">
-    <h4>🎛️ 人格编辑器</h4>
-    <p class="hint">拖动滑块调节性格，实时生成提示词，点"应用到上面"即可使用</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0;">
-      <div>
-        <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">毒舌程度 <span id="slVal_salt">50</span></label>
-        <input type="range" id="sl_salt" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--red)">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">话痨程度 <span id="slVal_chatty">50</span></label>
-        <input type="range" id="sl_chatty" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--primary)">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">阴阳怪气 <span id="slVal_yinyang">50</span></label>
-        <input type="range" id="sl_yinyang" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--violet)">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">攻击性 <span id="slVal_aggro">30</span></label>
-        <input type="range" id="sl_aggro" min="0" max="100" value="30" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--amber)">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">智商 <span id="slVal_iq">60</span></label>
-        <input type="range" id="sl_iq" min="0" max="100" value="60" oninput="updatePersonaEditor()" style="width:100%;accent-color:#60a5fa">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">情商 <span id="slVal_eq">30</span></label>
-        <input type="range" id="sl_eq" min="0" max="100" value="30" oninput="updatePersonaEditor()" style="width:100%;accent-color:#f472b6">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>口癖（每句话结尾加）</label><input type="text" id="pe_suffix" placeholder="例如：喵、啊、呢" oninput="updatePersonaEditor()"></div>
-      <div class="form-group"><label>口头禅</label><input type="text" id="pe_catchphrase" placeholder="例如：不是吧不是吧" oninput="updatePersonaEditor()"></div>
-    </div>
-    <div class="form-group"><label>生成的人设提示词</label>
-      <textarea id="pe_output" rows="4" style="font-size:11px;" readonly></textarea>
-    </div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-primary" onclick="applyPersonaEditor()">应用到上面的AI托管</button>
-      <button class="btn btn-secondary" onclick="randomPersonaEditor()">🎲 随机</button>
-    </div>
   </div>
   <div class="panel">
     <h4>多AI群聊/吵架模式</h4>
@@ -1716,58 +1483,10 @@ Protect your server NOW!</textarea></div>
   </div>
 </div>
 
-<!-- 人数趋势弹窗 -->
-<div class="modal-overlay hidden" id="popularityModal">
-  <div class="modal" style="max-width:700px;">
-    <h3>📈 人数趋势 - <span id="popTarget"></span></h3>
-    <div class="form-row">
-      <div class="form-group"><label>时间范围</label>
-        <select id="popHours" onchange="refreshPopularity()">
-          <option value="6">近6小时</option>
-          <option value="24" selected>近24小时</option>
-          <option value="72">近3天</option>
-          <option value="168">近7天</option>
-        </select>
-      </div>
-      <div class="form-group" style="display:flex;align-items:flex-end;">
-        <button class="btn btn-secondary" onclick="closePopularity()">关闭</button>
-      </div>
-    </div>
-    <div id="popChart" style="width:100%;height:300px;margin-top:12px;"></div>
-    <div id="popSummary" style="margin-top:10px;font-size:12px;color:var(--mute);"></div>
-  </div>
-</div>
-
-<!-- 服务器地图弹窗 -->
-<div class="modal-overlay hidden" id="mapModal">
-  <div class="modal" style="max-width:900px;">
-    <h3>🌍 服务器地理位置</h3>
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="loadMapFromResults()">加载当前结果页</button>
-      <button class="btn btn-secondary" onclick="loadMapFromFavorites()">加载收藏</button>
-      <button class="btn btn-secondary" onclick="closeMap()">关闭</button>
-      <span id="mapStatus" style="color:var(--mute);font-size:12px;align-self:center;"></span>
-    </div>
-    <div id="mapContainer" style="width:100%;height:400px;border-radius:8px;z-index:1;"></div>
-  </div>
-</div>
-
-<!-- 移动端底部导航 -->
-<nav class="mobile-nav" id="mobileNav">
-  <div class="mobile-nav-item" data-tab="scan" onclick="switchTab('scan')"><span class="icon">⚡</span>扫描</div>
-  <div class="mobile-nav-item" data-tab="results" onclick="switchTab('results')"><span class="icon">📋</span>结果</div>
-  <div class="mobile-nav-item" data-tab="observer" onclick="switchTab('observer')"><span class="icon">👁</span>观察</div>
-  <div class="mobile-nav-item" data-tab="favorites" onclick="switchTab('favorites')"><span class="icon">⭐</span>收藏</div>
-  <div class="mobile-nav-item" data-tab="aibot" onclick="switchTab('aibot')"><span class="icon">🤖</span>AI</div>
-  <div class="mobile-nav-item" data-tab="settings" onclick="switchTab('settings')"><span class="icon">⚙️</span>设置</div>
-</nav>
-
 </body>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // HTML转义，防止XSS
 function escapeHtml(str) {
@@ -2161,10 +1880,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     const target = document.getElementById('tab-' + this.dataset.tab);
     target.classList.remove('hidden');
     animateTabIn('tab-' + this.dataset.tab);
-    // 同步移动端导航
-    document.querySelectorAll('.mobile-nav-item').forEach(m => m.classList.remove('active'));
-    const mob = document.querySelector('.mobile-nav-item[data-tab="'+this.dataset.tab+'"]');
-    if (mob) mob.classList.add('active');
     if (this.dataset.tab === 'results') loadResults(1);
     if (this.dataset.tab === 'database') { loadDbStats(); loadDbResults(1); }
     if (this.dataset.tab === 'favorites') loadFavorites();
@@ -2173,14 +1888,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (this.dataset.tab === 'aibot') loadAiBotList();
     if (this.dataset.tab === 'autoscan') loadAutoScanList();
     if (this.dataset.tab === 'settings') loadSettings();
-    window.scrollTo(0,0);
   };
 });
-
-function switchTab(name) {
-  const tab = document.querySelector('.tab[data-tab="'+name+'"]');
-  if (tab) tab.click();
-}
 
 function toggleMasscanOptions() {
   const mode = document.getElementById('scanMode').value;
@@ -2353,22 +2062,21 @@ async function loadResults(page) {
     }
     return `<tr>
       <td><input type="checkbox" class="server-check" data-ip="${ip}" data-port="${r.port}"></td>
-      <td data-label="地址">${ip}:${r.port}</td>
-      <td data-label="版本">${version}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
-      <td data-label="核心"><span class="badge badge-${coreType}" style="text-transform:capitalize;">${escapeHtml(r.core_type || '-')}</span></td>
-      <td data-label="指纹">${fpHtml}</td>
-      <td data-label="协议">${r.proto || '-'}</td>
-      <td data-label="MOTD" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${motdTitle}">${motd}</td>
-      <td data-label="人数">${r.players_online || 0}/${r.players_max || 0}</td>
-      <td data-label="玩家" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${playersTitle}">${playersDisplay}</td>
-      <td data-label="认证"><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
-      <td data-label="延迟">${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
-      <td data-label="操作"><div class="actions">
+      <td>${ip}:${r.port}</td>
+      <td>${version}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td><span class="badge badge-${coreType}" style="text-transform:capitalize;">${escapeHtml(r.core_type || '-')}</span></td>
+      <td>${fpHtml}</td>
+      <td>${r.proto || '-'}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${motdTitle}">${motd}</td>
+      <td>${r.players_online || 0}/${r.players_max || 0}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${playersTitle}">${playersDisplay}</td>
+      <td><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
+      <td>${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
+      <td><div class="actions">
         <button class="btn btn-success" onclick="toggleFavorite('${ip}',${r.port}, this)" title="收藏">☆</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${r.port})">警告</button>
         <button class="btn btn-info" onclick="quickObserver('${ip}',${r.port})">观察</button>
-        <button class="btn btn-violet" onclick="showPopularity('${ip}',${r.port})" title="人数趋势">📈</button>
-        <button class="btn btn-warning" onclick="openCmdModal('${ip}',${r.port})">命令</button>
+        <button class="btn btn-warning" onclick="openCmdModal('${ip}',${r.port})">发命令</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -2403,129 +2111,9 @@ function drawVersionChart(results) {
   }
 }
 
-// ===== 人数趋势 =====
-let popChart = null;
-let popIp = '', popPort = 0;
-function showPopularity(ip, port) {
-  popIp = ip; popPort = port;
-  document.getElementById('popTarget').textContent = `${ip}:${port}`;
-  document.getElementById('popularityModal').classList.remove('hidden');
-  animateModalIn(document.getElementById('popularityModal'));
-  refreshPopularity();
-}
-function closePopularity() {
-  document.getElementById('popularityModal').classList.add('hidden');
-  if (popChart) { popChart.destroy(); popChart = null; }
-}
-async function refreshPopularity() {
-  const hours = document.getElementById('popHours').value;
-  const res = await fetch(`/api/server/popularity?ip=${encodeURIComponent(popIp)}&port=${popPort}&hours=${hours}`);
-  const data = await res.json();
-  const labels = (data.data||[]).map(d => d.time.slice(5, 16));
-  const online = (data.data||[]).map(d => d.online);
-  const max = (data.data||[]).map(d => d.max);
-  const peak = online.length ? Math.max(...online) : 0;
-  const avg = online.length ? Math.round(online.reduce((a,b)=>a+b,0)/online.length) : 0;
-  document.getElementById('popSummary').textContent =
-    `记录点: ${online.length} | 峰值: ${peak}人 | 平均: ${avg}人 | 范围: ${hours}小时`;
-  if (popChart) popChart.destroy();
-  const ctx = document.getElementById('popChart');
-  if (online.length === 0) {
-    ctx.innerHTML = '<p style="text-align:center;color:var(--mute);padding:60px 0;">暂无数据，扫描后自动记录</p>';
-    return;
-  }
-  popChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: '在线人数', data: online, borderColor: '#00d992', backgroundColor: 'rgba(0,217,146,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
-      { label: '最大人数', data: max, borderColor: '#8b949e', borderDash: [5,5], fill: false, tension: 0.3, pointRadius: 0 }
-    ]},
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#bdbdbd' } } },
-      scales: {
-        x: { ticks: { color: '#8b949e', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { beginAtZero: true, ticks: { color: '#8b949e' }, grid: { color: 'rgba(255,255,255,0.05)' } }
-      }
-    }
-  });
-}
-
 function exportResults(fmt) {
   const auth = document.getElementById('filterAuth').value;
   window.open(`/api/scan/export?format=${fmt}&auth=${auth}`);
-}
-
-// ===== 服务器地图 =====
-let mapInstance = null;
-let mapMarkers = [];
-function openMap() {
-  document.getElementById('mapModal').classList.remove('hidden');
-  animateModalIn(document.getElementById('mapModal'));
-  setTimeout(() => {
-    if (!mapInstance) {
-      mapInstance = L.map('mapContainer').setView([35, 105], 4);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap', maxZoom: 18
-      }).addTo(mapInstance);
-    } else {
-      mapInstance.invalidateSize();
-    }
-    loadMapFromResults();
-  }, 100);
-}
-function closeMap() {
-  document.getElementById('mapModal').classList.add('hidden');
-}
-async function geocodeIps(ips) {
-  // 用ip-api批量查询，一次最多100个
-  const unique = [...new Set(ips)];
-  const results = {};
-  const batches = [];
-  for (let i = 0; i < unique.length; i += 100) batches.push(unique.slice(i, i+100));
-  for (const batch of batches) {
-    try {
-      const res = await fetch('http://ip-api.com/batch?fields=query,lat,lon,city,country,isp', {
-        method: 'POST', body: JSON.stringify(batch)
-      });
-      const data = await res.json();
-      data.forEach(d => { if (d.lat) results[d.query] = d; });
-    } catch(e) { console.error('geocode error', e); }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  return results;
-}
-async function loadMapFromResults() {
-  const ips = Array.from(document.querySelectorAll('#resultsBody tr')).map(tr => {
-    const tds = tr.querySelectorAll('td');
-    if (tds.length > 1) return tds[1].textContent.split(':')[0];
-    return null;
-  }).filter(Boolean);
-  await plotIpsOnMap(ips);
-}
-async function loadMapFromFavorites() {
-  try {
-    const res = await fetch('/api/favorites/list');
-    const data = await res.json();
-    const ips = (data.servers || []).map(s => s.ip);
-    await plotIpsOnMap(ips);
-  } catch(e) { alert('加载收藏失败'); }
-}
-async function plotIpsOnMap(ips) {
-  if (!mapInstance) return;
-  document.getElementById('mapStatus').textContent = `定位中... (${ips.length}个IP)`;
-  mapMarkers.forEach(m => mapInstance.removeLayer(m));
-  mapMarkers = [];
-  const geo = await geocodeIps(ips);
-  Object.entries(geo).forEach(([ip, d]) => {
-    const marker = L.marker([d.lat, d.lon]).addTo(mapInstance);
-    marker.bindPopup(`<b>${ip}</b><br>${d.city||''}, ${d.country||''}<br>${d.isp||''}`);
-    mapMarkers.push(marker);
-  });
-  if (mapMarkers.length > 0) {
-    const group = L.featureGroup(mapMarkers);
-    mapInstance.fitBounds(group.getBounds().pad(0.2));
-  }
-  document.getElementById('mapStatus').textContent = `已定位 ${mapMarkers.length}/${ips.length} 个IP`;
 }
 
 async function importMasscanResults(input) {
@@ -2837,14 +2425,14 @@ async function loadDbResults(page) {
     const players = (r.player_list || []).map(escapeHtml);
     return `<tr>
       <td><input type="checkbox" class="db-server-check" data-ip="${r.ip}" data-port="${r.port}"></td>
-      <td data-label="地址">${ip}:${r.port}</td>
-      <td data-label="版本">${escapeHtml(r.version || '-')}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
-      <td data-label="MOTD" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
-      <td data-label="人数">${r.players_online || 0}/${r.players_max || 0}</td>
-      <td data-label="玩家" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(players.join(', '))}">${players.slice(0,3).join(', ') + (players.length>3?' +'+(players.length-3):'')}</td>
-      <td data-label="认证"><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
-      <td data-label="更新">${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
-      <td data-label="操作"><div class="actions">
+      <td>${ip}:${r.port}</td>
+      <td>${escapeHtml(r.version || '-')}${r.is_modded ? ' <span class="badge badge-mod">MOD</span>' : ''}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
+      <td>${r.players_online || 0}/${r.players_max || 0}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(players.join(', '))}">${players.slice(0,3).join(', ') + (players.length>3?' +'+(players.length-3):'')}</td>
+      <td><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
+      <td>${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
+      <td><div class="actions">
         <button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})" title="警告">⚠</button>
         <button class="btn btn-info" onclick="quickObserver('${r.ip}',${r.port})" title="观察">👁</button>
       </div></td>
@@ -3188,48 +2776,6 @@ async function testEmail() {
   } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
 }
 let favCache = {};
-
-// ===== 健康监控 =====
-let healthTimer = null;
-async function loadHealthStatus() {
-  try {
-    const res = await fetch('/api/health/status');
-    const d = await res.json();
-    document.getElementById('healthMonitored').textContent = d.monitored || 0;
-    document.getElementById('healthOnline').textContent = d.online_servers || 0;
-    document.getElementById('healthLastCheck').textContent = (d.last_check || '-').slice(11, 16);
-    document.getElementById('healthToggleBtn').textContent = d.running ? '停止监控' : '启动监控';
-    document.getElementById('healthToggleBtn').className = 'btn ' + (d.running ? 'btn-danger' : 'btn-primary');
-    const eventsEl = document.getElementById('healthEvents');
-    if (d.events && d.events.length > 0) {
-      eventsEl.innerHTML = d.events.map(e => {
-        const arrow = e.type === 'up' ? '↑' : '↓';
-        const color = e.type === 'up' ? 'var(--green)' : 'var(--red)';
-        return `<div style="padding:3px 0;border-bottom:1px solid var(--hairline-soft);">
-          <span style="color:var(--mute)">${e.time.slice(11,16)}</span>
-          <span style="color:${color}">${arrow}</span>
-          <span>${e.ip}:${e.port}</span>
-          <span style="color:var(--mute)">${e.from}→${e.to}人</span>
-        </div>`;
-      }).join('');
-    } else {
-      eventsEl.innerHTML = '<p style="color:var(--mute);">暂无事件</p>';
-    }
-  } catch(e) {}
-}
-async function toggleHealthMonitor() {
-  await fetch('/api/health/toggle', {method:'POST'});
-  loadHealthStatus();
-}
-// 切换到收藏页时加载健康状态
-document.addEventListener('click', e=>{
-  if (e.target.classList.contains('tab') && e.target.dataset.tab==='favorites') {
-    loadHealthStatus();
-    if (healthTimer) clearInterval(healthTimer);
-    healthTimer = setInterval(loadHealthStatus, 15000);
-  }
-});
-
 async function loadFavorites() {
   const tag = document.getElementById('favFilterTag').value;
   const search = document.getElementById('favSearch').value;
@@ -3261,19 +2807,18 @@ async function loadFavorites() {
     const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
     return `<tr>
       <td><input type="checkbox" class="fav-server-check" data-ip="${ip}" data-port="${f.port}"></td>
-      <td data-label="地址">${ip}:${f.port}</td>
-      <td data-label="版本">${escapeHtml(info.version || '-')}</td>
-      <td data-label="核心"><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
-      <td data-label="人数" style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
-      <td data-label="认证"><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
-      <td data-label="标签">${tags || '-'}</td>
-      <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
-      <td data-label="检查" style="font-size:11px;color:var(--mute);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
-      <td data-label="操作"><div class="actions">
+      <td>${ip}:${f.port}</td>
+      <td>${escapeHtml(info.version || '-')}</td>
+      <td><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
+      <td style="color:${stateColor};">${state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-')}</td>
+      <td><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
+      <td>${tags || '-'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
+      <td style="font-size:11px;color:var(--mute);">${f.last_check ? new Date(f.last_check).toLocaleString() : '-'}</td>
+      <td><div class="actions">
         <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
         <button class="btn btn-info" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
-        <button class="btn btn-violet" onclick="quickAiBot('${ip}',${f.port})" title="AI托管">🤖</button>
         <button class="btn btn-warning" onclick="editFavTags('${ip}',${f.port})" title="标签">🏷</button>
         <button class="btn btn-warning" onclick="editFavNote('${ip}',${f.port})" title="备注">✎</button>
         <button class="btn btn-danger" onclick="removeFavorite('${ip}',${f.port})" title="删除">✕</button>
@@ -3432,21 +2977,8 @@ function quickObserver(ip, port) {
   // 自动填到观察者表单并启动
   document.getElementById('obsIp').value = ip;
   document.getElementById('obsPort').value = port;
-  if (!document.getElementById('obsAuthme').value) {
-    document.getElementById('obsAuthme').value = 'WatchDog123';
-  }
   document.querySelector('.tab[data-tab="observer"]').click();
   setTimeout(() => startObserver(), 300);
-}
-
-function quickAiBot(ip, port) {
-  // 跳转到AI托管页并预填
-  document.getElementById('aiBotHost').value = ip;
-  document.getElementById('aiBotPort').value = port;
-  if (!document.getElementById('aiBotAuthme').value) {
-    document.getElementById('aiBotAuthme').value = 'AIBot123456';
-  }
-  document.querySelector('.tab[data-tab="aibot"]').click();
 }
 
 function openBatchObserverModal() {
@@ -3720,64 +3252,10 @@ function applyPresetPersona() {
   if (idx === '') return;
   fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
     if (d.personas[idx]) {
-      document.getElementById('aiBotPersona').value = d.personas[idx].prompt || d.personas[idx].persona || '';
+      document.getElementById('aiBotPersona').value = d.personas[idx].persona;
     }
   });
 }
-
-// ===== 人格编辑器 =====
-function updatePersonaEditor() {
-  const salt = document.getElementById('sl_salt').value;
-  const chatty = document.getElementById('sl_chatty').value;
-  const yinyang = document.getElementById('sl_yinyang').value;
-  const aggro = document.getElementById('sl_aggro').value;
-  const iq = document.getElementById('sl_iq').value;
-  const eq = document.getElementById('sl_eq').value;
-  const suffix = document.getElementById('pe_suffix').value.trim();
-  const catchphrase = document.getElementById('pe_catchphrase').value.trim();
-  document.getElementById('slVal_salt').textContent = salt;
-  document.getElementById('slVal_chatty').textContent = chatty;
-  document.getElementById('slVal_yinyang').textContent = yinyang;
-  document.getElementById('slVal_aggro').textContent = aggro;
-  document.getElementById('slVal_iq').textContent = iq;
-  document.getElementById('slVal_eq').textContent = eq;
-
-  let persona = '你是一个Minecraft服务器里的玩家。';
-  if (salt > 60) persona += '你说话非常毒舌，喜欢用刻薄的话讽刺别人，从不客气。';
-  else if (salt > 30) persona += '你说话有点毒舌，偶尔会讽刺别人。';
-  else persona += '你说话比较温和，不太毒舌。';
-  if (yinyang > 60) persona += '你极其擅长阴阳怪气，话里有话，表面客气实则嘲讽。';
-  else if (yinyang > 30) persona += '你偶尔会阴阳怪气。';
-  if (aggro > 60) persona += '你性格暴躁，容易发火，喜欢挑事吵架，说话带攻击性。';
-  else if (aggro > 30) persona += '你性格有点冲，偶尔会发脾气。';
-  else persona += '你性格比较平和。';
-  if (chatty > 60) persona += '你是个话痨，不停说话，回复很长很啰嗦。';
-  else if (chatty > 30) persona += '你话比较多。';
-  else persona += '你话不多，回复简短。';
-  if (iq > 70) persona += '你智商很高，说话有条理，喜欢用逻辑碾压别人。';
-  else if (iq < 30) persona += '你智商不太高，说话有点傻，经常说错话。';
-  if (eq < 30) persona += '你情商很低，说话直来直去，经常得罪人而不自知。';
-  else if (eq > 70) persona += '你情商很高，擅长察言观色。';
-  if (catchphrase) persona += `你的口头禅是"${catchphrase}"，经常挂在嘴边。`;
-  if (suffix) persona += `你每句话结尾都喜欢加"${suffix}"。`;
-  persona += '用中文回复，不要说自己是AI，要像真人一样聊天。不要用表情符号。';
-  document.getElementById('pe_output').value = persona;
-}
-function applyPersonaEditor() {
-  document.getElementById('aiBotPersona').value = document.getElementById('pe_output').value;
-  alert('已应用到AI托管的人设框');
-}
-function randomPersonaEditor() {
-  document.getElementById('sl_salt').value = Math.floor(Math.random()*100);
-  document.getElementById('sl_chatty').value = Math.floor(Math.random()*100);
-  document.getElementById('sl_yinyang').value = Math.floor(Math.random()*100);
-  document.getElementById('sl_aggro').value = Math.floor(Math.random()*100);
-  document.getElementById('sl_iq').value = Math.floor(Math.random()*100);
-  document.getElementById('sl_eq').value = Math.floor(Math.random()*100);
-  updatePersonaEditor();
-}
-// 初始化
-setTimeout(updatePersonaEditor, 500);
 
 function startMultiAi() {
   const host = document.getElementById('multiHost').value.trim();
