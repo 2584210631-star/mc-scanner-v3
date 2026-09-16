@@ -1308,6 +1308,12 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         </div>
       </div>
     </div>
+    <div class="panel">
+      <h2>📜 历史记录（断开/被ban后也能导出）</h2>
+      <div id="obsHistoryList" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <p class="hint">暂无历史记录</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -3524,7 +3530,6 @@ function loadObserverSessions() {
     box.innerHTML = '';
     if (!d.sessions || d.sessions.length===0) {
       box.innerHTML = '<span style="color:#64748b;font-size:12px;">暂无活跃会话</span>';
-      return;
     }
     d.sessions.forEach(s=>{
       const card = document.createElement('div');
@@ -3536,6 +3541,35 @@ function loadObserverSessions() {
       box.appendChild(card);
     });
   });
+  loadObserverHistory();
+}
+
+function loadObserverHistory() {
+  fetch('/api/observer/history').then(r=>r.json()).then(d=>{
+    const box = document.getElementById('obsHistoryList');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!d.sessions || d.sessions.length===0) {
+      box.innerHTML = '<span style="color:#64748b;font-size:12px;">暂无历史记录</span>';
+      return;
+    }
+    d.sessions.forEach(s=>{
+      const card = document.createElement('div');
+      card.className = 'obs-session-card';
+      card.style.opacity = '0.7';
+      card.innerHTML = `<div class="obs-name">${s.username} @ ${s.host}:${s.port}</div>
+        <div class="obs-status obs-status-offline">已结束 | ${s.msg_count}条 | ${s.saved_at.slice(5,16)}</div>
+        <div style="margin-top:6px;display:flex;gap:4px;">
+          <button class="obs-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();exportHistoryObserver('${s.session_id}','txt')">TXT</button>
+          <button class="obs-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();exportHistoryObserver('${s.session_id}','html')">HTML</button>
+        </div>`;
+      box.appendChild(card);
+    });
+  });
+}
+
+function exportHistoryObserver(sid, fmt) {
+  window.open(`/api/observer/export?session_id=${encodeURIComponent(sid)}&format=${fmt}`);
 }
 
 function startObsPolling() {
