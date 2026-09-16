@@ -232,10 +232,11 @@ def stats(db_path: str) -> dict:
         "SELECT COUNT(*) FROM servers WHERE players_online > 0").fetchone()[0]
     by_version = {}
     try:
-        by_version = {r[0]: r[1] for r in conn.execute(
+        by_version = {(r[0] or '未知'): r[1] for r in conn.execute(
             "SELECT version, COUNT(*) FROM servers GROUP BY version ORDER BY COUNT(*) DESC LIMIT 20")}
     except Exception:
         pass
+    by_auth = {(k or '未知'): v for k, v in by_auth.items()}
     by_core = {}
     try:
         by_core = {r[0]: r[1] for r in conn.execute(
