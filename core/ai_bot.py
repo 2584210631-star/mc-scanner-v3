@@ -99,19 +99,23 @@ class AIBotSession:
         """判断是否应该回复这条消息"""
         now = time.time()
         if now - self._last_reply_time < self.reply_cooldown:
+            print(f"[AI Bot {self.username}] 冷却中，跳过: {text[:30]}")
             return False
         # 不回复自己
         if sender == self.username:
+            print(f"[AI Bot {self.username}] 不回复自己: {text[:30]}")
             return False
         # 有些服务器sender解析不出来（全是"系统"），通过文本内容判断是不是自己发的
         # 格式如 [玩家]自己的名字: 消息 或 自己的名字: 消息
         if text and (f"]{self.username}:" in text or text.startswith(f"{self.username}:")):
+            print(f"[AI Bot {self.username}] 自己发的消息，跳过: {text[:30]}")
             return False
         # 过滤明显的系统消息（加入/离开/成就等）
         if not text:
             return False
         system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战", "被", "淹死", "摔死", "烧死", "炸死", "欢迎来到", "溜掉", "钓到了"]
         if any(p in text for p in system_patterns):
+            print(f"[AI Bot {self.username}] 系统消息，跳过: {text[:30]}")
             return False
         # 过滤纯命令输出
         if text.startswith('/') or text.startswith('Unknown command'):
@@ -119,6 +123,7 @@ class AIBotSession:
         # 关键词触发
         if self.trigger_keywords:
             if not any(kw in text for kw in self.trigger_keywords):
+                print(f"[AI Bot {self.username}] 关键词不匹配，跳过: {text[:30]}")
                 return False
         return True
 
@@ -128,6 +133,7 @@ class AIBotSession:
         if not self._should_reply(sender, text):
             return
         self._last_reply_time = time.time()
+        print(f"[AI Bot {self.username}] 准备回复 sender={sender} text={text[:40]}")
 
         def _reply_worker():
             try:
