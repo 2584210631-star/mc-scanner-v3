@@ -2157,12 +2157,24 @@ def _health_monitor_loop():
     while not health_monitor["stop_event"].is_set():
         try:
             # 从收藏列表获取服务器
-            fav_file = 'favorites.json'
             targets = []
-            if os.path.exists(fav_file):
-                with open(fav_file, 'r', encoding='utf-8') as f:
-                    favs = json.load(f)
-                targets = [(f['ip'], f['port']) for f in favs.get('servers', [])]
+            try:
+                from storage.favorites import filter_favorites
+                favs = filter_favorites()
+                targets = [(f['ip'], f['port']) for f in favs]
+            except Exception:
+                # 兜底：直接读文件
+                fav_file = 'favorites.json'
+                if os.path.exists(fav_file):
+                    try:
+                        with open(fav_file, 'r', encoding='utf-8') as f:
+                            favs = json.load(f)
+                        if isinstance(favs, list):
+                            targets = [(f['ip'], f['port']) for f in favs]
+                        elif isinstance(favs, dict) and 'servers' in favs:
+                            targets = [(f['ip'], f['port']) for f in favs['servers']]
+                    except Exception:
+                        pass
             # 也从数据库取有人过的服务器
             try:
                 conn = sqlite3.connect('mcscanner.db')
