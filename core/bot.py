@@ -547,8 +547,13 @@ class MCBot:
                 elif packet_id == pkts.get("cb_chat_message") or packet_id == pkts.get("cb_system_chat") or packet_id == pkts.get("cb_profileless_chat"):
                     # 聊天消息 — 提取文本用于插件抓取/命令响应
                     try:
-                        is_system = (packet_id == pkts.get("cb_system_chat")) or (packet_id == pkts.get("cb_profileless_chat"))
-                        text, sender = self._extract_chat_with_sender(data, is_system)
+                        is_profileless = (packet_id == pkts.get("cb_profileless_chat"))
+                        is_system = (packet_id == pkts.get("cb_system_chat"))
+                        if is_profileless:
+                            # 无签名玩家聊天（离线服常见）：格式=JSON组件，sender从JSON的with[0]提取
+                            text, sender = self._extract_profileless_chat(data)
+                        else:
+                            text, sender = self._extract_chat_with_sender(data, is_system)
                         if text:
                             with self._chat_lock:
                                 self.chat_messages.append(text)
@@ -579,6 +584,30 @@ class MCBot:
                 sender = text[1:gt]
                 text = text[gt + 1:].lstrip()
         return text, sender
+
+    def _extract_profileless_chat(self, data: bytes):
+        """无签名玩家聊天（profileless_chat）：格式=JSON组件，sender从with[0]提取"""
+        from .buffer import BytesStream, read_string_from_stream
+        try:
+            stream = BytesStream(data)
+            json_str = read_string_from_stream(stream)
+            text = self.protocol_handler._parse_json_chat(json_str)
+            # 从JSON提取sender
+            sender = "未知玩家"
+            try:
+                import json as _json
+                obj = _json.loads(json_str)
+                if isinstance(obj, dict):
+                    with_args = obj.get("with", [])
+                    if with_args and isinstance(with_args[0], dict):
+                        sender = with_args[0].get("text") or with_args[0].get("insertion") or "未知玩家"
+                    elif with_args and isinstance(with_args[0], str):
+                        sender = with_args[0]
+            except Exception:
+                pass
+            return text, sender
+        except Exception:
+            return "", "未知玩家"
 
     def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
         """从聊天包 payload 中提取纯文本（委托给版本协议处理器）"""
