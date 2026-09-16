@@ -72,6 +72,13 @@ body {
 .status-pill::before { content:''; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
 .status-pill.error { color: var(--red); }
 .status-pill.error::before { background: var(--red); }
+.topbar-icon-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--canvas); border: 1px solid var(--hairline);
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.topbar-icon-btn:hover { background: var(--primary); transform: rotate(45deg); }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
 /* ===== Tabs ===== */
 .tabs { display: flex; gap: 2px; padding: 0 28px; border-bottom: 1px solid var(--hairline); background: var(--canvas); }
@@ -731,9 +738,13 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--hairline);
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-  justify-content: space-around;
+  justify-content: flex-start;
   align-items: center;
+  overflow-x: auto;
+  gap: 2px;
+  scrollbar-width: none;
 }
+.mobile-nav::-webkit-scrollbar { display: none; }
 .mobile-nav-item {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 6px 8px; cursor: pointer; border-radius: 8px;
@@ -915,7 +926,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="subtitle">Minecraft 服务器扫描 · 安全提醒</div>
     </div>
   </div>
-  <div class="status-pill" id="headerStatus">就绪</div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="status-pill" id="headerStatus">就绪</div>
+    <button class="topbar-icon-btn" onclick="switchTab('settings')" title="设置">⚙️</button>
+  </div>
 </header>
 
 <nav class="tabs">
@@ -1760,6 +1774,7 @@ Protect your server NOW!</textarea></div>
 <nav class="mobile-nav" id="mobileNav">
   <div class="mobile-nav-item" data-tab="scan" onclick="switchTab('scan')"><span class="icon">⚡</span>扫描</div>
   <div class="mobile-nav-item" data-tab="results" onclick="switchTab('results')"><span class="icon">📋</span>结果</div>
+  <div class="mobile-nav-item" data-tab="database" onclick="switchTab('database')"><span class="icon">🗄️</span>数据库</div>
   <div class="mobile-nav-item" data-tab="observer" onclick="switchTab('observer')"><span class="icon">👁</span>观察</div>
   <div class="mobile-nav-item" data-tab="favorites" onclick="switchTab('favorites')"><span class="icon">⭐</span>收藏</div>
   <div class="mobile-nav-item" data-tab="aibot" onclick="switchTab('aibot')"><span class="icon">🤖</span>AI</div>
