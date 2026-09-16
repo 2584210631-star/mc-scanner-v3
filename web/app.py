@@ -596,6 +596,31 @@ def observer_list():
     return jsonify({"total": len(sessions), "sessions": sessions})
 
 
+@app.route('/api/observer/history')
+def observer_history():
+    """列出所有已保存的历史会话（断开/被ban后仍可导出）"""
+    logs = []
+    log_dir = 'observer_logs'
+    if os.path.exists(log_dir):
+        for fname in sorted(os.listdir(log_dir), reverse=True):
+            if fname.endswith('.json'):
+                try:
+                    with open(os.path.join(log_dir, fname), 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    logs.append({
+                        'session_id': data.get('session_id', fname.replace('.json','')),
+                        'host': data.get('host', '?'),
+                        'port': data.get('port', 0),
+                        'username': data.get('username', '?'),
+                        'status': data.get('status', 'disconnected'),
+                        'msg_count': len(data.get('chat_log', [])),
+                        'saved_at': data.get('saved_at', ''),
+                    })
+                except Exception:
+                    pass
+    return jsonify({"total": len(logs), "sessions": logs[:50]})
+
+
 @app.route('/api/observer/status')
 def observer_status():
     sid = request.args.get("session_id", "")
