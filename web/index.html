@@ -1532,6 +1532,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group" style="flex:2;"><label>API Key</label><input type="password" id="setAiApiKey" placeholder="sk-..."></div>
       <div class="form-group" style="flex:2;"><label>API 地址 (base_url)</label><input type="text" id="setAiBaseUrl" placeholder="https://api.deepseek.com/v1"></div>
       <div class="form-group"><label>模型</label><input type="text" id="setAiModel" placeholder="deepseek-chat"></div>
+      <div class="form-group" style="max-width:120px;"><label>回复冷却(秒)</label><input type="number" id="setAiCooldown" placeholder="2" min="0" step="0.5"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-primary" onclick="saveAiConfig()">保存配置</button>
@@ -3066,6 +3067,7 @@ async function loadSettings() {
     document.getElementById('setAiApiKey').value = cfg.ai_api_key || '';
     document.getElementById('setAiBaseUrl').value = cfg.ai_base_url || '';
     document.getElementById('setAiModel').value = cfg.ai_model || '';
+    document.getElementById('setAiCooldown').value = cfg.ai_reply_cooldown ?? 2;
     document.getElementById('setWebToken').value = cfg.web_token || '';
     document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
     document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
@@ -3091,6 +3093,7 @@ async function saveAiConfig() {
         ai_api_key: document.getElementById('setAiApiKey').value,
         ai_base_url: document.getElementById('setAiBaseUrl').value,
         ai_model: document.getElementById('setAiModel').value,
+        ai_reply_cooldown: parseFloat(document.getElementById('setAiCooldown').value) || 0,
       })
     });
     const data = await res.json();
