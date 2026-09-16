@@ -1653,7 +1653,7 @@ Protect your server NOW!</textarea></div>
 <nav class="mobile-nav" id="mobileNav">
   <div class="mobile-nav-item" data-tab="scan" onclick="switchTab('scan')"><span class="icon">⚡</span>扫描</div>
   <div class="mobile-nav-item" data-tab="results" onclick="switchTab('results')"><span class="icon">📋</span>结果</div>
-  <div class="mobile-nav-item" data-tab="database" onclick="switchTab('database')"><span class="icon">🗄️</span>数据库</div>
+  <div class="mobile-nav-item" data-tab="observer" onclick="switchTab('observer')"><span class="icon">👁</span>观察</div>
   <div class="mobile-nav-item" data-tab="favorites" onclick="switchTab('favorites')"><span class="icon">⭐</span>收藏</div>
   <div class="mobile-nav-item" data-tab="aibot" onclick="switchTab('aibot')"><span class="icon">🤖</span>AI</div>
   <div class="mobile-nav-item" data-tab="settings" onclick="switchTab('settings')"><span class="icon">⚙️</span>设置</div>
@@ -3438,7 +3438,7 @@ function applyPresetPersona() {
   if (idx === '') return;
   fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
     if (d.personas[idx]) {
-      document.getElementById('aiBotPersona').value = d.personas[idx].persona;
+      document.getElementById('aiBotPersona').value = d.personas[idx].prompt || d.personas[idx].persona || '';
     }
   });
 }
