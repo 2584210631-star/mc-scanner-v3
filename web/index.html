@@ -1429,7 +1429,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div id="storyResult" style="margin-top:12px;"></div>
   </div>
   <div class="panel" id="multiAiChatPanel" style="display:none">
-    <h4>群聊记录 <span id="multiAiCurrentId"></span></h4>
+    <h4 style="display:flex;justify-content:space-between;align-items:center;">群聊记录 <span id="multiAiCurrentId"></span>
+      <button class="btn btn-secondary" style="padding:2px 10px;font-size:12px;" onclick="closeMultiAiChat()">✕ 关闭</button>
+    </h4>
     <div id="multiAiChatLog" style="height:250px;overflow-y:auto;background:#0a0a0a;padding:10px;border-radius:6px;font-family:monospace;font-size:12px"></div>
     <div class="form-row">
       <input type="text" id="multiAiMsgInput" placeholder="输入话题让所有AI讨论..." style="flex:1" onkeypress="if(event.key==='Enter')sendMultiAiMsg()">
@@ -1441,7 +1443,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div id="aiBotList" class="server-list"><p class="hint">暂无运行中的Bot</p></div>
   </div>
   <div class="panel" id="aiBotChatPanel" style="display:none">
-    <h4>聊天记录 <span id="aiBotCurrentName"></span></h4>
+    <h4 style="display:flex;justify-content:space-between;align-items:center;">聊天记录 <span id="aiBotCurrentName"></span>
+      <button class="btn btn-secondary" style="padding:2px 10px;font-size:12px;" onclick="closeAiBotChat()">✕ 关闭</button>
+    </h4>
     <div id="aiBotChatLog" style="height:200px;overflow-y:auto;background:#0a0a0a;padding:10px;border-radius:6px;font-family:monospace;font-size:12px"></div>
     <div class="form-row">
       <input type="text" id="aiBotMsgInput" placeholder="手动发送消息..." style="flex:1" onkeypress="if(event.key==='Enter')sendAiBotMsg()">
@@ -3656,6 +3660,11 @@ function viewAiBotChat(sid, name) {
   aiBotPollTimer = setInterval(()=>{ if(currentAiBotId) fetchAiBotChat(); }, 2000);
   fetchAiBotChat();
 }
+function closeAiBotChat() {
+  currentAiBotId = null;
+  if (aiBotPollTimer) { clearInterval(aiBotPollTimer); aiBotPollTimer = null; }
+  document.getElementById('aiBotChatPanel').style.display = 'none';
+}
 
 function fetchAiBotChat() {
   if (!currentAiBotId) return;
@@ -3823,6 +3832,11 @@ function viewMultiAiChat(gid) {
   if (multiAiPollTimer) clearInterval(multiAiPollTimer);
   multiAiPollTimer = setInterval(()=>{ if(currentMultiAiId) fetchMultiAiChat(); }, 2000);
   fetchMultiAiChat();
+}
+function closeMultiAiChat() {
+  currentMultiAiId = null;
+  if (multiAiPollTimer) { clearInterval(multiAiPollTimer); multiAiPollTimer = null; }
+  document.getElementById('multiAiChatPanel').style.display = 'none';
 }
 
 function fetchMultiAiChat() {
