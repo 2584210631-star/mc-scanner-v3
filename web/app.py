@@ -2155,8 +2155,8 @@ def _health_monitor_loop():
     """后台健康监控线程：定期检查收藏的服务器，人数变化时记录，一轮汇总发一封邮件"""
     _log("[健康监控] 启动，间隔5分钟")
     while not health_monitor["stop_event"].is_set():
-        # 本轮收集到的上线服务器（用于汇总邮件）
-        new_online_servers = []  # [{ip, port, players, player_names, new_players}]
+        # 本轮收集到的人数变化服务器（用于汇总邮件）
+        changed_servers = []  # [{ip, port, prev, curr, joined, left, player_names, new_players, left_players}]
         try:
             # 从收藏列表获取服务器
             targets = []
@@ -2217,62 +2217,79 @@ def _health_monitor_loop():
                             conn.close()
                         except Exception:
                             pass
-                    # 检测变化
+                    # 对比玩家进出
+                    prev_players = set(health_monitor.get("last_players", {}).get(key, []))
+                    curr_players = set(player_names)
+                    new_players = list(curr_players - prev_players)
+                    left_players = list(prev_players - curr_players)
+                    # 检测变化（只要人数变了就记录，不只是0→有人）
                     if online != prev_online:
                         event = {
                             "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             "ip": ip, "port": port,
                             "from": prev_online, "to": online,
+                            "joined": len(new_players),
+                            "left": len(left_players),
+                            "new_players": new_players,
+                            "left_players": left_players,
                             "type": "up" if online > prev_online else "down"
                         }
                         health_monitor["events"].insert(0, event)
                         health_monitor["events"] = health_monitor["events"][:100]
-                        # 有人上线（从0到>0）收集起来，一轮结束后汇总发邮件
-                        if prev_online == 0 and online > 0:
-                            _log(f"[健康监控] {ip}:{port} 有人上线了! {online}人")
-                            # 对比新增玩家
-                            prev_players = set(health_monitor.get("last_players", {}).get(key, []))
-                            curr_players = set(player_names)
-                            new_players = list(curr_players - prev_players)
-                            new_online_servers.append({
-                                "ip": ip, "port": port,
-                                "players": online,
-                                "player_names": player_names,
-                                "new_players": new_players,
-                            })
+                        # 收集人数变化的服务器，一轮结束汇总发邮件
+                        changed_servers.append({
+                            "ip": ip, "port": port,
+                            "prev": prev_online, "curr": online,
+                            "joined": len(new_players), "left": len(left_players),
+                            "player_names": player_names,
+                            "new_players": new_players,
+                            "left_players": left_players,
+                        })
+                        _log(f"[健康监控] {ip}:{port} 人数变化: {prev_online}→{online} (进{len(new_players)}走{len(left_players)})")
                     # 更新上次玩家列表
                     if "last_players" not in health_monitor:
                         health_monitor["last_players"] = {}
                     health_monitor["last_players"][key] = player_names
-                    health_monitor["status"][key] = {"online": bool(r), "players": online, "last_check": datetime.now().strftime('%H:%M:%S')}
+                    health_monitor["status"][key] = {
+                        "online": bool(r), "players": online,
+                        "prev_players": prev_online,
+                        "joined": len(new_players), "left": len(left_players),
+                        "player_names": player_names,
+                        "last_check": datetime.now().strftime('%H:%M:%S')
+                    }
                 except Exception:
                     pass
                 time.sleep(0.5)
             health_monitor["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            # 一轮检查结束，汇总发送一封邮件
-            if new_online_servers:
+            # 一轮检查结束，汇总发送一封邮件（有人数变化就发）
+            if changed_servers:
                 try:
                     from core.notifier import send_email
                     email_enabled = config.get("email_enabled", False)
                     email_to = config.get("email_to", "")
                     if email_enabled and email_to:
-                        # 构建邮件内容
-                        lines = [f"<h2>服务器上线通知（共{len(new_online_servers)}个）</h2>"]
-                        for s in new_online_servers:
+                        lines = [f"<h2>服务器人数变化（共{len(changed_servers)}个）</h2>"]
+                        for s in changed_servers:
                             addr = f"{s['ip']}:{s['port']}"
-                            lines.append(f"<p><b>{addr}</b> - {s['players']}人在线</p>")
+                            delta = s['curr'] - s['prev']
+                            delta_str = f"+{delta}" if delta > 0 else str(delta)
+                            delta_color = "#e94560" if delta > 0 else "#4caf50"
+                            lines.append(f"<p><b>{addr}</b> - {s['prev']}人 → <span style='color:{delta_color}'>{s['curr']}人 ({delta_str})</span></p>")
+                            lines.append(f"<p style='margin-left:20px;color:#666;'>进了 {s['joined']} 人，走了 {s['left']} 人</p>")
                             if s['player_names']:
-                                lines.append(f"<p style='margin-left:20px;color:#666;'>全部玩家: {', '.join(s['player_names'])}</p>")
+                                lines.append(f"<p style='margin-left:20px;color:#888;'>当前玩家: {', '.join(s['player_names'])}</p>")
                             if s['new_players']:
-                                lines.append(f"<p style='margin-left:20px;color:#e94560;'>新增玩家: {', '.join(s['new_players'])}</p>")
+                                lines.append(f"<p style='margin-left:20px;color:#e94560;'>新增: {', '.join(s['new_players'])}</p>")
+                            if s['left_players']:
+                                lines.append(f"<p style='margin-left:20px;color:#999;'>离开: {', '.join(s['left_players'])}</p>")
                             lines.append("<hr style='border:none;border-top:1px solid #eee;'>")
                         body = "\n".join(lines)
                         ok, err = send_email(
-                            f"[MC监控] {len(new_online_servers)}个服务器有人上线了",
+                            f"[MC监控] {len(changed_servers)}个服务器人数变化",
                             body, html=True
                         )
-                        _log(f"[健康监控] 汇总邮件推送: {len(new_online_servers)}个服, success={ok} error={err}")
+                        _log(f"[健康监控] 汇总邮件推送: {len(changed_servers)}个服, success={ok} error={err}")
                     else:
                         _log(f"[健康监控] 邮件未推送: enabled={email_enabled} to={email_to}")
                 except Exception as e:
@@ -2307,6 +2324,32 @@ def health_toggle():
         health_monitor["thread"].start()
         health_monitor["running"] = True
         return jsonify({"success": True, "running": True})
+
+@app.route('/api/favorites/realtime')
+def favorites_realtime():
+    """返回收藏服务器的实时监控状态（当前人数、上次人数、进出玩家）"""
+    try:
+        from storage.favorites import filter_favorites
+        favs = filter_favorites()
+    except Exception:
+        favs = []
+    result = []
+    for f in favs:
+        key = f"{f['ip']}:{f['port']}"
+        st = health_monitor["status"].get(key, {})
+        result.append({
+            "ip": f['ip'], "port": f['port'],
+            "tag": f.get('tag', ''),
+            "note": f.get('note', ''),
+            "online": st.get("online", False),
+            "players": st.get("players", 0),
+            "prev_players": st.get("prev_players", 0),
+            "joined": st.get("joined", 0),
+            "left": st.get("left", 0),
+            "player_names": st.get("player_names", []),
+            "last_check": st.get("last_check", ""),
+        })
+    return jsonify({"servers": result, "last_check": health_monitor.get("last_check")})
 
 
 # ============ 自动扫描警告 ============
