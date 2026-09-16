@@ -2194,7 +2194,7 @@ def _health_monitor_loop():
                     from scanner.async_probe import async_slp_probe
                     r = asyncio.run(async_slp_probe(ip, port, timeout=4))
                     key = f"{ip}:{port}"
-                    online = r.get('players_online', 0) if r else 0
+                    online = r.get('online', 0) if r else 0
                     prev = health_monitor["status"].get(key, {})
                     prev_online = prev.get('players', 0)
                     # 记录人数趋势
@@ -2203,7 +2203,7 @@ def _health_monitor_loop():
                             conn = sqlite3.connect('mcscanner.db')
                             conn.execute(
                                 'INSERT INTO server_popularity (ip, port, players_online, players_max, recorded_at) VALUES (?,?,?,?,?)',
-                                (ip, port, online, r.get('players_max', 0), datetime.now(timezone.utc).isoformat())
+                                (ip, port, online, r.get('max', 0), datetime.now(timezone.utc).isoformat())
                             )
                             conn.commit()
                             conn.close()
@@ -2226,14 +2226,18 @@ def _health_monitor_loop():
                             try:
                                 from core.notifier import send_email
                                 cfg = _load_config()
+                                _log(f"[健康监控] 邮件配置: smtp_enabled={cfg.get('smtp_enabled')} notify_email={cfg.get('notify_email')}")
                                 if cfg.get('smtp_enabled') and cfg.get('notify_email'):
-                                    send_email(
+                                    ok = send_email(
                                         cfg['notify_email'],
                                         f"服务器有人上线了! {ip}:{port}",
                                         f"服务器 {ip}:{port} 当前有 {online} 人在线"
                                     )
-                            except Exception:
-                                pass
+                                    _log(f"[健康监控] 邮件推送结果: {ok}")
+                                else:
+                                    _log(f"[健康监控] 邮件未推送: smtp_enabled={cfg.get('smtp_enabled')} notify_email={cfg.get('notify_email')}")
+                            except Exception as e:
+                                _log(f"[健康监控] 邮件推送异常: {e}")
                     health_monitor["status"][key] = {"online": bool(r), "players": online, "last_check": datetime.now().strftime('%H:%M:%S')}
                 except Exception:
                     pass
