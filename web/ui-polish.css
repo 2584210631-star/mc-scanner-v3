@@ -1,0 +1,96 @@
+/* ===== UI polish v3.4.1 ===== */
+:root {
+  --canvas: #0e0e0f !important;
+  --canvas-soft: #161618 !important;
+  --canvas-2: #1c1c1f !important;
+  --hairline: #2e2e32 !important;
+  --body: #a1a1aa !important;
+  --mute: #71717a !important;
+  --faint: #52525b !important;
+  --radius-sm: 8px !important;
+  --radius: 12px !important;
+  --shadow: 0 8px 30px rgba(0,0,0,.35);
+  --topbar-h: 56px;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(14,14,15,.88) !important;
+}
+.tabs {
+  position: sticky;
+  top: var(--topbar-h, 56px);
+  z-index: 40;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 4px !important;
+  background: rgba(14,14,15,.85) !important;
+  backdrop-filter: blur(16px);
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  white-space: nowrap;
+  border-radius: 8px 8px 0 0;
+  letter-spacing: .01em;
+}
+.tab.active {
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary) !important;
+  background: linear-gradient(180deg, rgba(0,217,146,.1), transparent);
+  font-weight: 600;
+}
+.btn:hover { filter: brightness(1.06); }
+.btn:active { transform: translateY(1px); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(0,217,146,.15);
+}
+.table-wrap {
+  border-radius: 12px !important;
+  box-shadow: var(--shadow);
+}
+.tab-content { animation: uiFadeIn .22s ease-out; }
+@keyframes uiFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.m-bottom-nav {
+  display: none;
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 60;
+  background: rgba(14,14,15,.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-top: 1px solid var(--hairline);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  justify-content: space-around;
+  gap: 2px;
+}
+.m-bottom-nav button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--mute);
+  font-size: 11px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.m-bottom-nav button.active {
+  color: var(--primary);
+  background: rgba(0,217,146,.1);
+  font-weight: 600;
+}
+.m-bottom-nav button span { display: block; font-size: 16px; line-height: 1.2; margin-bottom: 2px; }
+@media (max-width: 768px) {
+  .tabs { display: none !important; }
+  .m-bottom-nav { display: flex; }
+  body { padding-bottom: 64px; }
+}
