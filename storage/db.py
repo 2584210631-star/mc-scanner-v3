@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # 线程局部连接池：每个线程每个db_path复用一个连接，避免频繁创建
 _local = threading.local()
@@ -229,6 +229,27 @@ def count(db_path: str, auth: str = None, modded: int = None,
         sql += " WHERE " + " AND ".join(conds)
     total = conn.execute(sql, args).fetchone()[0]
     return total
+
+
+def clean_old_records(db_path: str, retention_days: int = 30, only_offline: bool = True) -> int:
+    """清理超旧记录。retention_days=0时不清理。
+    only_offline=True时只清理离线且超旧的服务器，保留有人的记录。
+    返回删除条数。
+    """
+    if retention_days <= 0:
+        return 0
+    conn = get_conn(db_path)
+    cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d %H:%M:%S")
+    if only_offline:
+        cursor = conn.execute(
+            "DELETE FROM servers WHERE last_updated < ? AND (players_online IS NULL OR players_online = 0)",
+            (cutoff,)
+        )
+    else:
+        cursor = conn.execute("DELETE FROM servers WHERE last_updated < ?", (cutoff,))
+    deleted = cursor.rowcount
+    conn.commit()
+    return deleted
 
 
 def stats(db_path: str) -> dict:

@@ -40,6 +40,8 @@ def register(app):
 
     @app.route('/api/ai_bot/start', methods=['POST'])
     def ai_bot_start():
+        if state.is_read_only():
+            return jsonify({"error": "只读模式下禁止AI进服"}), 403
         global _ai_bot_seq
         data = request.json or {}
         host = data.get("host")
@@ -107,6 +109,8 @@ def register(app):
 
     @app.route('/api/ai_multi/start', methods=['POST'])
     def ai_multi_start():
+        if state.is_read_only():
+            return jsonify({"error": "只读模式下禁止AI进服"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)

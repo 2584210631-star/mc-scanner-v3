@@ -78,6 +78,20 @@ def register(app):
         ok = config.save_config(to_save)
         return jsonify({"success": ok, "saved": list(to_save.keys())})
 
+    @app.route('/api/config/read_only', methods=['POST'])
+    def config_read_only():
+        """切换只读模式：开启后禁止警告/进服/扫描等危险操作"""
+        data = request.json or {}
+        enabled = bool(data.get("enabled", False))
+        state.set_read_only(enabled)
+        # 同时持久化到config
+        config.save_config({"read_only_mode": enabled})
+        return jsonify({"success": True, "read_only": enabled})
+
+    @app.route('/api/config/read_only', methods=['GET'])
+    def config_read_only_status():
+        return jsonify({"read_only": state.is_read_only()})
+
     @app.route('/api/email/test', methods=['POST'])
     def email_test():
         """发送测试邮件"""

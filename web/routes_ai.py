@@ -34,6 +34,40 @@ def register(app):
         from core.ai_generator import get_preset_list
         return jsonify({"presets": get_preset_list()})
 
+    @app.route('/api/ai/personas')
+    def ai_personas_list():
+        """获取所有人格列表（含自定义覆盖）"""
+        from core.ai_personas import get_personas
+        return jsonify({"personas": get_personas()})
+
+    @app.route('/api/ai/personas/update', methods=['POST'])
+    def ai_personas_update():
+        """新增或更新人格，即时生效"""
+        if state.is_read_only():
+            return jsonify({"error": "只读模式下禁止修改人格"}), 403
+        data = request.json or {}
+        name = (data.get("name") or "").strip()
+        label = (data.get("label") or "").strip()
+        persona_text = data.get("persona") or ""
+        if not name or not persona_text:
+            return jsonify({"error": "name和persona不能为空"}), 400
+        from core.ai_personas import update_persona
+        update_persona(name, label, persona_text)
+        return jsonify({"success": True, "name": name})
+
+    @app.route('/api/ai/personas/delete', methods=['POST'])
+    def ai_personas_delete():
+        """删除自定义人格（预设人格恢复原样）"""
+        if state.is_read_only():
+            return jsonify({"error": "只读模式下禁止修改人格"}), 403
+        data = request.json or {}
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "name不能为空"}), 400
+        from core.ai_personas import delete_persona
+        ok = delete_persona(name)
+        return jsonify({"success": ok})
+
     @app.route('/api/ai/get')
     def ai_get():
         """GET版本，浏览器地址栏直接调用。参数: topic, preset, api_key, base_url, model"""

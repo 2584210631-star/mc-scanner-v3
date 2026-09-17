@@ -107,3 +107,86 @@ PRESET_PERSONAS = [
         + _HUMAN
     )},
 ]
+
+# ===== 人格热更新支持 =====
+import os
+import json
+import threading
+
+_PERSONAS_LOCK = threading.Lock()
+_PERSONAS_FILE = "personas.json"
+_custom_personas = {}  # name -> {name, label, persona}
+
+
+def _load_custom():
+    """从personas.json加载自定义人格"""
+    global _custom_personas
+    try:
+        if os.path.exists(_PERSONAS_FILE):
+            with open(_PERSONAS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    _custom_personas = {p["name"]: p for p in data if "name" in p}
+                elif isinstance(data, dict):
+                    _custom_personas = data
+    except Exception:
+        _custom_personas = {}
+
+
+def _save_custom():
+    """保存自定义人格到personas.json"""
+    try:
+        with open(_PERSONAS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(list(_custom_personas.values()), f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def get_personas():
+    """获取所有人格（预设+自定义覆盖），即时生效"""
+    with _PERSONAS_LOCK:
+        if not _custom_personas:
+            _load_custom()
+        result = []
+        for p in PRESET_PERSONAS:
+            if p["name"] in _custom_personas:
+                result.append(_custom_personas[p["name"]])
+            else:
+                result.append(p)
+        preset_names = {pp["name"] for pp in PRESET_PERSONAS}
+        for name, p in _custom_personas.items():
+            if name not in preset_names:
+                result.append(p)
+        return result
+
+
+def get_persona(name):
+    """按名字获取单个人格"""
+    for p in get_personas():
+        if p["name"] == name:
+            return p
+    return None
+
+
+def update_persona(name, label, persona_text):
+    """新增或更新人格，即时生效并持久化"""
+    with _PERSONAS_LOCK:
+        _load_custom()
+        _custom_personas[name] = {"name": name, "label": label or name, "persona": persona_text}
+        _save_custom()
+    return True
+
+
+def delete_persona(name):
+    """删除自定义人格（预设人格会恢复原样）"""
+    with _PERSONAS_LOCK:
+        _load_custom()
+        if name in _custom_personas:
+            del _custom_personas[name]
+            _save_custom()
+            return True
+    return False
+
+
+# 启动时加载一次
+_load_custom()
