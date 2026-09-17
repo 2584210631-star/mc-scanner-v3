@@ -189,36 +189,62 @@ class AIBotSession:
         threading.Thread(target=_talk_worker, daemon=True).start()
 
     def run(self):
-        try:
-            self.bot = MCBot(host=self.host, port=self.port, username=self.username,
-                             timeout=self.timeout, protocol_version=self.protocol_version)
-            self.bot.chat_callback = self._on_chat
-            self.bot.connect()
+        """运行主循环，断开后自动指数退避重连"""
+        max_reconnect = getattr(self, 'max_reconnect', 10)
+        reconnect_delay = 5.0
+        reconnect_count = 0
+
+        while not self.stop_event.is_set():
+            try:
+                self.bot = MCBot(host=self.host, port=self.port, username=self.username,
+                                 timeout=self.timeout, protocol_version=self.protocol_version)
+                self.bot.chat_callback = self._on_chat
+                self.bot.connect()
+                with self.lock:
+                    self.status = "connected"
+                    self.version_name = getattr(self.bot, 'version_name', '') or ""
+                    self.connect_time = time.time()
+                    self.error = ""
+                reconnect_count = 0
+                reconnect_delay = 5.0
+                if self.authme_password:
+                    try:
+                        self.bot.authme_login(self.authme_password, register=False)
+                    except Exception:
+                        pass
+                while not self.stop_event.is_set():
+                    if not getattr(self.bot, "connected", True):
+                        with self.lock:
+                            self.status = "reconnecting"
+                        break
+                    if self.duration > 0 and self.connect_time and (time.time() - self.connect_time) >= self.duration:
+                        with self.lock:
+                            self.status = "stopped"
+                        return
+                    self._do_auto_talk()
+                    time.sleep(1.0)
+            except Exception as e:
+                with self.lock:
+                    self.status = "error"
+                    self.error = str(e)[:200]
+                _log.error(f"[AI Bot {self.username}] run failed: {e}")
+
+            if self.stop_event.is_set():
+                return
+            if reconnect_count >= max_reconnect:
+                with self.lock:
+                    self.status = "disconnected"
+                _log.warning(f"[AI Bot {self.username}] 达到最大重连次数({max_reconnect})，停止")
+                return
+            reconnect_count += 1
+            _log.info(f"[AI Bot {self.username}] 断开，{reconnect_delay:.0f}秒后第{reconnect_count}次重连...")
             with self.lock:
-                self.status = "connected"
-                self.version_name = getattr(self.bot, 'version_name', '') or ""
-                self.connect_time = time.time()
-            if self.authme_password:
-                try:
-                    self.bot.authme_login(self.authme_password, register=False)
-                except Exception:
-                    pass
-            while not self.stop_event.is_set():
-                if not getattr(self.bot, "connected", True):
-                    with self.lock:
-                        self.status = "disconnected"
-                    return
-                if self.duration > 0 and self.connect_time and (time.time() - self.connect_time) >= self.duration:
-                    with self.lock:
-                        self.status = "stopped"
-                    return
-                self._do_auto_talk()
-                time.sleep(1.0)
-        except Exception as e:
-            with self.lock:
-                self.status = "error"
-                self.error = str(e)[:200]
-            _log.error(f"[AI Bot {self.username}] run failed: {e}")
+                self.status = "reconnecting"
+            # 指数退避，最多60秒
+            wait_end = time.time() + reconnect_delay
+            while time.time() < wait_end and not self.stop_event.is_set():
+                time.sleep(0.5)
+            reconnect_delay = min(reconnect_delay * 1.5, 60.0)
 
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True)

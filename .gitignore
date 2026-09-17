@@ -55,7 +55,6 @@ rescan*.py
 # 通用忽略，白名单必要配置
 *.json
 !config.example.json
-!config.json
 !package.json
 *.txt
 !requirements.txt
