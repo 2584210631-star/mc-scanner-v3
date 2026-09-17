@@ -37,3 +37,4 @@ def register(app):
         _mod = importlib.util.module_from_spec(_spec)
         _spec.loader.exec_module(_mod)
         return _mod.serve_index(os.path.dirname(__file__))
+
