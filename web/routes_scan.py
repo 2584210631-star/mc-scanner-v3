@@ -79,7 +79,9 @@ def register(app):
     @app.route('/api/scan/random', methods=['POST'])
     def random_scan_api():
         data = request.json or {}
-        if scan_state["running"]:
+        # 检查全局scan_state和任务队列里是否有任务在跑
+        has_running = scan_state["running"] or any(t["running"] for t in state.scan_tasks.values())
+        if has_running:
             return jsonify({"error": "已有扫描任务在运行"}), 400
         count = data.get("count", 1000)
         ports = data.get("ports", "25565-25575")
@@ -88,7 +90,6 @@ def register(app):
         do_probe = data.get("probe", True)
 
         def _random_worker():
-            pass
             try:
                 state.task_counter += 1
                 with scan_lock:

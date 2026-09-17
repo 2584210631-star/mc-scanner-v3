@@ -57,27 +57,31 @@ def _run_next_queued():
 
 def start_scan_task(targets_list, scan_config, scan_type="manual"):
     """启动扫描任务，如果有任务在跑则排队。返回task_id。"""
-    state.task_counter += 1
-    task_id = state.task_counter
-    task = state.new_task_state(task_id, len(targets_list), scan_type)
     with scan_lock:
+        state.task_counter += 1
+        task_id = state.task_counter
+        task = state.new_task_state(task_id, len(targets_list), scan_type)
         state.scan_tasks[task_id] = task
-    # 检查是否有任务在跑
-    running = any(t["running"] for t in state.scan_tasks.values())
-    if running:
-        task["status"] = "queued"
-        task["_queued_targets"] = targets_list
-        task["_queued_config"] = scan_config
-        with scan_lock:
+        # 在锁内检查是否有任务在跑，避免竞态
+        running = any(t["running"] for t in state.scan_tasks.values())
+        if running:
+            task["status"] = "queued"
+            task["_queued_targets"] = targets_list
+            task["_queued_config"] = scan_config
             state.scan_queue.append(task_id)
-        _log(f"任务 #{task_id} 已排队（前方{len(state.scan_queue)}个任务）", task_id=task_id)
-    else:
-        task["status"] = "running"
-        task["running"] = True
-        with scan_lock:
+            queue_len = len(state.scan_queue)
+            should_start = False
+        else:
+            task["status"] = "running"
+            task["running"] = True
             state.current_task_id = task_id
+            queue_len = 0
+            should_start = True
+    if should_start:
         thread = threading.Thread(target=_scan_worker, args=(task_id, targets_list, scan_config), daemon=True)
         thread.start()
+    else:
+        _log(f"任务 #{task_id} 已排队（前方{queue_len}个任务）", task_id=task_id)
     return task_id
 
 
@@ -124,7 +128,7 @@ def list_tasks():
         return tasks
 
 
-def _scan_worker(task_id, targets_list, config):
+def _scan_worker(task_id, targets_list, scan_cfg):
     """扫描工作线程，每个任务独立状态"""
     task = _get_task_state(task_id)
     if not task:
@@ -153,12 +157,12 @@ def _scan_worker(task_id, targets_list, config):
                 task["open_count"] = open_count
             _update_current_view(task_id)
 
-        use_masscan = config.get("use_masscan", False)
-        portscan_only = config.get("portscan_only", False)
+        use_masscan = scan_cfg.get("use_masscan", False)
+        portscan_only = scan_cfg.get("portscan_only", False)
         results = []
 
         # 连续扫描模式
-        if config.get("continuous"):
+        if scan_cfg.get("continuous"):
             import ipaddress
             subnets = []
             for t in targets_list:
@@ -179,37 +183,37 @@ def _scan_worker(task_id, targets_list, config):
                     continue
             from scanner.engine import ScanEngine
             engine = ScanEngine(stop_event=stop_evt,
-                db_path=config.get("db_path", "mcscanner.db"),
-                workers=config.get("workers", 32),
-                timeout=config.get("timeout", 4.0),
-                auth_check=config.get("auth_check", True),
-                rate_limit=config.get("rate", 0),
+                db_path=scan_cfg.get("db_path", "mcscanner.db"),
+                workers=scan_cfg.get("workers", 32),
+                timeout=scan_cfg.get("timeout", 4.0),
+                auth_check=scan_cfg.get("auth_check", True),
+                rate_limit=scan_cfg.get("rate", 0),
             )
             for i, subnet in enumerate(subnets):
                 if stop_evt.is_set():
                     break
                 _log(f"连续扫描 [{i+1}/{len(subnets)}]: {subnet}", task_id=task_id)
                 subnet_results = engine.scan_with_portscan(
-                    iter([(subnet, p) for p in config.get("ports", [25565])]),
-                    scan_threads=config.get("scan_threads", 200),
-                    scan_timeout=config.get("scan_timeout", 2.5),
+                    iter([(subnet, p) for p in scan_cfg.get("ports", [25565])]),
+                    scan_threads=scan_cfg.get("scan_threads", 200),
+                    scan_timeout=scan_cfg.get("scan_timeout", 2.5),
                     progress_callback=_on_progress,
                 )
                 results.extend(subnet_results)
         elif use_masscan:
             from scanner.masscan_wrapper import masscan_scan
             _log("使用 masscan 快速端口扫描")
-            open_ports = masscan_scan(targets_list, config.get("ports", [25565]),
-                                      rate=config.get("masscan_rate", 10000),
-                                      interface=config.get("interface"))
+            open_ports = masscan_scan(targets_list, scan_cfg.get("ports", [25565]),
+                                      rate=scan_cfg.get("masscan_rate", 10000),
+                                      interface=scan_cfg.get("interface"))
             _log(f"masscan 发现 {len(open_ports)} 个开放端口，开始SLP探测")
             if not portscan_only:
                 from scanner.engine import ScanEngine
                 engine = ScanEngine(stop_event=stop_evt,
-                    db_path=config.get("db_path", "mcscanner.db"),
-                    workers=config.get("workers", 32),
-                    timeout=config.get("timeout", 4.0),
-                    auth_check=config.get("auth_check", True),
+                    db_path=scan_cfg.get("db_path", "mcscanner.db"),
+                    workers=scan_cfg.get("workers", 32),
+                    timeout=scan_cfg.get("timeout", 4.0),
+                    auth_check=scan_cfg.get("auth_check", True),
                 )
                 results = engine.probe_list(open_ports, progress_callback=_on_progress)
             else:
@@ -219,35 +223,35 @@ def _scan_worker(task_id, targets_list, config):
                            for ip, port in open_ports]
                 _log(f"端口扫描完成，开放: {len(results)} 个")
         else:
-            if config.get("async_mode"):
+            if scan_cfg.get("async_mode"):
                 from scanner.async_engine import AsyncScanEngine
                 from scanner.async_portscan import has_uvloop
                 from scanner.async_probe import has_simdjson
                 _log(f"异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
                      f"simdjson: {'启用' if has_simdjson() else '未安装'}）", task_id=task_id)
                 async_engine = AsyncScanEngine(
-                    db_path=config.get("db_path", "mcscanner.db"),
-                    concurrency=config.get("scan_threads", 1000),
-                    slp_concurrency=config.get("workers", 200),
-                    timeout=config.get("timeout", 4.0),
-                    auth_check=config.get("auth_check", True),
-                    rate_limit=config.get("rate", 0),
+                    db_path=scan_cfg.get("db_path", "mcscanner.db"),
+                    concurrency=scan_cfg.get("scan_threads", 1000),
+                    slp_concurrency=scan_cfg.get("workers", 200),
+                    timeout=scan_cfg.get("timeout", 4.0),
+                    auth_check=scan_cfg.get("auth_check", True),
+                    rate_limit=scan_cfg.get("rate", 0),
                     stop_event=stop_evt,
                 )
                 results = async_engine.scan_with_portscan(iter(targets_list))
             else:
                 from scanner.engine import ScanEngine
                 engine = ScanEngine(stop_event=stop_evt,
-                    db_path=config.get("db_path", "mcscanner.db"),
-                    workers=config.get("workers", 32),
-                    timeout=config.get("timeout", 4.0),
-                    auth_check=config.get("auth_check", True),
-                    rate_limit=config.get("rate", 0),
+                    db_path=scan_cfg.get("db_path", "mcscanner.db"),
+                    workers=scan_cfg.get("workers", 32),
+                    timeout=scan_cfg.get("timeout", 4.0),
+                    auth_check=scan_cfg.get("auth_check", True),
+                    rate_limit=scan_cfg.get("rate", 0),
                 )
                 results = engine.scan_with_portscan(
                     iter(targets_list),
-                    scan_threads=config.get("scan_threads", 200),
-                    scan_timeout=config.get("scan_timeout", 2.5),
+                    scan_threads=scan_cfg.get("scan_threads", 200),
+                    scan_timeout=scan_cfg.get("scan_timeout", 2.5),
                     progress_callback=_on_progress,
                 )
 
@@ -299,7 +303,7 @@ def _scan_worker(task_id, targets_list, config):
         if next_id:
             next_task = _get_task_state(next_id)
             if next_task:
-                # 重新构造targets_list和config（排队时存了）
+                # 重新构造targets_list和scan_cfg（排队时存了）
                 queued_targets = next_task.pop("_queued_targets", None)
                 queued_config = next_task.pop("_queued_config", None)
                 if queued_targets and queued_config:
@@ -307,7 +311,9 @@ def _scan_worker(task_id, targets_list, config):
                     thread.start()
                 else:
                     _log(f"任务 #{next_id} 排队数据丢失，跳过", task_id=next_id)
-                    next_task["status"] = "error"
+                    with scan_lock:
+                        next_task["status"] = "error"
+                        next_task["running"] = False
         else:
             with scan_lock:
                 scan_state["running"] = False
