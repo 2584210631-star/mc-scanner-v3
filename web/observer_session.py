@@ -1,4 +1,14 @@
 # -*- coding: utf-8 -*-
+import os
+import json
+import time
+import threading
+import traceback
+from datetime import datetime
+from collections import deque
+from core.bot import MCBot
+
+
 class ObserverSession:
     """单个服务器观察者会话"""
     def __init__(self, host, port, username, authme_password=None, timeout=20.0, duration=0, protocol_version=None):
