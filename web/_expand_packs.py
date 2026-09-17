@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
+"""Expand packed web modules if source .py missing or older."""
 import os, zlib, base64, json
+
 _DIR = os.path.dirname(os.path.abspath(__file__))
+
 def expand(force=False):
-    i = wrote = 0
+    i = 0
+    wrote = 0
     while True:
         p = os.path.join(_DIR, f"_pack{i}.json")
         if not os.path.isfile(p):
@@ -18,5 +22,7 @@ def expand(force=False):
                 wrote += 1
         i += 1
     return wrote
+
 if __name__ == "__main__":
-    print("wrote", expand(force=True), "files")
+    n = expand(force=True)
+    print("wrote", n, "files")
