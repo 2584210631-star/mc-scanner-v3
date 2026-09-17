@@ -2,7 +2,6 @@
 """Web 面板共享状态。"""
 import threading
 from datetime import datetime
-
 import config
 import logger
 
@@ -81,8 +80,7 @@ def parse_ports_spec(ports_spec):
         if "-" in part:
             try:
                 start, end = part.split("-", 1)
-                start = int(start.strip())
-                end = int(end.strip())
+                start = int(start.strip()); end = int(end.strip())
                 if start > end:
                     start, end = end, start
                 result.extend(range(start, end + 1))
