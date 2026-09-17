@@ -30,7 +30,6 @@ scan_stats.json
 scan_results*.ndjson
 masscan_*.ndjson
 
-
 # IDE
 .vscode/
 .idea/
@@ -45,13 +44,31 @@ Thumbs.db
 # 环境变量
 .env
 
-# 临时脚本
+# 临时脚本与运行产物
 warn_*.py
 stay_*.py
 *.log
 verified_*.json
 cracked_*.json
 rescan*.py
+
+# 通用忽略，白名单必要配置
 *.json
+!config.example.json
+!config.json
+!package.json
 *.txt
+!requirements.txt
+!targets.txt
 libs/bin/
+
+# 聊天记录 / 观察者导出（勿提交）
+chat_log_*.html
+duel_chat_*.html
+provoke_chat_*.html
+observer_logs/
+*.html
+!web/index.html
+
+# 本地私密配置
+config.local.json
