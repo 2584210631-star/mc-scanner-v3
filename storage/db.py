@@ -93,6 +93,8 @@ def init_db(db_path: str):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_core_type ON servers(core_type)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_is_modded ON servers(is_modded)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_last_updated ON servers(last_updated)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_players_online ON servers(players_online)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_ip_port ON servers(ip, port)")
     conn.commit()
     # v3.2.1: 初始化扩展表（玩家历史、重扫队列）
     try:
@@ -174,6 +176,7 @@ def _escape_like(s: str) -> str:
 
 def query(db_path: str, auth: str = None, modded: int = None,
           core_type: str = None, search: str = None,
+          only_online: bool = False,
           limit: int = 200, offset: int = 0) -> list:
     conn = get_conn(db_path)
     sql = "SELECT " + ", ".join(QUERY_COLS) + " FROM servers"
@@ -187,6 +190,8 @@ def query(db_path: str, auth: str = None, modded: int = None,
     if core_type:
         conds.append("core_type = ?")
         args.append(core_type)
+    if only_online:
+        conds.append("players_online > 0")
     if search:
         conds.append("(motd LIKE ? ESCAPE '\\' OR version LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\')")
         escaped = f"%{_escape_like(search)}%"
@@ -200,7 +205,8 @@ def query(db_path: str, auth: str = None, modded: int = None,
 
 
 def count(db_path: str, auth: str = None, modded: int = None,
-          core_type: str = None, search: str = None) -> int:
+          core_type: str = None, search: str = None,
+          only_online: bool = False) -> int:
     conn = get_conn(db_path)
     sql = "SELECT COUNT(*) FROM servers"
     conds, args = [], []
@@ -213,6 +219,8 @@ def count(db_path: str, auth: str = None, modded: int = None,
     if core_type:
         conds.append("core_type = ?")
         args.append(core_type)
+    if only_online:
+        conds.append("players_online > 0")
     if search:
         conds.append("(motd LIKE ? ESCAPE '\\' OR version LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\')")
         escaped = f"%{_escape_like(search)}%"
