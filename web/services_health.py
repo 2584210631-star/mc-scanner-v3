@@ -3,6 +3,7 @@
 import time
 from datetime import datetime
 import config, logger
+from storage import favorites
 try:
     from web import state
 except ImportError:
