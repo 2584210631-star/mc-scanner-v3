@@ -1,29 +1,28 @@
 # -*- coding: utf-8 -*-
-"""One-shot: expand packed web route modules next to this file."""
+"""Expand packed web modules if source .py missing or older."""
 import os, zlib, base64, json
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
-def expand():
-    packs = []
+def expand(force=False):
     i = 0
+    wrote = 0
     while True:
         p = os.path.join(_DIR, f"_pack{i}.json")
         if not os.path.isfile(p):
             break
         with open(p, "r", encoding="utf-8") as f:
-            packs.append(json.load(f))
-        i += 1
-    if not packs:
-        return False
-    for pack in packs:
+            pack = json.load(f)
         for name, b64 in pack.items():
             path = os.path.join(_DIR, name)
             data = zlib.decompress(base64.b64decode(b64))
-            with open(path, "wb") as f:
-                f.write(data)
-            print("wrote", name, len(data))
-    return True
+            if force or (not os.path.isfile(path)) or os.path.getsize(path) < len(data) // 2:
+                with open(path, "wb") as out:
+                    out.write(data)
+                wrote += 1
+        i += 1
+    return wrote
 
 if __name__ == "__main__":
-    expand()
+    n = expand(force=True)
+    print("wrote", n, "files")
