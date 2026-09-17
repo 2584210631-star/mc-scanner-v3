@@ -7,6 +7,13 @@ from collections import deque
 import config, logger
 from storage import db, favorites
 try:
+    from scanner.masscan import has_masscan, get_masscan_version
+except ImportError:
+    def has_masscan():
+        return False
+    def get_masscan_version():
+        return None
+try:
     from web import state
 except ImportError:
     import state  # type: ignore
