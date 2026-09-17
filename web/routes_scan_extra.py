@@ -1,15 +1,33 @@
 # -*- coding: utf-8 -*-
 """Routes: scan_extra"""
-from flask import request, jsonify
+from flask import request, jsonify, Response, send_from_directory
+import os, sys, json, time, threading
+from datetime import datetime
+from collections import deque
 import config, logger
 try:
     from web import state
 except ImportError:
     import state  # type: ignore
 
+
 def register(app):
+    scan_state = state.scan_state
+    scan_lock = state.scan_lock
+    scan_stop_event = state.scan_stop_event
+    observer_sessions = state.observer_sessions
+    observer_lock = getattr(state, "observer_lock", state.scan_lock)
+    health_monitor = state.health_monitor
+    _ai_bots = state._ai_bots
     def _log(msg):
         state.log_scan(msg)
+    def _get_web_token():
+        return state.get_web_token()
+    def _safe_db_path(path):
+        return state.safe_db_path(path)
+    def parse_ports_spec(ports_spec):
+        return state.parse_ports_spec(ports_spec)
+
 
     @app.route('/api/rescan')
     def rescan_list():
@@ -67,7 +85,9 @@ def register(app):
     @app.route('/api/auto_scan/types')
     def auto_scan_types():
         from core.auto_scanner import AutoScanner
-        return jsonify({"types": [{"value": k, "label": v} for k, v in AutoScanner.TASK_TYPES.items()]})
+        return jsonify({"types": [
+            {"value": k, "label": v} for k, v in AutoScanner.TASK_TYPES.items()
+        ]})
 
     @app.route('/api/auto_scan/add', methods=['POST'])
     def auto_scan_add():
@@ -83,25 +103,30 @@ def register(app):
     @app.route('/api/auto_scan/start', methods=['POST'])
     def auto_scan_start():
         data = request.json or {}
+        tid = data.get("task_id")
         from core.auto_scanner import auto_scanner
-        ok = auto_scanner.start_task(data.get("task_id"))
+        ok = auto_scanner.start_task(tid)
         return jsonify({"success": ok})
 
     @app.route('/api/auto_scan/stop', methods=['POST'])
     def auto_scan_stop():
         data = request.json or {}
+        tid = data.get("task_id")
         from core.auto_scanner import auto_scanner
-        auto_scanner.stop_task(data.get("task_id"))
+        auto_scanner.stop_task(tid)
         return jsonify({"success": True})
 
     @app.route('/api/auto_scan/remove', methods=['POST'])
     def auto_scan_remove():
         data = request.json or {}
+        tid = data.get("task_id")
         from core.auto_scanner import auto_scanner
-        auto_scanner.remove_task(data.get("task_id"))
+        auto_scanner.remove_task(tid)
         return jsonify({"success": True})
 
     @app.route('/api/auto_scan/logs')
     def auto_scan_logs():
+        tid = request.args.get("task_id")
         from core.auto_scanner import auto_scanner
-        return jsonify({"logs": auto_scanner.get_logs(request.args.get("task_id"))})
+        return jsonify({"logs": auto_scanner.get_logs(tid)})
+
