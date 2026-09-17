@@ -11,7 +11,7 @@ from datetime import datetime
 from core.bot import MCBot
 from core.ai_generator import generate_content, split_for_minecraft
 import logger as _log
-from core.ai_personas import PRESET_PERSONAS
+from core.ai_personas import get_personas
 
 _api_lock = threading.Lock()
 _last_api_time = 0.0
@@ -296,11 +296,12 @@ class MultiAIBot:
         group_id = self._next_id()
         base_config = ai_config or {}
         bots = []
+        all_personas = get_personas()
         if persona_indices:
-            selected = [PRESET_PERSONAS[i % len(PRESET_PERSONAS)] for i in persona_indices]
+            selected = [all_personas[i % len(all_personas)] for i in persona_indices]
         else:
             import random
-            selected = random.sample(PRESET_PERSONAS, min(bot_count, len(PRESET_PERSONAS)))
+            selected = random.sample(all_personas, min(bot_count, len(all_personas)))
         for i, persona in enumerate(selected[:bot_count]):
             cfg = dict(base_config)
             cfg["persona"] = persona["persona"]

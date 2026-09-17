@@ -35,6 +35,8 @@ def register(app):
 
     @app.route('/api/observer/start', methods=['POST'])
     def observer_start():
+        if state.is_read_only():
+            return jsonify({"error": "只读模式下禁止观察者进服"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)
