@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
     "ai_api_key": "",          # AI API Key（OpenAI兼容）
     "ai_base_url": "https://api.openai.com/v1",  # AI API 地址
     "ai_model": "gpt-3.5-turbo",  # AI 模型名
+    "ai_reply_cooldown": 2.0,   # AI 回复冷却（秒）
     # 邮件通知
     "email_enabled": False,     # 扫描完成邮件通知开关
     "email_smtp_host": "",      # SMTP服务器地址，如 smtp.qq.com
@@ -51,6 +52,26 @@ DEFAULT_CONFIG = {
 
 _GLOBAL_CFG = None
 _CONFIG_PATH = None
+
+
+def _apply_env_overrides(cfg: dict) -> dict:
+    """环境变量优先覆盖敏感配置，避免密钥写进仓库。"""
+    env_map = {
+        "MC_WEB_TOKEN": "web_token",
+        "MC_AI_API_KEY": "ai_api_key",
+        "MC_AI_BASE_URL": "ai_base_url",
+        "MC_AI_MODEL": "ai_model",
+        "MC_DISCORD_WEBHOOK": "discord_webhook",
+        "MC_EMAIL_USERNAME": "email_username",
+        "MC_EMAIL_PASSWORD": "email_password",
+        "MC_EMAIL_TO": "email_to",
+        "MC_AUTHME_PASSWORD": "authme_password",
+    }
+    for env_key, cfg_key in env_map.items():
+        val = os.environ.get(env_key)
+        if val is not None and val != "":
+            cfg[cfg_key] = val
+    return cfg
 
 
 def load_config(path: str = None) -> dict:
@@ -67,7 +88,8 @@ def load_config(path: str = None) -> dict:
                 user_cfg = json.load(f)
             cfg.update(user_cfg)
         except (json.JSONDecodeError, OSError) as e:
-            print(f"[!] 配置文件读取失败，使用默认配置: {e}")
+            print(f"[!] 配置文件读取失败，使用默认配置: {e}")  # bootstrap, logger may not ready
+    cfg = _apply_env_overrides(cfg)
     _GLOBAL_CFG = cfg
     _CONFIG_PATH = config_path
     return cfg
