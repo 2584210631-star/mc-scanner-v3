@@ -46,9 +46,11 @@ def _register_routes():
     modules = [
         "routes_core",
         "routes_scan",
+        "routes_scan_extra",
         "routes_warn",
         "routes_data",
         "routes_ai",
+        "routes_ai_bots",
         "routes_observer",
         "routes_config",
         "routes_ops",
@@ -74,7 +76,6 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
     logger.setup_logger()
     from storage import db
     db.init_db(db_path)
-
     try:
         from core.proxy import get_proxy_manager
         from core.conn import set_global_proxy_manager
@@ -83,19 +84,12 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
             mgr = get_proxy_manager(proxy_file=proxy_file, auto_fetch=False)
             if mgr and mgr.proxies:
                 set_global_proxy_manager(mgr)
-                logger.info(f"[*] 已启用代理: {len(mgr.proxies)} 个代理，自动轮换")
+                logger.info(f"[*] 已启用代理: {len(mgr.proxies)} 个")
     except Exception as e:
         logger.warning(f"[!] 代理初始化失败: {e}")
-
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
-    logger.info(f"[*] 数据库: {db_path}")
-
     if host in ("0.0.0.0", "::") and not state.get_web_token():
-        logger.warning("=" * 60)
-        logger.warning("[!] 安全警告：绑定 0.0.0.0 且未设置 web_token！")
-        logger.warning("[!] 请在 config.json 中设置 web_token，或仅绑定 127.0.0.1")
-        logger.warning("=" * 60)
-
+        logger.warning("[!] 安全警告：绑定 0.0.0.0 且未设置 web_token")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 
