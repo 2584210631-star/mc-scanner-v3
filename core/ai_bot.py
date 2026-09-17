@@ -5,7 +5,6 @@ AI托管Bot模块。
 """
 import threading
 import time
-import re
 from collections import deque
 from datetime import datetime
 
@@ -55,7 +54,7 @@ class AIBotSession:
         self.api_key = cfg.get("api_key", "")
         self.base_url = cfg.get("base_url", "https://api.openai.com/v1")
         self.model = cfg.get("model", "gpt-3.5-turbo")
-        self.persona = cfg.get("persona", "你是一个友好的MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。")
+        self.persona = cfg.get("persona", "你是普通MC玩家，说话短，像真人打字，别像客服。")
         self.reply_enabled = cfg.get("reply_enabled", True)
         self.reply_cooldown = float(cfg.get("reply_cooldown", 2.0))
         self.trigger_keywords = cfg.get("trigger_keywords", [])
@@ -81,11 +80,8 @@ class AIBotSession:
             with self.lock:
                 self.chat_log.append((self._next_seq(), self._ts(), sender, text))
             state = getattr(self.bot, "state", "unknown")
-            _log.debug(f"[AI Bot {self.username}] _on_chat state={state} reply_enabled={self.reply_enabled} sender={sender} text={text[:40]}")
             if self.reply_enabled and self.bot and state == "play":
                 self._maybe_reply(sender, text)
-            else:
-                _log.debug(f"[AI Bot {self.username}] skip reply state={state}")
         except Exception as e:
             _log.warning(f"[AI Bot {self.username}] _on_chat error: {e}")
 
@@ -99,7 +95,8 @@ class AIBotSession:
             return False
         if not text:
             return False
-        system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战", "溃死", "摔死", "烧死", "炸死", "欢迎来到"]
+        system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战",
+                           "溃死", "摔死", "烧死", "炸死", "欢迎来到"]
         if any(p in text for p in system_patterns):
             return False
         if text.startswith('/') or text.startswith('Unknown command'):
@@ -112,7 +109,6 @@ class AIBotSession:
         if not self._should_reply(sender, text):
             return
         self._last_reply_time = time.time()
-        _log.info(f"[AI Bot {self.username}] reply to {sender}: {text[:40]}")
 
         def _reply_worker():
             try:
@@ -124,10 +120,15 @@ class AIBotSession:
                         history_text = "\n".join(history_lines)
                 except Exception:
                     pass
+                style = (
+                    "用中文直接回一句聊天内容，像真人网友打字。"
+                    "不要解释、不要角色旁白、不要括号心理活动。"
+                    "尽量不超过25个字，可以很随意。"
+                )
                 if history_text:
-                    prompt = f"{self.persona}\n\n【最近聊天记录】\n{history_text}\n\n玩家[{sender}]说：{text}\n请结合上下文回复："
+                    prompt = f"{self.persona}\n最近几条聊天：\n{history_text}\n{sender} 说：{text}\n{style}"
                 else:
-                    prompt = f"{self.persona}\n玩家[{sender}]说：{text}\n请回复："
+                    prompt = f"{self.persona}\n{sender} 说：{text}\n{style}"
                 _acquire_api_slot()
                 try:
                     result = generate_content(topic=prompt, preset="custom", api_key=self.api_key,
@@ -167,11 +168,11 @@ class AIBotSession:
                     pass
                 _acquire_api_slot()
                 try:
-                    ctx = f"\n\n【最近聊天记录】\n{history_text}" if history_text else ""
+                    ctx = f"\n\n最近聊天：\n{history_text}" if history_text else ""
                     if self.topic:
-                        prompt = f"{self.persona}{ctx}\n当前讨论话题：{self.topic}\n请结合上下文主动发表一句关于这个话题的观点。"
+                        prompt = f"{self.persona}{ctx}\n当前话题：{self.topic}\n随便接一句，像群聊水一句，别正式。"
                     else:
-                        prompt = f"{self.persona}{ctx}\n请结合当前聊天氛围，主动说一句话挑起话题。"
+                        prompt = f"{self.persona}{ctx}\n水一句，短一点，像真人摸鱼聊天。"
                     result = generate_content(topic=self.topic or "随机话题", preset="custom", api_key=self.api_key,
                                               base_url=self.base_url, model=self.model, custom_prompt=prompt)
                 finally:
@@ -256,8 +257,6 @@ class AIBotSession:
 
 
 class MultiAIBot:
-    """多AI群聊/吵架管理器"""
-
     def __init__(self):
         self.groups = {}
         self._seq = 0
@@ -280,9 +279,9 @@ class MultiAIBot:
             cfg = dict(base_config)
             cfg["persona"] = persona["persona"]
             if topic:
-                cfg["persona"] += f"\n当前讨论话题：{topic}。请围绕这个话题和其他玩家讨论。"
+                cfg["persona"] += f"\n大家在聊：{topic}。你就顺着抬杠/接话，别端着。"
             else:
-                cfg["persona"] += "\n主动和其他玩家搭话，引发讨论，不要冷场。"
+                cfg["persona"] += "\n偶尔接话就行，别像主持。"
             cfg["reply_cooldown"] = 0.5 + i * 0.3
             cfg["reply_enabled"] = True
             cfg["trigger_keywords"] = []
