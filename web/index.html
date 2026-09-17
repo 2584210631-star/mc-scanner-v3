@@ -1075,6 +1075,17 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
           <option value="neoforge">NeoForge</option>
           <option value="bukkit">Bukkit</option>
         </select>
+        <select id="filterVersion" onchange="loadResults(1)">
+          <option value="">全部版本</option>
+          <option value="1.21">1.21.x</option>
+          <option value="1.20">1.20.x</option>
+          <option value="1.19">1.19.x</option>
+          <option value="1.18">1.18.x</option>
+          <option value="1.17">1.17.x</option>
+          <option value="1.16">1.16.x</option>
+          <option value="1.12">1.12.x</option>
+          <option value="1.8">1.8.x</option>
+        </select>
         <label><input type="checkbox" id="filterOnline" onchange="loadResults(1)"> 仅有人在线</label>
         <input type="text" id="filterSearch" placeholder="搜索 IP/MOTD/版本..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadResults(1)">
         <button class="btn btn-primary" onclick="loadResults(1)">搜索</button>
@@ -1092,7 +1103,14 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <table>
           <thead>
             <tr>
-              <th style="width:30px;"><input type="checkbox" id="selectAllServers" onchange="toggleSelectAll(this)"></th><th>IP:端口</th><th>版本</th><th>核心</th><th>指纹</th><th>协议</th><th>MOTD</th><th>玩家</th><th>在线玩家</th><th>认证</th><th>延迟</th><th>操作</th>
+              <th style="width:30px;"><input type="checkbox" id="selectAllServers" onchange="toggleSelectAll(this)"></th>
+              <th class="sortable" onclick="sortResults('ip')">IP:端口<span class="sort-arrow">↕</span></th>
+              <th class="sortable" onclick="sortResults('version')">版本<span class="sort-arrow">↕</span></th>
+              <th>核心</th><th>指纹</th><th>协议</th><th>MOTD</th>
+              <th class="sortable" onclick="sortResults('players')">玩家<span class="sort-arrow">↕</span></th>
+              <th>在线玩家</th><th>认证</th>
+              <th class="sortable" onclick="sortResults('ping')">延迟<span class="sort-arrow">↕</span></th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
@@ -1790,7 +1808,23 @@ Protect your server NOW!</textarea></div>
   .assistant-msg { max-width:85%; padding:8px 12px; border-radius:12px; font-size:13px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
   .assistant-msg.user { align-self:flex-end; background:linear-gradient(135deg,#8b5cf6,#6366f1); color:#fff; border-bottom-right-radius:4px; }
   .assistant-msg.bot { align-self:flex-start; background:var(--bg-secondary); color:var(--text); border-bottom-left-radius:4px; }
+  /* Toast 通知 */
+  #toast-container { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .toast { min-width:240px; max-width:380px; padding:12px 16px; border-radius:10px; color:#fff; font-size:13px; line-height:1.5; box-shadow:0 8px 24px rgba(0,0,0,0.3); animation:toastIn .3s ease, toastOut .3s ease 2.7s forwards; pointer-events:auto; word-break:break-word; }
+  .toast.success { background:linear-gradient(135deg,#10b981,#059669); }
+  .toast.error { background:linear-gradient(135deg,#ef4444,#dc2626); }
+  .toast.warning { background:linear-gradient(135deg,#f59e0b,#d97706); }
+  .toast.info { background:linear-gradient(135deg,#3b82f6,#2563eb); }
+  @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+  @keyframes toastOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(40px); } }
+  /* 可排序表头 */
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { color:var(--accent); }
+  th.sortable .sort-arrow { font-size:10px; margin-left:4px; opacity:0.6; }
+  th.sortable.active .sort-arrow { opacity:1; color:var(--accent); }
 </style>
+
+<div id="toast-container"></div>
 
 </body>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -1806,6 +1840,40 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ===== 全局 Toast 通知 =====
+function toast(msg, type) {
+  type = type || 'info';
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 3100);
+}
+// 兼容旧alert调用：关键操作改用toast
+const _origAlert = window.alert;
+// 统一API错误提示
+async function apiFetch(url, options) {
+  try {
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.error || data.message || ('请求失败 ' + res.status);
+      toast(msg, 'error');
+      return { ok: false, error: msg, data };
+    }
+    if (data.error) {
+      toast(data.error, 'error');
+      return { ok: false, error: data.error, data };
+    }
+    return { ok: true, data };
+  } catch (e) {
+    toast('网络错误: ' + e.message, 'error');
+    return { ok: false, error: e.message, data: {} };
+  }
 }
 
 // ===== AI助手浮窗 =====
@@ -2284,7 +2352,7 @@ function saveConfig() {
     scanPorts: document.getElementById('scanPorts').value,
   };
   localStorage.setItem('mcscanner_config', JSON.stringify(cfg));
-  alert('配置已保存');
+  toast('配置已保存', 'success');
 }
 loadConfig();
 
@@ -2347,7 +2415,7 @@ async function startRandomScan() {
   });
   const data = await res.json();
   if (data.error) { alert(data.error); return; }
-  alert('随机扫描已启动: ' + count + ' 个目标, 端口 ' + ports);
+  toast('随机扫描已启动: ' + count + ' 个目标', 'success');
   document.getElementById('progressPanel').style.display = 'block';
   document.getElementById('btnStartScan').disabled = true;
   document.getElementById('btnStopScan').disabled = false;
@@ -2384,12 +2452,30 @@ async function pollStatus() {
   }
 }
 
+// 结果排序状态
+let resultSortKey = '';
+let resultSortAsc = true;
+function sortResults(key) {
+  if (resultSortKey === key) {
+    resultSortAsc = !resultSortAsc;
+  } else {
+    resultSortKey = key;
+    resultSortAsc = true;
+  }
+  // 更新表头箭头
+  document.querySelectorAll('th.sortable').forEach(th => th.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  event.currentTarget.querySelector('.sort-arrow').textContent = resultSortAsc ? '↑' : '↓';
+  loadResults(currentPage);
+}
+
 async function loadResults(page) {
   currentPage = page;
   const params = new URLSearchParams({
     auth: document.getElementById('filterAuth').value,
     modded: document.getElementById('filterModded').value,
     core_type: document.getElementById('filterCore').value,
+    version: document.getElementById('filterVersion').value,
     only_online: document.getElementById('filterOnline').checked ? '1' : '0',
     search: document.getElementById('filterSearch').value,
     page, per_page: 50
@@ -2397,7 +2483,21 @@ async function loadResults(page) {
   const res = await fetch('/api/scan/results?' + params);
   const data = await res.json();
   totalResults = data.total;
-  document.getElementById('resultsBody').innerHTML = data.results.map(r => {
+  let results = data.results || [];
+  // 前端排序（当前页）
+  if (resultSortKey) {
+    results.sort((a, b) => {
+      let va, vb;
+      if (resultSortKey === 'ip') { va = a.ip; vb = b.ip; }
+      else if (resultSortKey === 'version') { va = a.version || ''; vb = b.version || ''; }
+      else if (resultSortKey === 'players') { va = a.players_online || 0; vb = b.players_online || 0; }
+      else if (resultSortKey === 'ping') { va = a.ping_ms || 9999; vb = b.ping_ms || 9999; }
+      if (va < vb) return resultSortAsc ? -1 : 1;
+      if (va > vb) return resultSortAsc ? 1 : -1;
+      return 0;
+    });
+  }
+  document.getElementById('resultsBody').innerHTML = results.map(r => {
     const ip = escapeHtml(r.ip);
     const version = escapeHtml(r.version || '-');
     const coreType = escapeHtml(r.core_type || 'unknown');
@@ -2441,7 +2541,7 @@ async function loadResults(page) {
     </tr>`;
   }).join('');
   renderPagination('pagination', page, data.total, 50, loadResults);
-  drawVersionChart(data.results);
+  drawVersionChart(results);
 }
 
 function renderPagination(id, page, total, perPage, callback) {
@@ -2532,9 +2632,9 @@ async function importMasscanResults(input) {
   try {
     const res = await fetch('/api/import', { method: 'POST', body: formData });
     const data = await res.json();
-    if (data.error) { alert('导入失败: ' + data.error); }
-    else { alert('导入成功，共 ' + data.count + ' 个服务器'); loadResults(1); }
-  } catch(e) { alert('导入失败: ' + e.message); }
+    if (data.error) { toast('导入失败: ' + data.error, 'error'); }
+    else { toast('导入成功，共 ' + data.count + ' 个服务器', 'success'); loadResults(1); }
+  } catch(e) { toast('导入失败: ' + e.message, 'error'); }
   input.value = '';
 }
 
@@ -3446,8 +3546,8 @@ async function importFavorites(input) {
   formData.append('file', input.files[0]);
   const res = await fetch('/api/favorites/import', { method: 'POST', body: formData });
   const data = await res.json();
-  if (data.success) { alert('导入成功，共 ' + data.count + ' 个'); loadFavorites(); }
-  else alert('导入失败: ' + (data.error || ''));
+  if (data.success) { toast('导入成功，共 ' + data.count + ' 个', 'success'); loadFavorites(); }
+  else toast('导入失败: ' + (data.error || ''), 'error');
   input.value = '';
 }
 function exportFavorites(fmt) {

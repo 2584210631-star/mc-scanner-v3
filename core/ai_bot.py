@@ -153,7 +153,21 @@ class AIBotSession:
                 _acquire_api_slot()
                 try:
                     result = generate_content(topic=prompt, preset="custom", api_key=self.api_key,
-                                              base_url=self.base_url, model=self.model, custom_prompt=prompt)
+                                              base_url=self.base_url, model=self.model,
+                                              custom_prompt=prompt, max_tokens=2048)
+                    # 回复被截断时自动续写一次
+                    if result.get("success") and result.get("truncated") and result.get("text"):
+                        try:
+                            cont_prompt = f"{prompt}\n你刚才的回复被截断了，接着上面的内容继续说完，不要重复。"
+                            cont_result = generate_content(topic=cont_prompt, preset="custom",
+                                                           api_key=self.api_key, base_url=self.base_url,
+                                                           model=self.model, custom_prompt=cont_prompt,
+                                                           max_tokens=1024)
+                            if cont_result.get("success") and cont_result.get("text"):
+                                result["text"] = result["text"] + cont_result["text"]
+                                _log.info(f"[AI Bot {self.username}] 回复已自动续写")
+                        except Exception as ce:
+                            _log.warning(f"[AI Bot] 续写失败: {ce}")
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
@@ -202,7 +216,8 @@ class AIBotSession:
                     else:
                         prompt = f"{self.persona}{ctx}\n水一句，短一点，像真人摸鱼聊天。"
                     result = generate_content(topic=self.topic or "随机话题", preset="custom", api_key=self.api_key,
-                                              base_url=self.base_url, model=self.model, custom_prompt=prompt)
+                                              base_url=self.base_url, model=self.model,
+                                              custom_prompt=prompt, max_tokens=1024)
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):

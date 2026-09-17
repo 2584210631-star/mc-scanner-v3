@@ -115,13 +115,15 @@ def generate_content(
     custom_prompt: Optional[str] = None,
     custom_system: Optional[str] = None,
     timeout: int = 60,
+    max_tokens: int = 2048,
 ) -> dict:
     """
     调用 AI 生成内容。
-    返回: {"success": bool, "text": str, "segments": list, "error": str}
+    返回: {"success": bool, "text": str, "segments": list, "error": str, "truncated": bool}
+    truncated=True表示回复被max_tokens截断，可调用续写
     """
     if not api_key:
-        return {"success": False, "text": "", "segments": [], "error": "未配置 API Key，请在设置中填写 ai_api_key"}
+        return {"success": False, "text": "", "segments": [], "error": "未配置 API Key，请在设置中填写 ai_api_key", "truncated": False}
 
     preset_cfg = PRESETS.get(preset, PRESETS["custom"])
     system = custom_system or preset_cfg["system"]
@@ -137,7 +139,7 @@ def generate_content(
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.8,
-        "max_tokens": 1024,
+        "max_tokens": max_tokens,
     }
 
     base = base_url.rstrip("/")
@@ -159,17 +161,20 @@ def generate_content(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        text = data["choices"][0]["message"]["content"].strip()
+        choice = data["choices"][0]
+        text = choice["message"]["content"].strip()
+        finish_reason = choice.get("finish_reason", "stop")
+        truncated = (finish_reason == "length")
         segments = split_for_minecraft(text)
-        return {"success": True, "text": text, "segments": segments, "error": ""}
+        return {"success": True, "text": text, "segments": segments, "error": "", "truncated": truncated}
     except urllib.error.HTTPError as e:
         try:
             err_body = e.read().decode("utf-8", errors="replace")
         except Exception:
             err_body = str(e)
-        return {"success": False, "text": "", "segments": [], "error": f"HTTP {e.code}: {err_body[:200]}"}
+        return {"success": False, "text": "", "segments": [], "error": f"HTTP {e.code}: {err_body[:200]}", "truncated": False}
     except Exception as e:
-        return {"success": False, "text": "", "segments": [], "error": str(e)}
+        return {"success": False, "text": "", "segments": [], "error": str(e), "truncated": False}
 
 
 def get_preset_list() -> list:

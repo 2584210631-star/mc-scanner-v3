@@ -140,9 +140,16 @@ def register(app):
 
     @app.route('/api/observer/export')
     def observer_export():
-        """导出观察者聊天记录，支持 txt 和 html 格式"""
+        """导出观察者聊天记录，支持 txt 和 html 格式。会话进行中也能下载（读实时jsonl）"""
         sid = request.args.get("session_id", "")
         fmt = request.args.get("format", "txt").lower()
+        safe_id = sid.replace('/', '_').replace('\\', '_')
+        messages = []
+        host = "unknown"
+        port = 0
+        username = "unknown"
+
+        # 1. 优先从内存读（会话进行中）
         with observer_lock:
             session = observer_sessions.get(sid)
         if session:
@@ -151,20 +158,39 @@ def register(app):
             port = session.port
             username = session.username
         else:
-            # 会话已结束（被ban/踢），从保存的文件读取
-            safe_id = sid.replace('/', '_').replace('\\', '_')
-            log_file = f'observer_logs/{safe_id}.json'
-            if not os.path.exists(log_file):
+            # 2. 从实时jsonl读（被ban/踢但文件还在）
+            jsonl_file = f'observer_logs/{safe_id}.jsonl'
+            json_file = f'observer_logs/{safe_id}.json'
+            if os.path.exists(jsonl_file):
+                try:
+                    with open(jsonl_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            rec = json.loads(line)
+                            messages.append((rec.get("seq", 0), rec.get("time", ""),
+                                             rec.get("sender", ""), rec.get("text", "")))
+                            if not host or host == "unknown":
+                                host = rec.get("host", "unknown")
+                                port = rec.get("port", 0)
+                                username = rec.get("observer", "unknown")
+                    _log(f"从实时jsonl导出 {len(messages)} 条")
+                except Exception as e:
+                    return jsonify({"error": f"读取实时记录失败: {e}"}), 500
+            elif os.path.exists(json_file):
+                # 3. 从结束快照读
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    messages = data.get('chat_log', [])
+                    host = data.get('host', 'unknown')
+                    port = data.get('port', 0)
+                    username = data.get('username', 'unknown')
+                except Exception as e:
+                    return jsonify({"error": f"读取记录失败: {e}"}), 500
+            else:
                 return jsonify({"error": "会话不存在或已过期"}), 404
-            try:
-                with open(log_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                messages = data.get('chat_log', [])
-                host = data.get('host', 'unknown')
-                port = data.get('port', 0)
-                username = data.get('username', 'unknown')
-            except Exception as e:
-                return jsonify({"error": f"读取记录失败: {e}"}), 500
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if fmt == "html":
