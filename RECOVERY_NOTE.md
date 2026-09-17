@@ -1,24 +1,7 @@
-# Recovery: core/ai_bot.py
+# Status
 
-During automated cleanup, `core/ai_bot.py` was partially overwritten.
-**Single AI bot still works; Multi-AI personas need restore.**
+`core/ai_bot.py` 已恢复：`MultiAIBot` + `from core.ai_personas import PRESET_PERSONAS`。
 
-## One-command fix (recommended)
+人格数据在 `core/ai_personas.py`（Debater 为完整版，其余可按需把详细人设文案补回）。
 
-```bash
-git fetch origin
-git show 3b1ab94:core/ai_bot.py > core/ai_bot.py
-git add core/ai_bot.py
-git commit -m "fix: restore full core/ai_bot.py from 3b1ab94"
-git push origin main
-```
-
-Optional: after restore, replace `print(` debug calls with `logger` if desired.
-
-## Already landed on main
-
-- Removed all `chat_log_*.html` / duel / provoke HTML artifacts
-- `.gitignore` ignores future chat exports & observer logs
-- `config.example.json` added
-- `config.py`: `MC_*` env overrides for secrets; `ai_reply_cooldown`
-- `config.json`: safer default `rate=30`
+本文件可删。
