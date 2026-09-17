@@ -12,14 +12,13 @@ from datetime import datetime
 from core.bot import MCBot
 from core.ai_generator import generate_content, split_for_minecraft
 import logger as _log
+from core.ai_personas import PRESET_PERSONAS
 
-# 全局API请求限流：避免多个AI同时调用触发429
 _api_lock = threading.Lock()
 _last_api_time = 0.0
-API_MIN_INTERVAL = 1.5  # 两次API请求最小间隔（秒）
+API_MIN_INTERVAL = 1.5
 
 def _acquire_api_slot():
-    """获取API调用槽位，确保请求之间有最小间隔"""
     global _last_api_time
     _api_lock.acquire()
     now = time.time()
@@ -33,8 +32,6 @@ def _release_api_slot():
 
 
 class AIBotSession:
-    """AI托管Bot会话：连接服务器，AI自动回复聊天"""
-
     def __init__(self, host, port, username, authme_password=None, timeout=20.0,
                  duration=0, protocol_version=None, ai_config=None):
         self.session_id = ""
@@ -54,7 +51,6 @@ class AIBotSession:
         self.version_name = ""
         self.start_time = time.time()
         self.connect_time = None
-
         cfg = ai_config or {}
         self.api_key = cfg.get("api_key", "")
         self.base_url = cfg.get("base_url", "https://api.openai.com/v1")
@@ -67,7 +63,6 @@ class AIBotSession:
         self.auto_talk_interval = float(cfg.get("auto_talk_interval", 120.0))
         self.auto_talk_preset = cfg.get("auto_talk_preset", "novel")
         self.topic = cfg.get("topic", "")
-
         self.chat_log = deque(maxlen=500)
         self._last_reply_time = 0
         self._last_auto_talk = time.time()
@@ -90,41 +85,34 @@ class AIBotSession:
             if self.reply_enabled and self.bot and state == "play":
                 self._maybe_reply(sender, text)
             else:
-                _log.debug(f"[AI Bot {self.username}] 不回复: state={state} reply_enabled={self.reply_enabled}")
+                _log.debug(f"[AI Bot {self.username}] skip reply state={state}")
         except Exception as e:
-            _log.warning(f"[AI Bot {self.username}] _on_chat异常: {e}")
+            _log.warning(f"[AI Bot {self.username}] _on_chat error: {e}")
 
     def _should_reply(self, sender, text):
         now = time.time()
         if now - self._last_reply_time < self.reply_cooldown:
-            _log.debug(f"[AI Bot {self.username}] 冷却中，跳过: {text[:30]}")
             return False
         if sender == self.username:
-            _log.debug(f"[AI Bot {self.username}] 不回复自己: {text[:30]}")
             return False
         if text and (f"]{self.username}:" in text or text.startswith(f"{self.username}:")):
-            _log.debug(f"[AI Bot {self.username}] 自己发的消息，跳过: {text[:30]}")
             return False
         if not text:
             return False
-        system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战", "被", "淹死", "摔死", "烧死", "炸死", "欢迎来到", "溜掉", "钓到了"]
+        system_patterns = ["加入了游戏", "离开了游戏", "达成了", "完成了挑战", "溃死", "摔死", "烧死", "炸死", "欢迎来到"]
         if any(p in text for p in system_patterns):
-            _log.debug(f"[AI Bot {self.username}] 系统消息，跳过: {text[:30]}")
             return False
         if text.startswith('/') or text.startswith('Unknown command'):
             return False
-        if self.trigger_keywords:
-            if not any(kw in text for kw in self.trigger_keywords):
-                _log.debug(f"[AI Bot {self.username}] 关键词不匹配，跳过: {text[:30]}")
-                return False
+        if self.trigger_keywords and not any(kw in text for kw in self.trigger_keywords):
+            return False
         return True
 
     def _maybe_reply(self, sender, text):
-        _log.debug(f"[AI Bot {self.username}] 收到消息 sender={sender} text={text[:40]}")
         if not self._should_reply(sender, text):
             return
         self._last_reply_time = time.time()
-        _log.info(f"[AI Bot {self.username}] 准备回复 sender={sender} text={text[:40]}")
+        _log.info(f"[AI Bot {self.username}] reply to {sender}: {text[:40]}")
 
         def _reply_worker():
             try:
@@ -132,44 +120,33 @@ class AIBotSession:
                 try:
                     recent = list(self.chat_log)[-20:]
                     if len(recent) > 1:
-                        history_lines = []
-                        for seq, ts, s, t in recent[:-1]:
-                            history_lines.append(f"[{s}] {t}")
+                        history_lines = [f"[{s}] {t}" for seq, ts, s, t in recent[:-1]]
                         history_text = "\n".join(history_lines)
                 except Exception:
                     pass
-
                 if history_text:
                     prompt = f"{self.persona}\n\n【最近聊天记录】\n{history_text}\n\n玩家[{sender}]说：{text}\n请结合上下文回复："
                 else:
                     prompt = f"{self.persona}\n玩家[{sender}]说：{text}\n请回复："
                 _acquire_api_slot()
                 try:
-                    result = generate_content(
-                        topic=prompt,
-                        preset="custom",
-                        api_key=self.api_key,
-                        base_url=self.base_url,
-                        model=self.model,
-                        custom_prompt=prompt,
-                    )
+                    result = generate_content(topic=prompt, preset="custom", api_key=self.api_key,
+                                              base_url=self.base_url, model=self.model, custom_prompt=prompt)
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
-                    reply = result["text"].strip()
-                    reply = reply.replace('"', '').replace('"', '').replace('「', '').replace('」', '')
+                    reply = result["text"].strip().replace('"', '').replace('「', '').replace('」', '')
                     for line in split_for_minecraft(reply):
                         if self.stop_event.is_set():
                             break
                         self.bot.send_chat(line)
                         time.sleep(0.5)
                 elif not result.get("success"):
-                    _log.warning(f"[AI Bot] 生成失败: {result.get('error', '未知错误')}")
+                    _log.warning(f"[AI Bot] generate failed: {result.get('error', '?')}")
             except Exception as e:
-                _log.warning(f"[AI Bot] 回复异常: {e}")
+                _log.warning(f"[AI Bot] reply error: {e}")
 
-        t = threading.Thread(target=_reply_worker, daemon=True)
-        t.start()
+        threading.Thread(target=_reply_worker, daemon=True).start()
 
     def _do_auto_talk(self):
         if not self.auto_talk_enabled or not self.bot or self.bot.state != "play":
@@ -185,34 +162,18 @@ class AIBotSession:
                 try:
                     recent = list(self.chat_log)[-15:]
                     if recent:
-                        history_lines = [f"[{s}] {t}" for seq, ts, s, t in recent]
-                        history_text = "\n".join(history_lines)
+                        history_text = "\n".join(f"[{s}] {t}" for seq, ts, s, t in recent)
                 except Exception:
                     pass
                 _acquire_api_slot()
                 try:
+                    ctx = f"\n\n【最近聊天记录】\n{history_text}" if history_text else ""
                     if self.topic:
-                        ctx = f"\n\n【最近聊天记录】\n{history_text}" if history_text else ""
-                        prompt = f"{self.persona}{ctx}\n当前讨论话题：{self.topic}\n请结合上下文主动发表一句关于这个话题的观点，挑衅其他玩家参与讨论。"
-                        result = generate_content(
-                            topic=self.topic,
-                            preset="custom",
-                            api_key=self.api_key,
-                            base_url=self.base_url,
-                            model=self.model,
-                            custom_prompt=prompt,
-                        )
+                        prompt = f"{self.persona}{ctx}\n当前讨论话题：{self.topic}\n请结合上下文主动发表一句关于这个话题的观点。"
                     else:
-                        ctx = f"\n\n【最近聊天记录】\n{history_text}" if history_text else ""
                         prompt = f"{self.persona}{ctx}\n请结合当前聊天氛围，主动说一句话挑起话题。"
-                        result = generate_content(
-                            topic="随机话题",
-                            preset="custom",
-                            api_key=self.api_key,
-                            base_url=self.base_url,
-                            model=self.model,
-                            custom_prompt=prompt,
-                        )
+                    result = generate_content(topic=self.topic or "随机话题", preset="custom", api_key=self.api_key,
+                                              base_url=self.base_url, model=self.model, custom_prompt=prompt)
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
@@ -224,19 +185,17 @@ class AIBotSession:
             except Exception:
                 pass
 
-        t = threading.Thread(target=_talk_worker, daemon=True)
-        t.start()
+        threading.Thread(target=_talk_worker, daemon=True).start()
 
     def run(self):
         try:
-            self.bot = MCBot(host=self.host, port=self.port,
-                             username=self.username, timeout=self.timeout,
-                             protocol_version=self.protocol_version)
+            self.bot = MCBot(host=self.host, port=self.port, username=self.username,
+                             timeout=self.timeout, protocol_version=self.protocol_version)
             self.bot.chat_callback = self._on_chat
             self.bot.connect()
             with self.lock:
                 self.status = "connected"
-                self.version_name = self.bot.version_name if hasattr(self.bot, 'version_name') else ""
+                self.version_name = getattr(self.bot, 'version_name', '') or ""
                 self.connect_time = time.time()
             if self.authme_password:
                 try:
@@ -258,9 +217,7 @@ class AIBotSession:
             with self.lock:
                 self.status = "error"
                 self.error = str(e)[:200]
-            _log.error(f"[AI Bot {self.username}] 连接/运行失败: {e}")
-            import traceback
-            _log.debug(traceback.format_exc())
+            _log.error(f"[AI Bot {self.username}] run failed: {e}")
 
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True)
@@ -285,12 +242,8 @@ class AIBotSession:
     def get_status(self):
         with self.lock:
             return {
-                "session_id": self.session_id,
-                "host": self.host,
-                "port": self.port,
-                "username": self.username,
-                "status": self.status,
-                "error": self.error,
+                "session_id": self.session_id, "host": self.host, "port": self.port,
+                "username": self.username, "status": self.status, "error": self.error,
                 "version": self.version_name,
                 "uptime": int(time.time() - self.connect_time) if self.connect_time else 0,
                 "chat_count": len(self.chat_log),
@@ -302,17 +255,9 @@ class AIBotSession:
                     for s, t, sd, tx in self.chat_log if s > since]
 
 
-# NOTE: PRESET_PERSONAS and MultiAIBot restored from pre-incident version
-# Full personas list kept in repo history; minimal working multi-AI below.
-PRESET_PERSONAS = []
-try:
-    import json as _json
-    # load from module-level if needed - use original fixed file path when available
-    pass
-except Exception:
-    pass
-
 class MultiAIBot:
+    """多AI群聊/吵架管理器"""
+
     def __init__(self):
         self.groups = {}
         self._seq = 0
@@ -323,24 +268,90 @@ class MultiAIBot:
 
     def start_group(self, host, port, bot_count=3, topic="", duration=0,
                     authme_password=None, ai_config=None, persona_indices=None):
-        _log.warning("PRESET_PERSONAS empty - restore full ai_bot.py from local backup")
-        return self._next_id()
+        group_id = self._next_id()
+        base_config = ai_config or {}
+        bots = []
+        if persona_indices:
+            selected = [PRESET_PERSONAS[i % len(PRESET_PERSONAS)] for i in persona_indices]
+        else:
+            import random
+            selected = random.sample(PRESET_PERSONAS, min(bot_count, len(PRESET_PERSONAS)))
+        for i, persona in enumerate(selected[:bot_count]):
+            cfg = dict(base_config)
+            cfg["persona"] = persona["persona"]
+            if topic:
+                cfg["persona"] += f"\n当前讨论话题：{topic}。请围绕这个话题和其他玩家讨论。"
+            else:
+                cfg["persona"] += "\n主动和其他玩家搭话，引发讨论，不要冷场。"
+            cfg["reply_cooldown"] = 0.5 + i * 0.3
+            cfg["reply_enabled"] = True
+            cfg["trigger_keywords"] = []
+            cfg["auto_talk_enabled"] = True
+            cfg["auto_talk_interval"] = 12.0 + i * 4.0
+            cfg["topic"] = topic
+            bot = AIBotSession(host=host, port=port, username=persona["name"],
+                               authme_password=authme_password, timeout=20.0,
+                               duration=duration, ai_config=cfg)
+            bot.session_id = f"{group_id}_{i}"
+            bot.start()
+            bots.append(bot)
+            time.sleep(2.0)
+        self.groups[group_id] = {"bots": bots, "topic": topic, "host": host, "port": port,
+                                 "created_at": datetime.now().isoformat()}
+
+        def _kickoff():
+            for _ in range(30):
+                if bots and bots[0].bot and getattr(bots[0].bot, "state", None) == "play":
+                    break
+                time.sleep(1)
+            if bots and bots[0].bot and getattr(bots[0].bot, "state", None) == "play":
+                opener = topic or "大家觉得这个服务器怎么样？"
+                try:
+                    bots[0].bot.send_chat(opener)
+                    _log.info(f"[MultiAI] opener sent: {opener}")
+                except Exception as e:
+                    _log.warning(f"[MultiAI] opener failed: {e}")
+
+        threading.Thread(target=_kickoff, daemon=True).start()
+        return group_id
 
     def stop_group(self, group_id):
         if group_id in self.groups:
-            for bot in self.groups[group_id].get("bots", []):
+            for bot in self.groups[group_id]["bots"]:
                 bot.stop()
             del self.groups[group_id]
             return True
         return False
 
     def list_groups(self):
-        return []
+        result = []
+        for gid, g in self.groups.items():
+            bots_status = [b.get_status() for b in g["bots"]]
+            connected = sum(1 for s in bots_status if s["status"] == "connected")
+            result.append({"group_id": gid, "host": g["host"], "port": g["port"], "topic": g["topic"],
+                           "bot_count": len(g["bots"]), "connected": connected,
+                           "created_at": g["created_at"], "bots": bots_status})
+        return result
 
     def get_group_chat(self, group_id, since=0):
-        return []
+        if group_id not in self.groups:
+            return []
+        all_msgs = []
+        for bot in self.groups[group_id]["bots"]:
+            all_msgs.extend(bot.get_chat(since))
+        all_msgs.sort(key=lambda x: x["seq"])
+        return all_msgs
 
     def send_to_all(self, group_id, message):
-        return False
+        if group_id not in self.groups:
+            return False
+        for bot in self.groups[group_id]["bots"]:
+            try:
+                bot.send_message(message)
+                time.sleep(0.5)
+            except Exception:
+                pass
+        return True
+
 
 multi_ai_bot = MultiAIBot()
