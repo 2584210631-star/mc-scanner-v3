@@ -7,11 +7,7 @@
     "2.如必须离线模式，请安装 AuthMe 等登录插件并开启白名单",
     "3.定期检查 ops.json，删除不认识的管理员"
   ],
-  "ports": [
-    25565,
-    25566,
-    25570
-  ],
+  "ports": [25565, 25566, 25570],
   "scan_threads": 200,
   "scan_timeout": 2.5,
   "workers": 16,
@@ -20,7 +16,7 @@
   "bot_timeout": 12,
   "message_delay": 0.8,
   "retry_count": 1,
-  "rate": 0,
+  "rate": 30,
   "authme_password": "",
   "exclude_file": "exclude.conf",
   "db_path": "mcscanner.db",
@@ -38,6 +34,7 @@
   "ai_api_key": "",
   "ai_base_url": "https://api.openai.com/v1",
   "ai_model": "gpt-3.5-turbo",
+  "ai_reply_cooldown": 2.0,
   "email_enabled": false,
   "email_smtp_host": "",
   "email_smtp_port": 465,
