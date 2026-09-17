@@ -157,7 +157,7 @@ class MidTermMemory:
             self._compress()
 
     def _compress(self):
-        """把当前窗口压缩成摘要片段"""
+        """把当前窗口压缩成摘要片段，保留代表性对话"""
         if not self._buffer:
             return
         senders = [s for s, _ in self._buffer]
@@ -166,7 +166,25 @@ class MidTermMemory:
         keywords = _extract_keywords(all_text, top_n=8)
         sender_str = "、".join(f"{s}({c}条)" for s, c in top_senders)
         kw_str = "、".join(keywords) if keywords else "无明显话题"
+        # 挑选2-3条代表性对话（不同说话人、长度适中、非纯语气词）
+        quotes = []
+        seen_senders = set()
+        for sender, text in self._buffer:
+            if sender in seen_senders:
+                continue
+            t = text.strip()
+            if len(t) < 4 or len(t) > 60:
+                continue
+            if t in ("？", "?", "。", "…", "嗯", "哦", "啊", "哈", "哈哈"):
+                continue
+            quotes.append(f"{sender}:{t}")
+            seen_senders.add(sender)
+            if len(quotes) >= 3:
+                break
+        quote_str = " | ".join(quotes) if quotes else ""
         segment = f"[前{len(self._buffer)}条] 活跃:{sender_str} | 话题:{kw_str}"
+        if quote_str:
+            segment += f" | 代表:{quote_str}"
         self._segments.append(segment)
         if len(self._segments) > self.max_segments:
             self._segments = self._segments[-self.max_segments:]

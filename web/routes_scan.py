@@ -181,6 +181,7 @@ def register(app):
         search = request.args.get("search", "")
         modded = request.args.get("modded")
         core_type = request.args.get("core_type")
+        version = request.args.get("version", "")
         only_online = request.args.get("only_online") == "1"
         page = int(request.args.get("page", 1))
         per_page = int(request.args.get("per_page", 50))
@@ -193,6 +194,8 @@ def register(app):
             if modded and str(r.get("is_modded", 0)) != modded:
                 continue
             if core_type and r.get("core_type", "") != core_type:
+                continue
+            if version and not str(r.get("version", "")).startswith(version):
                 continue
             if only_online and r.get("players_online", 0) <= 0:
                 continue
