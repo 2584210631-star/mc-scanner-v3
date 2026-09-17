@@ -5,6 +5,7 @@ import os, sys, json, time, threading
 from datetime import datetime
 from collections import deque
 import config, logger
+from core.bot import DEFAULT_WARNING_MESSAGES, join_and_warn
 try:
     from web import state
 except ImportError:

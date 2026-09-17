@@ -115,6 +115,8 @@ def _parse_tool_call(text):
 
 def _execute_tool(tool, args):
     """执行工具，返回结果字符串"""
+    scan_state = state.scan_state
+    health_monitor = state.health_monitor
     api_key = config.get("ai_api_key", "")
     base_url = config.get("ai_base_url", "https://api.openai.com/v1")
     model = config.get("ai_model", "gpt-3.5-turbo")
