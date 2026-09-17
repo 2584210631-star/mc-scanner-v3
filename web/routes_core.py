@@ -10,6 +10,7 @@ try:
 except ImportError:
     import state  # type: ignore
 
+
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
@@ -26,6 +27,7 @@ def register(app):
         return state.safe_db_path(path)
     def parse_ports_spec(ports_spec):
         return state.parse_ports_spec(ports_spec)
+
 
     @app.route('/')
     def index():
