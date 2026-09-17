@@ -64,7 +64,6 @@ def log_scan(msg: str):
 
 
 def parse_ports_spec(ports_spec):
-    """解析端口规格，支持单个端口、逗号分隔、范围(25565-25575)、混合。空值默认[25565]"""
     if ports_spec is None or (isinstance(ports_spec, str) and not ports_spec.strip()):
         return [25565]
     if isinstance(ports_spec, list):
