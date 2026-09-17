@@ -42,15 +42,14 @@ def register(app):
     def ai_bot_start():
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止AI进服"}), 403
-        global _ai_bot_seq
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)
         username = data.get("username", "AI助手")
         if not host:
             return jsonify({"success": False, "error": "请指定服务器地址"}), 400
-        _ai_bot_seq += 1
-        session_id = f"aibot_{_ai_bot_seq}"
+        state._ai_bot_seq += 1
+        session_id = f"aibot_{state._ai_bot_seq}"
         from core.ai_bot import AIBotSession
         ai_cfg = data.get("ai_config", {})
         # 空值回退到全局设置
