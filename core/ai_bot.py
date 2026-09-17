@@ -66,6 +66,12 @@ class AIBotSession:
         self._last_reply_time = 0
         self._last_auto_talk = time.time()
         self._seq = 0
+        # 分层记忆
+        try:
+            from core.ai_memory import MidTermMemory
+            self.mid_memory = MidTermMemory(window_size=30, max_segments=3)
+        except Exception:
+            self.mid_memory = None
 
     def _next_seq(self):
         self._seq += 1
@@ -79,6 +85,14 @@ class AIBotSession:
         try:
             with self.lock:
                 self.chat_log.append((self._next_seq(), self._ts(), sender, text))
+            # 更新中期记忆和长期记忆
+            try:
+                if self.mid_memory and sender not in ("系统", "system", "Server"):
+                    self.mid_memory.add(sender, text)
+                from core.ai_memory import update_player_memory
+                update_player_memory(sender, text)
+            except Exception:
+                pass
             state = getattr(self.bot, "state", "unknown")
             if self.reply_enabled and self.bot and state == "play":
                 self._maybe_reply(sender, text)
@@ -112,21 +126,28 @@ class AIBotSession:
 
         def _reply_worker():
             try:
-                history_text = ""
+                # 分层记忆：短期50条原文 + 中期摘要 + 长期玩家档案
+                memory_text = ""
                 try:
-                    recent = list(self.chat_log)[-20:]
-                    if len(recent) > 1:
-                        history_lines = [f"[{s}] {t}" for seq, ts, s, t in recent[:-1]]
-                        history_text = "\n".join(history_lines)
+                    from core.ai_memory import build_memory_prompt
+                    memory_text = build_memory_prompt(
+                        self.chat_log, self.mid_memory, sender, short_count=50
+                    )
                 except Exception:
-                    pass
+                    # 回退：最近20条
+                    try:
+                        recent = list(self.chat_log)[-20:]
+                        if len(recent) > 1:
+                            memory_text = "\n".join(f"[{s}] {t}" for seq, ts, s, t in recent[:-1])
+                    except Exception:
+                        pass
                 style = (
                     "用中文直接回一句聊天内容，像真人网友打字。"
                     "不要解释、不要角色旁白、不要括号心理活动。"
                     "尽量不超过25个字，可以很随意。"
                 )
-                if history_text:
-                    prompt = f"{self.persona}\n最近几条聊天：\n{history_text}\n{sender} 说：{text}\n{style}"
+                if memory_text:
+                    prompt = f"{self.persona}\n{memory_text}\n{sender} 说：{text}\n{style}"
                 else:
                     prompt = f"{self.persona}\n{sender} 说：{text}\n{style}"
                 _acquire_api_slot()
@@ -159,16 +180,23 @@ class AIBotSession:
 
         def _talk_worker():
             try:
-                history_text = ""
+                # 自动说话也用分层记忆
+                memory_text = ""
                 try:
-                    recent = list(self.chat_log)[-15:]
-                    if recent:
-                        history_text = "\n".join(f"[{s}] {t}" for seq, ts, s, t in recent)
+                    from core.ai_memory import build_memory_prompt
+                    memory_text = build_memory_prompt(
+                        self.chat_log, self.mid_memory, "自动", short_count=40
+                    )
                 except Exception:
-                    pass
+                    try:
+                        recent = list(self.chat_log)[-15:]
+                        if recent:
+                            memory_text = "\n".join(f"[{s}] {t}" for seq, ts, s, t in recent)
+                    except Exception:
+                        pass
                 _acquire_api_slot()
                 try:
-                    ctx = f"\n\n最近聊天：\n{history_text}" if history_text else ""
+                    ctx = f"\n\n{memory_text}" if memory_text else ""
                     if self.topic:
                         prompt = f"{self.persona}{ctx}\n当前话题：{self.topic}\n随便接一句，像群聊水一句，别正式。"
                     else:
