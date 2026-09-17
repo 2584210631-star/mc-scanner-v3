@@ -1,14 +1,34 @@
 # -*- coding: utf-8 -*-
-"""Routes: AI generate/send"""
-from flask import request, jsonify
-import time
+"""Routes: ai"""
+from flask import request, jsonify, Response, send_from_directory
+import os, sys, json, time, threading
+from datetime import datetime
+from collections import deque
 import config, logger
 try:
     from web import state
 except ImportError:
     import state  # type: ignore
 
+
 def register(app):
+    scan_state = state.scan_state
+    scan_lock = state.scan_lock
+    scan_stop_event = state.scan_stop_event
+    observer_sessions = state.observer_sessions
+    observer_lock = getattr(state, "observer_lock", state.scan_lock)
+    health_monitor = state.health_monitor
+    _ai_bots = state._ai_bots
+    def _log(msg):
+        state.log_scan(msg)
+    def _get_web_token():
+        return state.get_web_token()
+    def _safe_db_path(path):
+        return state.safe_db_path(path)
+    def parse_ports_spec(ports_spec):
+        return state.parse_ports_spec(ports_spec)
+
+
     @app.route('/api/ai/presets')
     def ai_presets():
         from core.ai_generator import get_preset_list
@@ -16,51 +36,70 @@ def register(app):
 
     @app.route('/api/ai/get')
     def ai_get():
-        return jsonify({
-            "api_key": "***" if config.get("ai_api_key") else "",
-            "base_url": config.get("ai_base_url", ""),
-            "model": config.get("ai_model", ""),
-        })
+        topic = request.args.get("topic", "").strip()
+        preset = request.args.get("preset", "novel")
+        custom_prompt = request.args.get("prompt")
+        if not topic and not custom_prompt:
+            return jsonify({"success": False, "error": "缺少topic参数"}), 400
+        from core.ai_generator import generate_content
+        result = generate_content(
+            topic=topic, preset=preset,
+            api_key=request.args.get("api_key") or config.get("ai_api_key", ""),
+            base_url=request.args.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+            model=request.args.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
+            custom_prompt=custom_prompt,
+        )
+        if request.args.get("format") == "text":
+            text = result["text"] if result["success"] else f"错误: {result['error']}"
+            return Response(text, mimetype="text/plain; charset=utf-8")
+        return jsonify(result)
 
     @app.route('/api/ai/generate', methods=['POST'])
     def ai_generate():
         data = request.json or {}
+        topic = data.get("topic", "").strip()
+        preset = data.get("preset", "novel")
+        custom_prompt = data.get("custom_prompt")
+        custom_system = data.get("custom_system")
+        if not topic and not custom_prompt:
+            return jsonify({"success": False, "error": "请输入主题或自定义提示词"}), 400
         from core.ai_generator import generate_content
         result = generate_content(
-            topic=data.get("topic", ""),
-            preset=data.get("preset", "custom"),
+            topic=topic, preset=preset,
             api_key=data.get("api_key") or config.get("ai_api_key", ""),
-            base_url=data.get("base_url") or config.get("ai_base_url", ""),
-            model=data.get("model") or config.get("ai_model", ""),
-            custom_prompt=data.get("custom_prompt"),
+            base_url=data.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+            model=data.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
+            custom_prompt=custom_prompt, custom_system=custom_system,
         )
         return jsonify(result)
 
     @app.route('/api/ai/send', methods=['POST'])
     def ai_send():
         data = request.json or {}
-        from core.ai_generator import generate_content, split_for_minecraft
-        from core.bot import MCBot
-        result = generate_content(
-            topic=data.get("topic", ""),
-            preset=data.get("preset", "custom"),
+        ip = data.get("ip")
+        port = int(data.get("port") or 25565)
+        username = data.get("username", "StoryBot")
+        authme_password = data.get("authme_password")
+        if not ip:
+            return jsonify({"success": False, "error": "请指定服务器地址"}), 400
+        from core.ai_generator import generate_content
+        gen = generate_content(
+            topic=data.get("topic", ""), preset=data.get("preset", "novel"),
             api_key=data.get("api_key") or config.get("ai_api_key", ""),
-            base_url=data.get("base_url") or config.get("ai_base_url", ""),
-            model=data.get("model") or config.get("ai_model", ""),
+            base_url=data.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+            model=data.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
             custom_prompt=data.get("custom_prompt"),
         )
-        if not result.get("success"):
-            return jsonify(result)
-        host = data.get("host")
-        port = int(data.get("port", 25565))
-        username = data.get("username", "AIBot")
-        try:
-            bot = MCBot(host=host, port=port, username=username, timeout=20)
-            bot.connect()
-            for line in split_for_minecraft(result.get("text", "")):
-                bot.send_chat(line)
-                time.sleep(0.5)
-            bot.close()
-            return jsonify({"success": True})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)[:200]})
+        if not gen["success"]:
+            return jsonify({"success": False, "error": gen["error"]})
+        from core.bot import join_and_warn
+        messages = gen["segments"]
+        _log(f"AI生成并发送: {len(messages)}段 -> {ip}:{port}")
+        r = join_and_warn(ip, port, username, messages, timeout=15.0,
+                          message_delay=float(data.get("message_delay", 1.0)),
+                          authme_password=authme_password)
+        return jsonify({
+            "success": r.success, "messages_sent": r.messages_sent,
+            "total_segments": len(messages), "text": gen["text"],
+            "segments": gen["segments"], "error": r.error,
+        })
