@@ -1,9 +1,9 @@
 <div align="center">
 
-# MC Scanner v3.4.0
+# MC Scanner v3.5.0
 ### Minecraft 服务器扫描工具
 
-Python 3.8+ · 协议 340+ · Web 面板 · 离线检测 · 观察者模式 · AI托管 · 多AI吵架
+Python 3.8+ · 协议 340+ · Web 面板 · 离线检测 · 观察者模式 · AI托管 · 多AI吵架 · AI分层记忆
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -35,8 +35,28 @@ MC Scanner 是一个 Minecraft 服务器扫描与探测工具，支持端口扫�
 
 ### AI 托管 / 多 AI
 - AI 驱动聊天机器人（DeepSeek / OpenAI 兼容 API）
-- 预设人格见 `core/ai_personas.py`
-- 多 AI 群聊（2-8 个）
+- 16 种预设人格，支持 Web 端热更新（新增/修改/删除即时生效）
+- 多 AI 群聊（2-8 个），可选历史对立人物
+- **三层记忆系统**（`core/ai_memory.py`）：
+  - 短期：最近 50 条原文
+  - 中期：每 30 条自动压缩话题摘要，保留 3 段
+  - 长期：玩家档案（身份/名字/喜好/年龄），持久化到 `ai_memory.json`
+  - 纯本地规则提取，不消耗 API token
+- AI 自动重连（指数退避，最多 10 次），重连保留聊天记录和记忆
+- 回复冷却可配置（设置页调整，填 0 关闭）
+
+### 扫描引擎
+- 同步 / 异步 / masscan 三种扫描模式
+- 扫描任务队列（多任务排队，不互相覆盖）
+- SLP 探测缓存（60 秒 TTL，避免重复探测）
+- 随机 IP 暴力扫描
+
+### 安全与运维
+- 全局只读模式（一键锁死警告/AI进服/观察者等危险操作）
+- API 按模块限流（scan/warn/ai，可配置次数/分钟）
+- 0.0.0.0 绑定必须设置 web_token，否则拒绝启动
+- config.json 不入库（敏感配置用环境变量 `MC_*` 覆盖）
+- 定期清理超旧离线记录（可配置保留天数）
 
 ### Web 面板
 - `python run.py` 后打开 http://127.0.0.1:8080
@@ -53,6 +73,32 @@ python run.py
 ```
 
 敏感项可用环境变量：`MC_WEB_TOKEN` / `MC_AI_API_KEY` / `MC_AI_BASE_URL` / `MC_AI_MODEL` / `MC_DISCORD_WEBHOOK` / `MC_EMAIL_*` / `MC_AUTHME_PASSWORD`
+
+---
+
+## 更新日志
+
+### v3.5.0
+- 新增 AI 三层记忆系统（短期原文 + 中期话题摘要 + 长期玩家档案）
+- 新增扫描任务队列（多任务排队执行）
+- 新增全局只读模式（危险 API 返回 403）
+- 新增 AI 人格热更新（Web 端增删改即时生效）
+- 新增 API 按模块限流
+- 新增定期清理超旧离线记录
+- 新增 SLP 探测缓存（60 秒 TTL）
+- AI bot / 观察者自动重连（指数退避）
+- 观察者聊天记录实时落盘 + 关键词告警
+- 安全加固：0.0.0.0 无 token 拒绝启动，config.json 不入库
+- 修复多个运行时 NameError 和竞态条件
+
+### v3.4.0
+- Web 面板模块化拆分（11 个路由模块 + 3 个服务层）
+- Web UI 视觉升级 + 移动端适配
+- AI 助手浮窗（Agent 模式，可控制扫描/警告/观察者）
+- 服务器健康监控（有人上线/掉线邮件推送）
+- 人数历史曲线
+- 收藏 / 数据库导出
+- 批量 AI 托管
 
 ---
 
