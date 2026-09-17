@@ -61,3 +61,4 @@ def register(app):
             health_monitor["thread"].start()
             health_monitor["running"] = True
             return jsonify({"success": True, "running": True})
+
