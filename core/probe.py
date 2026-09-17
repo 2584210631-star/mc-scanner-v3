@@ -14,6 +14,26 @@ from .protocol import COMMON_PROTOCOLS
 
 socket_timeout = socket.timeout
 
+# SLP探测缓存：60秒内同一IP:端口不重复探测
+_slp_cache = {}
+_slp_cache_ttl = 60.0
+
+def _slp_cache_get(host, port):
+    key = (host, port)
+    item = _slp_cache.get(key)
+    if item and (time.time() - item[0]) < _slp_cache_ttl:
+        return item[1]
+    return None
+
+def _slp_cache_set(host, port, result):
+    _slp_cache[(host, port)] = (time.time(), result)
+    # 缓存超过10000条时清理旧的
+    if len(_slp_cache) > 10000:
+        cutoff = time.time() - _slp_cache_ttl
+        for k in list(_slp_cache.keys()):
+            if _slp_cache[k][0] < cutoff:
+                del _slp_cache[k]
+
 # 认证状态常量
 STATE_ONLINE = "online"        # 正版验证
 STATE_CRACKED = "cracked"      # 离线/破解
@@ -30,6 +50,10 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
     protocol_version=-1 时使用特殊值请求服务器返回真实版本。
     吸收 V2 的 JSON 截断容错：某些服务器声明的 JSON 长度比实际少几个字节。
     """
+    # 缓存命中直接返回
+    cached = _slp_cache_get(host, port)
+    if cached is not None:
+        return cached
     last_error = None
     for attempt in range(retries + 1):
         try:
@@ -87,7 +111,7 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                 ver_name = version.get("name", "")
                 proto_ver = version.get("protocol", 0)
                 fp = fingerprint_server(info, proto_ver)
-                return {
+                result = {
                     "state": "up",
                     "version": ver_name,
                     "proto": proto_ver,
@@ -103,11 +127,15 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                     "fingerprint": fp,
                     "_raw": info,
                 }
+                _slp_cache_set(host, port, result)
+                return result
         except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError, IndexError) as e:
             last_error = str(e)
             continue
-    return {"state": STATE_OFFLINE if _is_offline_err(last_error) else STATE_ERROR,
+    result = {"state": STATE_OFFLINE if _is_offline_err(last_error) else STATE_ERROR,
             "error": last_error}
+    _slp_cache_set(host, port, result)
+    return result
 
 
 def probe_with_fallback(host: str, port: int, timeout: float = 5.0) -> dict | None:

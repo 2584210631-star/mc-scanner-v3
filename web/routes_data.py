@@ -36,6 +36,7 @@ def register(app):
         auth = request.args.get("auth")
         modded = request.args.get("modded")
         search = request.args.get("search")
+        only_online = request.args.get("only_online", "0") == "1"
         try:
             limit = int(request.args.get("limit", 100))
         except (ValueError, TypeError):
@@ -51,8 +52,10 @@ def register(app):
         if not os.path.exists(db_path):
             return jsonify({"total": 0, "results": []})
         rows = db.query(db_path, auth=auth, modded=modded_val,
-                         search=search, limit=limit, offset=offset)
-        total = db.count(db_path, auth=auth, modded=modded_val, search=search)
+                         search=search, only_online=only_online,
+                         limit=limit, offset=offset)
+        total = db.count(db_path, auth=auth, modded=modded_val,
+                         search=search, only_online=only_online)
         return jsonify({"total": total, "results": rows})
 
     @app.route('/api/db/export')

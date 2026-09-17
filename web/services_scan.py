@@ -16,7 +16,6 @@ def _log(msg):
     state.log_scan(msg)
 
 def _scan_worker(targets_list, config):
-    pass
     try:
         state.task_counter += 1
         scan_stop_event.clear()
