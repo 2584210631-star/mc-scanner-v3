@@ -232,16 +232,21 @@ class AutoScanner:
                     try:
                         info = await async_slp_probe(ip, port, timeout=3)
                         if info and info.get('state') == 'up':
+                            ct = info.get('core_type', 'unknown')
                             return {
                                 'ip': ip, 'port': port,
+                                'state': 'up',
                                 'version': info.get('version', '?'),
-                                'players': info.get('online', 0),
-                                'max': info.get('max', 0),
-                                'motd': str(info.get('motd', ''))[:50],
                                 'proto': info.get('proto', 0),
-                                'core_type': info.get('core_type', 'unknown'),
+                                'motd': str(info.get('motd', ''))[:200],
+                                'players_online': info.get('online', 0),
+                                'players_max': info.get('max', 0),
+                                'player_list': [p.get('name', '') for p in info.get('sample', [])],
+                                'core_type': ct,
+                                'is_modded': 1 if ct in ('forge', 'fabric', 'neoforge', 'quilt') else 0,
                                 'favicon': info.get('favicon', ''),
                                 'ping_ms': info.get('ping_ms', 0),
+                                'auth': 'unknown',
                             }
                     except Exception:
                         pass
@@ -265,7 +270,7 @@ class AutoScanner:
         self._log(task_id, f"SLP探测完成: {len(mc_servers)} 个MC服务器")
 
         min_players = int(config.get("min_players", 1))
-        alive = [s for s in mc_servers if s['players'] >= min_players]
+        alive = [s for s in mc_servers if s['players_online'] >= min_players]
         self._log(task_id, f"有人服务器: {len(alive)} 个 (>= {min_players}人)")
 
         if config.get("warn_enabled") and alive:
@@ -304,11 +309,11 @@ class AutoScanner:
         targets = self._parse_targets(config.get("targets", []), config.get("ports", "25565"))
         mc_servers = self._probe_servers(targets, task_id, concurrency=50, timeout=3.0)
         threshold = int(config.get("player_threshold", 5))
-        triggered = [s for s in mc_servers if s['players'] >= threshold]
+        triggered = [s for s in mc_servers if s['players_online'] >= threshold]
 
         self._log(task_id, f"玩家监控: {len(mc_servers)} 个在线, {len(triggered)} 个达到阈值(>={threshold}人)")
         for s in triggered:
-            self._log(task_id, f"  ⚠️ {s['ip']}:{s['port']} 玩家数={s['players']} 版本={s['version']}")
+            self._log(task_id, f"  ⚠️ {s['ip']}:{s['port']} 玩家数={s['players_online']} 版本={s['version']}")
 
         if config.get("warn_enabled") and triggered:
             warned = self._warn_servers(triggered, config.get("warn_message", "服务器安全提示"))
@@ -348,7 +353,7 @@ class AutoScanner:
         config["total_found"] += len(mc_servers)
         self._log(task_id, f"发现 {len(new_servers)} 个新服务器 (总计 {len(known)} 个已知)")
         for s in new_servers:
-            self._log(task_id, f"  🆕 {s['ip']}:{s['port']} {s['version']} 玩家={s['players']} MOTD={s['motd']}")
+            self._log(task_id, f"  🆕 {s['ip']}:{s['port']} {s['version']} 玩家={s['players_online']} MOTD={s['motd']}")
 
         if config.get("auto_favorite") and new_servers:
             self._favorite_servers(new_servers)
@@ -361,7 +366,7 @@ class AutoScanner:
                                          concurrency=int(config.get("concurrency", 200)),
                                          timeout=float(config.get("timeout", 2.0)))
         min_players = int(config.get("min_players", 1))
-        alive = [s for s in mc_servers if s['players'] >= min_players]
+        alive = [s for s in mc_servers if s['players_online'] >= min_players]
         self._log(task_id, f"AI托管扫描: {len(alive)} 个有人服务器 (>= {min_players}人)")
 
         if alive:
@@ -419,7 +424,7 @@ class AutoScanner:
             for s in servers:
                 records.append({
                     'ip': s['ip'], 'port': s['port'],
-                    'version': s['version'], 'players': s['players'],
+                    'version': s['version'], 'players': s['players_online'],
                     'max_players': s['max'], 'motd': s['motd'],
                     'protocol': s.get('proto', 0),
                 })

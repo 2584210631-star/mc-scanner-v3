@@ -30,9 +30,9 @@ def register(app):
         return state.parse_ports_spec(ports_spec)
 
     try:
-        from web.services_scan import _scan_worker
+        from web import services_scan
     except ImportError:
-        from services_scan import _scan_worker  # type: ignore
+        import services_scan  # type: ignore
 
 
     @app.route('/api/scan/start', methods=['POST'])
@@ -41,8 +41,6 @@ def register(app):
         targets_str = data.get("targets", "")
         if not targets_str:
             return jsonify({"error": "请输入目标"}), 400
-        if scan_state["running"]:
-            return jsonify({"error": "已有扫描任务在运行"}), 400
         targets_list = list(targets_str.split(','))
         continuous = data.get("continuous", False)
         ports = parse_ports_spec(data.get("ports", [25565]))
@@ -58,7 +56,7 @@ def register(app):
             if not parsed_raw:
                 return jsonify({"error": "没有有效的目标，请检查输入格式（如 1.2.3.4 或 1.2.3.0/24）"}), 400
             return jsonify({"error": f"目标被排除列表全部过滤（原始{len(parsed_raw)}个，排除后0个）"}), 400
-        config = {
+        scan_config = {
             "workers": data.get("workers", 32),
             "timeout": data.get("timeout", 4.0),
             "scan_threads": data.get("scan_threads", 200),
@@ -74,9 +72,9 @@ def register(app):
             "continuous": continuous,
             "async_mode": data.get("async_mode", True),
         }
-        t = threading.Thread(target=_scan_worker, args=(parsed, config), daemon=True)
-        t.start()
-        return jsonify({"status": "started", "targets": len(parsed), "task_id": state.task_counter + 1})
+        task_id = services_scan.start_scan_task(parsed, scan_config, scan_type="manual")
+        queued = services_scan._get_task_state(task_id)["status"] == "queued"
+        return jsonify({"status": "queued" if queued else "started", "targets": len(parsed), "task_id": task_id, "queued": queued})
 
     @app.route('/api/scan/random', methods=['POST'])
     def random_scan_api():
@@ -140,9 +138,17 @@ def register(app):
 
     @app.route('/api/scan/stop', methods=['POST'])
     def stop_scan():
-        scan_stop_event.set()
-        _log("收到停止请求，正在终止扫描...")
-        return jsonify({"status": "stop_requested"})
+        data = request.json or {}
+        task_id = data.get("task_id")
+        stopped_id = services_scan.stop_task(task_id)
+        scan_stop_event.set()  # 兼容旧引擎
+        _log(f"收到停止请求，正在终止扫描任务 #{stopped_id}...")
+        return jsonify({"status": "stop_requested", "task_id": stopped_id})
+
+    @app.route('/api/scan/tasks')
+    def scan_tasks():
+        tasks = services_scan.list_tasks()
+        return jsonify({"tasks": tasks, "current_id": state.current_task_id, "queue_length": len(state.scan_queue)})
 
     @app.route('/api/scan/status')
     def scan_status():

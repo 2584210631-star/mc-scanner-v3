@@ -9,6 +9,11 @@ scan_stop_event = threading.Event()
 scan_lock = threading.Lock()
 task_counter = 0
 
+# 任务队列：支持多任务排队，不互相覆盖
+scan_tasks = {}          # task_id -> task_state dict
+scan_queue = []          # 排队中的 task_id 列表
+current_task_id = None   # 当前正在运行的 task_id
+
 scan_state = {
     "running": False,
     "progress": 0,
@@ -21,6 +26,40 @@ scan_state = {
     "task_id": None,
     "history": [],
 }
+
+
+def new_task_state(task_id, targets_count=0, scan_type="manual"):
+    """创建一个新的扫描任务状态"""
+    return {
+        "task_id": task_id,
+        "running": False,
+        "status": "queued",  # queued / running / done / stopped / error
+        "progress": 0,
+        "total": targets_count,
+        "scanned": 0,
+        "open_count": 0,
+        "results": [],
+        "logs": [],
+        "start_time": None,
+        "end_time": None,
+        "scan_type": scan_type,
+        "stop_event": threading.Event(),
+    }
+
+
+def log_scan(msg: str, task_id=None):
+    logger.info(msg)
+    entry = {"time": datetime.now().strftime("%H:%M:%S"), "msg": msg}
+    with scan_lock:
+        # 写入当前活动任务的日志
+        if task_id and task_id in scan_tasks:
+            scan_tasks[task_id]["logs"].append(entry)
+            if len(scan_tasks[task_id]["logs"]) > 500:
+                scan_tasks[task_id]["logs"] = scan_tasks[task_id]["logs"][-500:]
+        # 兼容旧接口：写入全局scan_state
+        scan_state["logs"].append(entry)
+        if len(scan_state["logs"]) > 500:
+            scan_state["logs"] = scan_state["logs"][-500:]
 
 observer_sessions = {}
 observer_lock = threading.Lock()
@@ -38,6 +77,18 @@ health_monitor = {
 _ai_bots = {}
 _ai_bot_seq = 0
 
+# 全局安全开关：只读模式下禁止危险操作（警告/进服/扫描）
+read_only_mode = False
+
+
+def is_read_only():
+    return read_only_mode or config.get("read_only_mode", False)
+
+
+def set_read_only(enabled: bool):
+    global read_only_mode
+    read_only_mode = enabled
+
 
 def get_web_token():
     return config.get("web_token", "") or ""
@@ -51,15 +102,6 @@ def safe_db_path(path: str) -> str:
     if not path.endswith(".db"):
         return "mcscanner.db"
     return path
-
-
-def log_scan(msg: str):
-    logger.info(msg)
-    with scan_lock:
-        entry = {"time": datetime.now().strftime("%H:%M:%S"), "msg": msg}
-        scan_state["logs"].append(entry)
-        if len(scan_state["logs"]) > 500:
-            scan_state["logs"] = scan_state["logs"][-500:]
 
 
 def parse_ports_spec(ports_spec):
