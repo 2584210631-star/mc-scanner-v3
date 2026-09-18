@@ -1304,7 +1304,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       </div>
     </div>
     <div class="panel">
-      <h2>活跃会话</h2>
+      <h2 style="display:flex;align-items:center;gap:8px;">活跃会话
+        <button class="btn btn-danger" style="font-size:12px;padding:4px 10px;margin-left:auto;" onclick="stopAllObservers()">全部停止</button>
+      </h2>
       <div id="obsSessionList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
       <div class="obs-terminal" id="obsTerminal">
         <div class="obs-terminal-header">
@@ -3713,13 +3715,25 @@ function loadObserverSessions() {
       const card = document.createElement('div');
       card.className = 'obs-session-card' + (s.session_id===currentObsSid?' active':'');
       const statusCls = s.status==='connected'?'obs-status-online':'obs-status-offline';
-      card.innerHTML = `<div class="obs-name">${s.username} @ ${s.host}:${s.port}</div>
-        <div class="obs-status ${statusCls}">${s.status} | 消息${s.chat_count||0}</div>`;
+      card.innerHTML = `<div class="obs-name">${escapeHtml(s.username)} @ ${escapeHtml(s.host)}:${s.port}</div>
+        <div class="obs-status ${statusCls}">${escapeHtml(s.status)} | 消息${s.chat_count||0}</div>`;
       card.onclick = ()=>{ currentObsSid=s.session_id; obsLastSeq=0; document.getElementById('obsTerminalBody').innerHTML=''; loadObserverSessions(); startObsPolling(); };
       box.appendChild(card);
     });
   });
   loadObserverHistory();
+}
+
+function stopAllObservers() {
+  if (!confirm('确定停止全部观察者？')) return;
+  fetch('/api/observer/stop_all', {method:'POST'}).then(r=>r.json()).then(d=>{
+    if (d.success) {
+      toast(`已停止 ${d.stopped} 个观察者`);
+      currentObsSid = null;
+      document.getElementById('obsTerminalBody').innerHTML = '<div class="obs-msg obs-system">已全部停止</div>';
+      loadObserverSessions();
+    }
+  });
 }
 
 function loadObserverHistory() {

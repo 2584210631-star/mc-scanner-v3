@@ -113,6 +113,20 @@ def register(app):
         _log(f"观察者停止: {session.username} -> {session.host}:{session.port}")
         return jsonify({"success": True, "session_id": sid, "status": session.status})
 
+    @app.route('/api/observer/stop_all', methods=['POST'])
+    def observer_stop_all():
+        with observer_lock:
+            sessions = list(observer_sessions.values())
+        stopped = 0
+        for s in sessions:
+            try:
+                s.stop()
+                stopped += 1
+            except Exception:
+                pass
+        _log(f"一键停止全部观察者: {stopped}个")
+        return jsonify({"success": True, "stopped": stopped})
+
     @app.route('/api/observer/send', methods=['POST'])
     def observer_send():
         data = request.json or {}
