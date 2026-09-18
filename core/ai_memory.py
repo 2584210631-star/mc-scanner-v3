@@ -6,7 +6,7 @@ import os
 import json
 import re
 import threading
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime
 
 _LOCK = threading.Lock()

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """Routes: observer"""
-from flask import request, jsonify, Response, send_from_directory
-import os, sys, json, time, threading
+from flask import request, jsonify, Response
+import os
+import json
+import time
+import threading
 from datetime import datetime
-from collections import deque
-import config, logger
 try:
     from web import state
 except ImportError:
@@ -16,13 +17,8 @@ except ImportError:
 
 
 def register(app):
-    scan_state = state.scan_state
-    scan_lock = state.scan_lock
-    scan_stop_event = state.scan_stop_event
     observer_sessions = state.observer_sessions
-    observer_lock = getattr(state, "observer_lock", state.scan_lock)
-    health_monitor = state.health_monitor
-    _ai_bots = state._ai_bots
+    observer_lock = state.observer_lock
     def _log(msg):
         state.log_scan(msg)
     def _get_web_token():
@@ -220,7 +216,7 @@ def register(app):
             return Response(html, mimetype="text/html; charset=utf-8",
                             headers={"Content-Disposition": f"attachment; filename=observer_{host}_{port}_{int(time.time())}.html"})
         else:
-            lines = [f"观察者聊天记录", f"服务器: {host}:{port}", f"观察者: {username}",
+            lines = ["观察者聊天记录", f"服务器: {host}:{port}", f"观察者: {username}",
                      f"导出时间: {now}", f"消息数: {len(messages)}", "=" * 50, ""]
             for seq, ts, sender, text in messages:
                 lines.append(f"[{ts}] {sender}: {text}")

@@ -4,7 +4,6 @@
 封装 storage/rescan.py 的数据库操作，提供高层调度接口。
 可在扫描引擎中自动调用，也可通过 CLI 手动管理。
 """
-import time
 from storage import rescan as rescan_db
 from storage import player_history as ph_db
 

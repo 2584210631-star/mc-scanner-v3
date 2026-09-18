@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """AI assistant helpers."""
-import os, re, time, threading, sqlite3
-import config, logger
+import os
+import time
+import threading
+import sqlite3
+import config
 try:
     from web import state
     from web.observer_session import ObserverSession

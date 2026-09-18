@@ -4,7 +4,6 @@
 """
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
 
 import config
 import logger
