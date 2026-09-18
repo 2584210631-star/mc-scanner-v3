@@ -365,7 +365,7 @@ def register(app):
             try:
                 r = slp_probe(ip, port, timeout=5.0)
                 if r and r.get("state") == "up":
-                    auth = auth_probe(ip, port, r.get("protocol_version", 0))
+                    auth = auth_probe(ip, port, r.get("proto", 0))
                     r.update(auth)
                     r["ip"] = ip
                     r["port"] = port

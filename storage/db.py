@@ -61,7 +61,16 @@ CREATE TABLE IF NOT EXISTS servers (
     forge_channels TEXT,
     fingerprint TEXT,
     PRIMARY KEY (ip, port)
-)
+);
+CREATE TABLE IF NOT EXISTS server_popularity (
+    ip TEXT,
+    port INTEGER,
+    players_online INTEGER,
+    players_max INTEGER,
+    recorded_at TEXT,
+    PRIMARY KEY (ip, port, recorded_at)
+);
+CREATE INDEX IF NOT EXISTS idx_popularity_ip_port ON server_popularity(ip, port);
 """
 
 UPSERT_SQL = """
@@ -102,7 +111,7 @@ def _migrate(conn):
 
 def init_db(db_path: str):
     conn = get_conn(db_path)
-    conn.execute(SCHEMA)
+    conn.executescript(SCHEMA)
     _migrate(conn)
     # 二级索引：加速过滤和排序
     conn.execute("CREATE INDEX IF NOT EXISTS idx_servers_auth ON servers(auth)")
@@ -255,7 +264,8 @@ def clean_old_records(db_path: str, retention_days: int = 30, only_offline: bool
     if retention_days <= 0:
         return 0
     conn = get_conn(db_path)
-    cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d %H:%M:%S")
+    # 与写入格式一致：datetime.now(timezone.utc).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
     if only_offline:
         cursor = conn.execute(
             "DELETE FROM servers WHERE last_updated < ? AND (players_online IS NULL OR players_online = 0)",

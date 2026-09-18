@@ -66,10 +66,14 @@ def _rate_limit():
         key = (ip, module)
         now = _time.time()
         with _rate_limit_lock:
-            # 清理过期时间戳
+            # 清理过期时间戳，空列表的key也删掉防内存泄漏
             if key in _rate_limit_store:
-                _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < _RATE_WINDOW]
-            else:
+                active = [t for t in _rate_limit_store[key] if now - t < _RATE_WINDOW]
+                if active:
+                    _rate_limit_store[key] = active
+                else:
+                    del _rate_limit_store[key]
+            if key not in _rate_limit_store:
                 _rate_limit_store[key] = []
             if len(_rate_limit_store[key]) >= limit:
                 return jsonify({"error": f"请求过于频繁，{module}模块限{limit}次/分钟"}), 429
