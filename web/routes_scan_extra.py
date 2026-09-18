@@ -93,6 +93,8 @@ def register(app):
     def auto_scan_start():
         data = request.json or {}
         tid = data.get("task_id")
+        if not tid:
+            return jsonify({"success": False, "error": "请指定task_id"}), 400
         from core.auto_scanner import auto_scanner
         ok = auto_scanner.start_task(tid)
         return jsonify({"success": ok})
@@ -101,6 +103,8 @@ def register(app):
     def auto_scan_stop():
         data = request.json or {}
         tid = data.get("task_id")
+        if not tid:
+            return jsonify({"success": False, "error": "请指定task_id"}), 400
         from core.auto_scanner import auto_scanner
         auto_scanner.stop_task(tid)
         return jsonify({"success": True})
@@ -109,6 +113,8 @@ def register(app):
     def auto_scan_remove():
         data = request.json or {}
         tid = data.get("task_id")
+        if not tid:
+            return jsonify({"success": False, "error": "请指定task_id"}), 400
         from core.auto_scanner import auto_scanner
         auto_scanner.remove_task(tid)
         return jsonify({"success": True})
