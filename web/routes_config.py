@@ -43,7 +43,7 @@ def register(app):
         """读取当前配置（敏感字段打码）"""
         cfg = config.get_all()
         # 敏感字段打码
-        for k in ("ai_api_key", "web_token"):
+        for k in ("ai_api_key", "web_token", "authme_password", "email_password"):
             if cfg.get(k):
                 v = str(cfg[k])
                 cfg[k] = v[:4] + "****" + v[-2:] if len(v) > 8 else "****"

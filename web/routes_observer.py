@@ -16,6 +16,12 @@ except ImportError:
     from observer_session import ObserverSession  # type: ignore
 
 
+def _html_escape(s):
+    if s is None:
+        return ""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
 def register(app):
     observer_sessions = state.observer_sessions
     observer_lock = state.observer_lock
@@ -193,7 +199,7 @@ def register(app):
             rows = ""
             for seq, ts, sender, text in messages:
                 color = "#e94560" if sender == username else "#00d992"
-                rows += f'<div class="msg"><span class="time">{ts}</span><span class="sender" style="color:{color}">{sender}</span><span class="text">{text}</span></div>\n'
+                rows += f'<div class="msg"><span class="time">{_html_escape(ts)}</span><span class="sender" style="color:{color}">{_html_escape(sender)}</span><span class="text">{_html_escape(text)}</span></div>\n'
             html = f"""<!DOCTYPE html>
     <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>观察者记录 - {host}:{port}</title>

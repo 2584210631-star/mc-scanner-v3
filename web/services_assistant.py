@@ -136,7 +136,7 @@ def _execute_tool(tool, args):
         if not target:
             return "错误：没有指定扫描目标"
         try:
-            from core.engine import ScanEngine
+            from scanner.engine import ScanEngine
             scan_state["stop_event"].clear()
             scan_state["results"] = []
             scan_state["total"] = 0
@@ -266,9 +266,8 @@ def _execute_tool(tool, args):
             return "错误：没有指定服务器地址"
         try:
             from core.ai_bot import AIBotSession
-            global _ai_bot_seq
-            _ai_bot_seq += 1
-            sid = f"assistant_{_ai_bot_seq}"
+            state._ai_bot_seq += 1
+            sid = f"assistant_{state._ai_bot_seq}"
             session = AIBotSession(
                 host=host, port=port, username="AssistantBot",
                 authme_password="AIBot123456", timeout=20, duration=0,
@@ -443,7 +442,7 @@ def _assistant_keyword_match(msg):
             target = ip_match.group()
             port_match = re.search(r'端口\s*([0-9, ]+)', msg)
             ports = [int(p.strip()) for p in port_match.group(1).split(',') if p.strip()] if port_match else [25565]
-            from core.engine import ScanEngine
+            from scanner.engine import ScanEngine
             scan_state["stop_event"].clear()
             scan_state["results"] = []
             scan_state["total"] = 0
@@ -474,9 +473,8 @@ def _assistant_keyword_match(msg):
                 return "格式：托管1.2.3.4:25565"
             host, port = ip_match.group(1), int(ip_match.group(2))
             from core.ai_bot import AIBotSession
-            global _ai_bot_seq
-            _ai_bot_seq += 1
-            sid = f"assistant_{_ai_bot_seq}"
+            state._ai_bot_seq += 1
+            sid = f"assistant_{state._ai_bot_seq}"
             session = AIBotSession(host=host, port=port, username="AssistantBot",
                 authme_password="AIBot123456", timeout=20, duration=0,
                 ai_config={"api_key": config.get("ai_api_key",""), "base_url": config.get("ai_base_url","https://api.openai.com/v1"),
