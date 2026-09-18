@@ -2,8 +2,7 @@
 """Health monitor loop."""
 import os, json, time, sqlite3
 from datetime import datetime, timezone
-import config, logger
-from storage import favorites
+import config
 try:
     from web import state
 except ImportError:

@@ -3,7 +3,6 @@ import os
 import json
 import time
 import threading
-import traceback
 from datetime import datetime
 from collections import deque
 from core.bot import MCBot

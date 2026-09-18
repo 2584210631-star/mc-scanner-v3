@@ -4,7 +4,6 @@
 支持多种任务类型：扫描警告、状态监控、玩家数监控、定时警告、新服务器发现、AI自动托管。
 """
 import asyncio
-import json
 import threading
 import time
 from datetime import datetime
@@ -429,7 +428,7 @@ class AutoScanner:
                     'protocol': s.get('proto', 0),
                 })
             upsert_many(records)
-        except Exception as e:
+        except Exception:
             pass
 
     def _start_ai_bot(self, server, ai_config):
@@ -444,7 +443,7 @@ class AutoScanner:
             )
             bot.session_id = f"auto_{server['ip']}_{server['port']}"
             bot.start()
-        except Exception as e:
+        except Exception:
             pass
 
     def list_tasks(self):

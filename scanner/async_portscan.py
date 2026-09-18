@@ -8,7 +8,6 @@ import asyncio
 import socket
 import time
 from dataclasses import dataclass
-from typing import Optional, AsyncIterator
 
 
 async def _open_connection(ip, port, timeout):

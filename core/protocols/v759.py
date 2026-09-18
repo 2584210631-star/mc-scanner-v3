@@ -2,7 +2,7 @@
 from __future__ import annotations
 import struct, time
 from .base import ProtocolHandler
-from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
+from ..buffer import write_string, write_uuid, BytesStream, read_string_from_stream, read_boolean_from_stream
 
 
 class Handler(ProtocolHandler):

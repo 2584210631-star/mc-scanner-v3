@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """Routes: data"""
-from flask import request, jsonify, Response, send_from_directory
-import os, sys, json, time, threading, sqlite3
+from flask import request, jsonify, Response
+import os
+import time
+import sqlite3
 from datetime import datetime
-from collections import deque
-import config, logger
 from storage import db, favorites
 try:
     from web import state
@@ -15,11 +15,7 @@ except ImportError:
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
-    scan_stop_event = state.scan_stop_event
-    observer_sessions = state.observer_sessions
-    observer_lock = getattr(state, "observer_lock", state.scan_lock)
     health_monitor = state.health_monitor
-    _ai_bots = state._ai_bots
     def _log(msg):
         state.log_scan(msg)
     def _get_web_token():
@@ -142,7 +138,7 @@ def register(app):
                             headers={"Content-Disposition": f"attachment; filename=scan_results_{ts}.html"})
 
         # 默认 TXT
-        lines = [f"MC扫描结果导出", f"共 {total} 个服务器", f"导出时间: {now}", "=" * 60, ""]
+        lines = ["MC扫描结果导出", f"共 {total} 个服务器", f"导出时间: {now}", "=" * 60, ""]
         for i, r in enumerate(rows, 1):
             ip = r.get("ip", "")
             port = r.get("port", 25565)
@@ -331,7 +327,7 @@ def register(app):
                             headers={"Content-Disposition": f"attachment; filename=favorites_{ts}.html"})
 
         # 默认 TXT
-        lines = [f"MC服务器收藏列表", f"共 {len(favs)} 个服务器", f"导出时间: {now}", "=" * 60, ""]
+        lines = ["MC服务器收藏列表", f"共 {len(favs)} 个服务器", f"导出时间: {now}", "=" * 60, ""]
         for i, f in enumerate(favs, 1):
             info = f.get("last_info") or {}
             ip = f.get("ip", "")

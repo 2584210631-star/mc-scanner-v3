@@ -218,7 +218,7 @@ class AsyncScanEngine:
         print(f"[*] uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}")
         # 阶段1: 异步端口扫描
-        print(f"[*] 阶段1: 异步端口扫描...")
+        print("[*] 阶段1: 异步端口扫描...")
         port_results = scan_ports_async(
             list(targets),
             concurrency=scan_concurrency,
@@ -232,7 +232,7 @@ class AsyncScanEngine:
         if not open_ports or (self.stop_event and self.stop_event.is_set()):
             return []
         # 阶段2: 对开放端口做SLP+认证探测
-        print(f"[*] 阶段2: SLP探测 + 认证检测...")
+        print("[*] 阶段2: SLP探测 + 认证检测...")
         return self.scan(iter(open_ports))
 
 

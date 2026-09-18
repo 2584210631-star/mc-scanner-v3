@@ -1,6 +1,6 @@
 """协议处理器基类 — 每个版本继承并实现自己的格式"""
 from __future__ import annotations
-from typing import Optional, Tuple
+from typing import Optional
 import json
 
 
@@ -49,7 +49,6 @@ class ProtocolHandler:
     def parse_player_info(self, data: bytes) -> None:
         """解析 Player Info Update 包，更新 bot.player_list 和 player_callback。
         各版本按自己的格式覆盖。"""
-        pass
 
     def get_client_info_extra(self) -> bytes:
         """Configuration 阶段 Client Information 包的版本特有额外字段。"""

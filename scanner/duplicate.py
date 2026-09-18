@@ -78,7 +78,6 @@ class DuplicateDetector:
 
     def get_unique(self) -> list:
         """获取去重后的服务器列表（每组保留第一个）。"""
-        seen_fps = set()
         unique = []
         for fp, results in self.fingerprints.items():
             if results:

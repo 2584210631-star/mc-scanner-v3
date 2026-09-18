@@ -7,11 +7,8 @@
 - 正版/白名单服：2小时重扫
 - 新发现服务器：1分钟内快速确认（前5次）
 """
-import json
-import os
 from storage.db import get_conn
 import time
-from datetime import datetime, timezone
 
 
 RESCAN_QUEUE_SCHEMA = """

@@ -3,7 +3,6 @@
 import time
 import threading
 from datetime import datetime
-import config, logger
 try:
     from web import state
 except ImportError:
@@ -148,7 +147,6 @@ def _scan_worker(task_id, targets_list, scan_cfg):
         _log(f"任务 #{task_id} 开始，目标数: {len(targets_list)}", task_id=task_id)
 
         # 进度回调
-        total_targets = len(targets_list)
         def _on_progress(done, total, open_count):
             with scan_lock:
                 task["scanned"] = done
@@ -289,7 +287,6 @@ def _scan_worker(task_id, targets_list, scan_cfg):
             if len(scan_state["history"]) > 20:
                 scan_state["history"] = scan_state["history"][:20]
     except Exception as e:
-        import traceback
         _log(f"扫描出错: {e}", task_id=task_id)
         with scan_lock:
             task["status"] = "error"
