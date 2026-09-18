@@ -7,7 +7,6 @@ import concurrent.futures
 import json
 import threading
 import time
-from typing import Optional
 
 from core.probe import slp_probe, auth_probe, active_fingerprint
 from core.bot import join_and_warn

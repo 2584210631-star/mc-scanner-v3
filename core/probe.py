@@ -9,7 +9,7 @@ import time
 from .buffer import (write_varint, write_string, read_string, write_uuid,
                      read_varint, offline_uuid)
 from .conn import MCConnection, PROTO_STATE_STATUS, PROTO_STATE_LOGIN
-from .packets import get_play_packets, get_login_packets, supported_protos
+from .packets import get_login_packets, supported_protos
 from .protocol import COMMON_PROTOCOLS
 
 socket_timeout = socket.timeout
@@ -173,7 +173,6 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
         try:
             with MCConnection(host, port, timeout) as conn:
                 conn.handshake(protocol=proto, next_state=PROTO_STATE_LOGIN)
-                play_pkts = get_play_packets(proto)
                 pid = login_pkts["sb_start"]
                 payload = write_string(username)
                 if proto >= 766:

@@ -32,7 +32,6 @@ def set_global_proxy(proxy):
 
 def get_global_proxy():
     """获取当前全局代理。如果设置了ProxyManager，会自动轮换。"""
-    global _global_proxy
     with _global_proxy_lock:
         if _global_proxy_manager is not None:
             p = _global_proxy_manager.get_proxy()

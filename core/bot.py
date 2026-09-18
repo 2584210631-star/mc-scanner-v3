@@ -4,7 +4,6 @@ Minecraft 机器人核心模块。
 完整支持 1.12.2 ~ 最新版本（协议 340+），保留 V1 的全部 5 种聊天消息格式。
 功能：连接 → 登录 → 配置 → 发消息/AuthMe → 保持连接 → 退出
 """
-import io
 import struct
 import time
 import threading
@@ -12,14 +11,13 @@ import socket
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .buffer import (write_varint, write_string, write_uuid,
-                     read_varint_from_stream, read_string_from_stream,
-                     read_uuid_from_stream, read_boolean_from_stream,
+from .buffer import (write_varint, write_string, read_varint_from_stream,
+                     read_string_from_stream, read_uuid_from_stream,
                      offline_uuid, BytesStream)
 from .conn import MCConnection, PROTO_STATE_LOGIN, PROTO_STATE_CONFIGURATION, PROTO_STATE_PLAY
 from .packets import get_play_packets, get_config_packets, get_login_packets
 from .protocol import get_version_name, COMMON_PROTOCOLS
-from .probe import probe_with_fallback, slp_probe
+from .probe import probe_with_fallback
 
 # 默认警告消息
 DEFAULT_WARNING_MESSAGES = [
@@ -501,7 +499,7 @@ class MCBot:
                         z = struct.unpack(">d", stream.read(8))[0]
                         yaw = struct.unpack(">f", stream.read(4))[0]
                         pitch = struct.unpack(">f", stream.read(4))[0]
-                        flags = stream.read(1)  # flags: 位掩码（相对坐标）
+                        stream.read(1)  # flags: 位掩码（相对坐标）
                         # 1.17+ 有 teleport_id，旧版本没有
                         teleport_id = None
                         try:
@@ -619,7 +617,6 @@ class MCBot:
     @staticmethod
     def _json_component_to_text(obj) -> str:
         """将 Minecraft JSON 聊天组件转为纯文本"""
-        import json
         if isinstance(obj, str):
             return obj
         if isinstance(obj, dict):

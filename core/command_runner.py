@@ -8,7 +8,6 @@
 import time
 import re
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 from .bot import MCBot
 

@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """Routes: warn"""
-from flask import request, jsonify, Response, send_from_directory
-import os, sys, json, time, threading
-from datetime import datetime
-from collections import deque
-import config, logger
+from flask import request, jsonify
+import time
 from core.bot import DEFAULT_WARNING_MESSAGES, join_and_warn
 try:
     from web import state
@@ -15,11 +12,6 @@ except ImportError:
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
-    scan_stop_event = state.scan_stop_event
-    observer_sessions = state.observer_sessions
-    observer_lock = getattr(state, "observer_lock", state.scan_lock)
-    health_monitor = state.health_monitor
-    _ai_bots = state._ai_bots
     def _log(msg):
         state.log_scan(msg)
     def _get_web_token():

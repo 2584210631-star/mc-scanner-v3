@@ -3,7 +3,6 @@
 VarInt / VarLong / String / UUID / Boolean 编解码工具。
 零依赖纯标准库，支持 MC 协议所有基础数据类型。
 """
-import io
 import struct
 import uuid
 
