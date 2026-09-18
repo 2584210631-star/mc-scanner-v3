@@ -9,7 +9,7 @@ from datetime import datetime
 from storage import db, favorites
 from scanner.exclude import Excluder
 from scanner.targets import parse_targets, parse_port_spec as parse_port_ranges
-from scanner.random_scan import random_scan
+from scanner.random_scan import random_scan, parse_port_ranges as _parse_random_port_ranges
 from scanner.engine import ScanEngine
 try:
     from scanner.masscan import has_masscan, get_masscan_version, parse_masscan_json
@@ -116,7 +116,7 @@ def register(app):
                     scan_state["start_time"] = time.time()
                 scan_stop_event.clear()
                 _log(f"随机暴力扫描开始: {count} 个目标, 端口 {ports}")
-                port_ranges = parse_port_ranges(ports)
+                port_ranges = _parse_random_port_ranges(ports)
                 def progress(done, total, found):
                     with scan_lock:
                         scan_state["progress"] = done
@@ -150,7 +150,7 @@ def register(app):
 
         t = threading.Thread(target=_random_worker, daemon=True)
         t.start()
-        return jsonify({"status": "started", "count": count, "task_id": state.task_counter + 1})
+        return jsonify({"status": "started", "count": count, "task_id": state.task_counter})
 
     @app.route('/api/scan/stop', methods=['POST'])
     def stop_scan():
@@ -402,6 +402,8 @@ def register(app):
     def fav_rescan_one():
         data = request.json or {}
         ip = data.get("ip")
+        if not ip:
+            return jsonify({"success": False, "error": "请指定ip"}), 400
         port = int(data.get("port") or 25565)
         info = favorites.rescan_one(ip, port, timeout=float(data.get("timeout", 5.0)))
         return jsonify({"success": True, "info": info})
