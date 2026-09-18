@@ -20,7 +20,7 @@ def register(app):
 
     @app.route('/api/rescan')
     def rescan_list():
-        db_path = request.args.get("db_path", "mcscanner.db")
+        db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
         action = request.args.get("action", "list")
         limit = int(request.args.get("limit", 100))
         from storage import rescan as rescan_db
@@ -36,7 +36,7 @@ def register(app):
     @app.route('/api/rescan/run', methods=['POST'])
     def rescan_run():
         data = request.json or {}
-        db_path = data.get("db_path", "mcscanner.db")
+        db_path = _safe_db_path(data.get("db_path", "mcscanner.db"))
         limit = int(data.get("limit", 50))
         from storage import rescan as rescan_db
         from scanner.engine import ScanEngine
@@ -60,7 +60,7 @@ def register(app):
     @app.route('/api/rescan/clear', methods=['POST'])
     def rescan_clear():
         data = request.json or {}
-        db_path = data.get("db_path", "mcscanner.db")
+        db_path = _safe_db_path(data.get("db_path", "mcscanner.db"))
         from storage import rescan as rescan_db
         rescan_db.clear_rescan(db_path)
         _log("重扫队列已清空")

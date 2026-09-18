@@ -26,7 +26,6 @@ DEFAULT_WARNING_MESSAGES = [
     "建议：1.在 server.properties 中设置 online-mode=true",
     "2.如必须离线模式，请安装 AuthMe 等登录插件并开启白名单",
     "3.定期检查 ops.json，删除不认识的管理员",
-    "参考: https://matdoes.dev/matscan",
 ]
 
 
