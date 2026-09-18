@@ -47,5 +47,6 @@
   "email_from": "",
   "email_to": "",
   "api_rate_limit": 0,
-  "db_retention_days": 30
+  "db_retention_days": 30,
+  "app_mode": "fun"
 }
