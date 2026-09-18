@@ -8,7 +8,7 @@ import threading
 from datetime import datetime
 from storage import db, favorites
 from scanner.exclude import Excluder
-from scanner.targets import parse_targets, parse_port_spec as parse_port_ranges
+from scanner.targets import parse_targets
 from scanner.random_scan import random_scan, parse_port_ranges as _parse_random_port_ranges
 from scanner.engine import ScanEngine
 try:
@@ -78,7 +78,7 @@ def register(app):
             "scan_timeout": data.get("scan_timeout", 2.5),
             "rate": data.get("rate", 0),
             "auth_check": data.get("auth_check", True),
-            "db_path": data.get("db_path", "mcscanner.db"),
+            "db_path": _safe_db_path(data.get("db_path", "mcscanner.db")),
             "use_masscan": data.get("use_masscan", False),
             "portscan_only": data.get("portscan_only", False),
             "masscan_rate": data.get("masscan_rate", 5000),
@@ -303,8 +303,9 @@ def register(app):
         if not f.filename:
             return jsonify({"error": "文件名为空"}), 400
         do_auth = request.form.get('do_auth', '1') == '1'
-        tmp_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'import_' + str(int(time.time())) + '.ndjson')
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(suffix='.ndjson', prefix='import_')
+        os.close(fd)
         f.save(tmp_path)
         _log(f"导入 masscan 结果: {f.filename}")
         try:

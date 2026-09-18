@@ -39,7 +39,9 @@ def _check_token():
 
 # API限流：按IP+模块，滑动窗口60秒
 import time as _time
+import threading as _threading
 _rate_limit_store = {}  # (ip, module) -> [timestamps]
+_rate_limit_lock = _threading.Lock()
 _RATE_WINDOW = 60.0  # 秒
 
 def _get_module(path):
@@ -63,14 +65,15 @@ def _rate_limit():
         ip = request.remote_addr or "unknown"
         key = (ip, module)
         now = _time.time()
-        # 清理过期时间戳
-        if key in _rate_limit_store:
-            _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < _RATE_WINDOW]
-        else:
-            _rate_limit_store[key] = []
-        if len(_rate_limit_store[key]) >= limit:
-            return jsonify({"error": f"请求过于频繁，{module}模块限{limit}次/分钟"}), 429
-        _rate_limit_store[key].append(now)
+        with _rate_limit_lock:
+            # 清理过期时间戳
+            if key in _rate_limit_store:
+                _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < _RATE_WINDOW]
+            else:
+                _rate_limit_store[key] = []
+            if len(_rate_limit_store[key]) >= limit:
+                return jsonify({"error": f"请求过于频繁，{module}模块限{limit}次/分钟"}), 429
+            _rate_limit_store[key].append(now)
     except Exception:
         pass
     return None

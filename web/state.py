@@ -104,14 +104,15 @@ def safe_db_path(path: str) -> str:
     return path
 
 
-def parse_ports_spec(ports_spec):
+def parse_ports_spec(ports_spec, max_ports=2000):
+    """解析端口规格，返回去重排序后的端口列表。max_ports限制单次扫描端口数防滥用。"""
     if ports_spec is None or (isinstance(ports_spec, str) and not ports_spec.strip()):
         return [25565]
     if isinstance(ports_spec, list):
         result = []
         for p in ports_spec:
-            result.extend(parse_ports_spec(p))
-        return sorted(set(result))
+            result.extend(parse_ports_spec(p, max_ports))
+        return sorted(set(result))[:max_ports]
     if not isinstance(ports_spec, str):
         return [int(ports_spec)]
     result = []
@@ -133,4 +134,4 @@ def parse_ports_spec(ports_spec):
                 result.append(int(part))
             except ValueError:
                 continue
-    return sorted(set(result))
+    return sorted(set(result))[:max_ports]

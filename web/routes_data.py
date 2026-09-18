@@ -12,6 +12,12 @@ except ImportError:
     import state  # type: ignore
 
 
+def _html_escape(s):
+    if s is None:
+        return ""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
@@ -101,15 +107,15 @@ def register(app):
         if fmt == "html":
             rows_html = ""
             for r in rows:
-                ip = r.get("ip", "")
-                port = r.get("port", 25565)
-                ver = r.get("version") or "-"
+                ip = _html_escape(r.get("ip", ""))
+                port = _html_escape(r.get("port", 25565))
+                ver = _html_escape(r.get("version") or "-")
                 players = f"{r.get('players_online', 0)}/{r.get('players_max', 0)}"
                 online = r.get("players_online", 0)
                 pcolor = "#e94560" if online > 0 else "#555"
-                auth_v = r.get("auth") or "-"
-                core = r.get("core_type") or "-"
-                motd = (r.get("motd") or "")[:50]
+                auth_v = _html_escape(r.get("auth") or "-")
+                core = _html_escape(r.get("core_type") or "-")
+                motd = _html_escape((r.get("motd") or "")[:50])
                 rows_html += f"""<tr>
     <td><a href="http://{ip}:{port}" style="color:#00d992;">{ip}:{port}</a></td>
     <td>{ver}</td><td style="color:{pcolor};font-weight:bold;">{players}</td><td>{auth_v}</td><td>{core}</td><td style="color:#888;font-size:12px;">{motd}</td>
@@ -247,8 +253,9 @@ def register(app):
         if 'file' not in request.files:
             return jsonify({"error": "请选择文件"}), 400
         f = request.files['file']
-        tmp_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'fav_import_' + str(int(time.time())) + '.txt')
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='fav_import_')
+        os.close(fd)
         f.save(tmp_path)
         try:
             count = favorites.import_from_file(tmp_path)
@@ -352,7 +359,7 @@ def register(app):
 
     @app.route('/api/players')
     def players_history():
-        db_path = request.args.get("db_path", "mcscanner.db")
+        db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
         player_name = request.args.get("name")
         ip = request.args.get("ip")
         port = request.args.get("port", type=int)
@@ -365,7 +372,7 @@ def register(app):
 
     @app.route('/api/players/stats')
     def players_stats():
-        db_path = request.args.get("db_path", "mcscanner.db")
+        db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
         if not os.path.exists(db_path):
             return jsonify({"total_records": 0, "unique_players": 0, "unique_servers": 0})
         from storage import player_history as ph

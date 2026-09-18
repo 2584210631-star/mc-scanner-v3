@@ -2,6 +2,7 @@
 """Routes: warn"""
 from flask import request, jsonify
 import time
+import config
 from core.bot import DEFAULT_WARNING_MESSAGES, join_and_warn
 try:
     from web import state
@@ -121,8 +122,9 @@ def register(app):
                 targets.append((ip, int(port), 0))
         if not targets:
             return jsonify({"error": "请先选择要警告的服务器"}), 400
-        if bot_count < 1 or bot_count > 50:
-            return jsonify({"error": "机器人数量需在 1-50 之间"}), 400
+        max_bots = int(config.get("warn_bot_max", 20))
+        if bot_count < 1 or bot_count > max_bots:
+            return jsonify({"error": f"机器人数量需在 1-{max_bots} 之间"}), 400
 
         _log(f"多机器人警告开始：{len(targets)}台服务器 x {bot_count}个机器人")
 

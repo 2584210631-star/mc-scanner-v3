@@ -8,10 +8,24 @@ import json
 import os
 import sqlite3
 import threading
+import atexit
 from datetime import datetime, timezone, timedelta
 
 # 线程局部连接池：每个线程每个db_path复用一个连接，避免频繁创建
 _local = threading.local()
+# 全局连接注册表，用于程序退出时统一关闭（防文件描述符泄漏）
+_all_conns = []
+_all_conns_lock = threading.Lock()
+
+@atexit.register
+def _close_all_conns():
+    with _all_conns_lock:
+        for conn in _all_conns:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _all_conns.clear()
 
 def get_conn(db_path: str):
     """获取线程局部持久连接（首次创建时设置PRAGMA，后续复用）。"""
@@ -23,6 +37,8 @@ def get_conn(db_path: str):
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA temp_store=MEMORY")
         _local.conns[db_path] = conn
+        with _all_conns_lock:
+            _all_conns.append(conn)
     return _local.conns[db_path]
 
 SCHEMA = """
