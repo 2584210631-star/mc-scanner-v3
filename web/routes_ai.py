@@ -60,7 +60,8 @@ def register(app):
 
     @app.route('/api/ai/get')
     def ai_get():
-        """GET版本，浏览器地址栏直接调用。参数: topic, preset, api_key, base_url, model"""
+        """GET版本，浏览器地址栏直接调用。参数: topic, preset, prompt, format
+        注意：api_key/base_url/model只能通过配置文件或POST接口设置，不通过URL传递（防泄露）"""
         topic = request.args.get("topic", "").strip()
         preset = request.args.get("preset", "novel")
         custom_prompt = request.args.get("prompt")
@@ -69,9 +70,9 @@ def register(app):
         from core.ai_generator import generate_content
         result = generate_content(
             topic=topic, preset=preset,
-            api_key=request.args.get("api_key") or config.get("ai_api_key", ""),
-            base_url=request.args.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
-            model=request.args.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
+            api_key=config.get("ai_api_key", ""),
+            base_url=config.get("ai_base_url", "https://api.openai.com/v1"),
+            model=config.get("ai_model", "gpt-3.5-turbo"),
             custom_prompt=custom_prompt,
         )
         # 浏览器直接访问时返回纯文本，方便阅读

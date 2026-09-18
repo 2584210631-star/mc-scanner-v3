@@ -36,8 +36,8 @@ DEFAULT_CONFIG = {
     "duplicate_detection": False,  # 重复服务器检测
     # AI 内容生成
     "ai_api_key": "",          # AI API Key（OpenAI兼容）
-    "ai_base_url": "https://api.openai.com/v1",  # AI API 地址
-    "ai_model": "gpt-3.5-turbo",  # AI 模型名
+    "ai_base_url": "https://api.deepseek.com/v1",  # AI API 地址
+    "ai_model": "deepseek-chat",  # AI 模型名
     "ai_reply_cooldown": 2.0,   # AI 回复冷却（秒）
     # 邮件通知
     "email_enabled": False,     # 扫描完成邮件通知开关
