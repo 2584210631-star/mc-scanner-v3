@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
 """AI assistant helpers."""
-import os, re, time, threading
+import os, re, time, threading, sqlite3
 import config, logger
 try:
     from web import state
+    from web.observer_session import ObserverSession
 except ImportError:
     import state  # type: ignore
+    from observer_session import ObserverSession  # type: ignore
 _ai_bots = state._ai_bots
+scan_state = state.scan_state
+health_monitor = state.health_monitor
+observer_lock = state.observer_lock
+observer_sessions = state.observer_sessions
 
 def _handle_assistant_command(msg):
     """AI助手：优先用API做意图识别+工具调用+结果总结，没key时fallback关键词匹配"""
