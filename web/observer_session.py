@@ -19,7 +19,7 @@ class ObserverSession:
 
     def __init__(self, host, port, username, authme_password=None, timeout=20.0,
                  duration=0, protocol_version=None, keywords=None,
-                 max_reconnect=10):
+                 max_reconnect=5):
         self.session_id = ""
         self.duration = duration  # 观察时长（秒），0=一直观察
         self.host = host
@@ -195,7 +195,18 @@ class ObserverSession:
                     self.status = "error"
                     self.error = str(e)[:300]
                 self._append_log("error", {"text": str(e)[:300]})
-                print(f"[观察者错误] {self.username}@{self.host}:{self.port} - {e}")
+                err_str = str(e)
+                # Connection refused说明端口没开，服务器大概率下线了，只重试1次就放弃
+                if "Connection refused" in err_str or "Errno 111" in err_str:
+                    print(f"[观察者] {self.username}@{self.host}:{self.port} 端口未开放({err_str[:50]})")
+                    if self.reconnect_count >= 1:
+                        print(f"[观察者] {self.username}@{self.host}:{self.port} 端口未开放，停止重连")
+                        with self.lock:
+                            self.status = "disconnected"
+                        self._append_log("system", {"text": "端口未开放，停止重连"})
+                        break
+                else:
+                    print(f"[观察者错误] {self.username}@{self.host}:{self.port} - {e}")
 
             if self.stop_event.is_set():
                 break
