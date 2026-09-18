@@ -83,6 +83,20 @@ def register(app):
     def config_read_only_status():
         return jsonify({"read_only": state.is_read_only()})
 
+    @app.route('/api/config/mode', methods=['POST'])
+    def config_set_mode():
+        """切换应用模式：fun=搞怪模式（全功能），serious=正经模式（隐藏娱乐功能）"""
+        data = request.json or {}
+        mode = data.get("mode", "fun")
+        if mode not in ("fun", "serious"):
+            return jsonify({"error": "mode只能是fun或serious"}), 400
+        config.save_config({"app_mode": mode})
+        return jsonify({"success": True, "mode": mode})
+
+    @app.route('/api/config/mode', methods=['GET'])
+    def config_get_mode():
+        return jsonify({"mode": config.get("app_mode", "fun")})
+
     @app.route('/api/email/test', methods=['POST'])
     def email_test():
         """发送测试邮件"""
