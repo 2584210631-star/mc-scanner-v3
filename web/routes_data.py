@@ -18,6 +18,14 @@ def _html_escape(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def _csv_field(s):
+    """CSV字段转义：含逗号/引号/换行时加双引号，内部引号转义为两个"""
+    s = str(s) if s is not None else ""
+    if ',' in s or '"' in s or '\n' in s or '\r' in s:
+        return '"' + s.replace('"', '""') + '"'
+    return s
+
+
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
@@ -90,16 +98,16 @@ def register(app):
         if fmt == "csv":
             lines = ["IP,端口,版本,协议,人数,延迟,验证,核心,Mod,MOTD"]
             for r in rows:
-                ip = r.get("ip", "")
-                port = r.get("port", 25565)
-                ver = (r.get("version") or "").replace(",", " ")
-                proto = r.get("proto", "")
-                players = f"{r.get('players_online', 0)}/{r.get('players_max', 0)}"
-                ping = r.get("ping_ms", "")
-                auth_v = r.get("auth", "")
-                core = (r.get("core_type") or "").replace(",", " ")
+                ip = _csv_field(r.get("ip", ""))
+                port = _csv_field(r.get("port", 25565))
+                ver = _csv_field(r.get("version") or "")
+                proto = _csv_field(r.get("proto", ""))
+                players = _csv_field(f"{r.get('players_online', 0)}/{r.get('players_max', 0)}")
+                ping = _csv_field(r.get("ping_ms", ""))
+                auth_v = _csv_field(r.get("auth", ""))
+                core = _csv_field(r.get("core_type") or "")
                 mods = "是" if r.get("is_modded") else "否"
-                motd = (r.get("motd") or "").replace(",", " ").replace("\n", " ")
+                motd = _csv_field(r.get("motd") or "")
                 lines.append(f"{ip},{port},{ver},{proto},{players},{ping},{auth_v},{core},{mods},{motd}")
             return Response("\n".join(lines), mimetype="text/csv; charset=utf-8",
                             headers={"Content-Disposition": f"attachment; filename=scan_results_{ts}.csv"})
@@ -282,14 +290,14 @@ def register(app):
             lines = ["IP,端口,版本,人数,验证,标签,备注,MOTD"]
             for f in favs:
                 info = f.get("last_info") or {}
-                ip = f.get("ip", "")
-                port = f.get("port", 25565)
-                ver = (info.get("version") or "").replace(",", " ")
-                players = f"{info.get('players_online', 0)}/{info.get('players_max', 0)}"
-                auth = info.get("auth", "")
-                tags = "|".join(f.get("tags", []))
-                note = (f.get("note") or "").replace(",", " ").replace("\n", " ")
-                motd = (info.get("motd") or "").replace(",", " ").replace("\n", " ")
+                ip = _csv_field(f.get("ip", ""))
+                port = _csv_field(f.get("port", 25565))
+                ver = _csv_field(info.get("version") or "")
+                players = _csv_field(f"{info.get('players_online', 0)}/{info.get('players_max', 0)}")
+                auth = _csv_field(info.get("auth", ""))
+                tags = _csv_field("|".join(f.get("tags", [])))
+                note = _csv_field(f.get("note") or "")
+                motd = _csv_field(info.get("motd") or "")
                 lines.append(f"{ip},{port},{ver},{players},{auth},{tags},{note},{motd}")
             return Response("\n".join(lines), mimetype="text/csv; charset=utf-8",
                             headers={"Content-Disposition": f"attachment; filename=favorites_{ts}.csv"})
@@ -298,14 +306,14 @@ def register(app):
             rows = ""
             for f in favs:
                 info = f.get("last_info") or {}
-                ip = f.get("ip", "")
-                port = f.get("port", 25565)
-                ver = info.get("version") or "-"
+                ip = _html_escape(f.get("ip", ""))
+                port = _html_escape(f.get("port", 25565))
+                ver = _html_escape(info.get("version") or "-")
                 players = f"{info.get('players_online', 0)}/{info.get('players_max', 0)}"
-                auth = info.get("auth") or "-"
-                tags = " ".join(f'<span style="background:#0f3460;padding:2px 6px;border-radius:3px;font-size:11px;">{t}</span>' for t in f.get("tags", []))
-                note = f.get("note") or ""
-                motd = (info.get("motd") or "")[:50]
+                auth = _html_escape(info.get("auth") or "-")
+                tags = " ".join(f'<span style="background:#0f3460;padding:2px 6px;border-radius:3px;font-size:11px;">{_html_escape(t)}</span>' for t in f.get("tags", []))
+                note = _html_escape(f.get("note") or "")
+                motd = _html_escape((info.get("motd") or "")[:50])
                 rows += f"""<tr>
     <td><a href="http://{ip}:{port}" style="color:#00d992;">{ip}:{port}</a></td>
     <td>{ver}</td><td>{players}</td><td>{auth}</td><td>{tags}</td><td>{note}</td><td style="color:#888;font-size:12px;">{motd}</td>

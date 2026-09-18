@@ -191,19 +191,26 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                 if stop_evt.is_set():
                     break
                 _log(f"连续扫描 [{i+1}/{len(subnets)}]: {subnet}", task_id=task_id)
+                # 展开CIDR为IP列表（subnets已被拆成/24，最多256个IP）
+                net = ipaddress.ip_network(subnet, strict=False)
+                ips = [str(ip) for ip in net.hosts()]
+                if not ips:
+                    continue
                 subnet_results = engine.scan_with_portscan(
-                    iter([(subnet, p) for p in scan_cfg.get("ports", [25565])]),
+                    iter([(ip, p) for ip in ips for p in scan_cfg.get("ports", [25565])]),
                     scan_threads=scan_cfg.get("scan_threads", 200),
                     scan_timeout=scan_cfg.get("scan_timeout", 2.5),
                     progress_callback=_on_progress,
                 )
                 results.extend(subnet_results)
         elif use_masscan:
-            from scanner.masscan_wrapper import masscan_scan
+            from scanner.masscan import run_masscan, parse_masscan_json
             _log("使用 masscan 快速端口扫描")
-            open_ports = masscan_scan(targets_list, scan_cfg.get("ports", [25565]),
-                                      rate=scan_cfg.get("masscan_rate", 10000),
-                                      interface=scan_cfg.get("interface"))
+            masscan_targets = ",".join(str(t) for t in targets_list) if isinstance(targets_list, list) else str(targets_list)
+            masscan_ports = ",".join(str(p) for p in scan_cfg.get("ports", [25565]))
+            output_file = run_masscan(masscan_targets, ports=masscan_ports,
+                                      rate=scan_cfg.get("masscan_rate", 10000))
+            open_ports = parse_masscan_json(output_file)
             _log(f"masscan 发现 {len(open_ports)} 个开放端口，开始SLP探测")
             if not portscan_only:
                 from scanner.engine import ScanEngine

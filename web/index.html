@@ -3897,7 +3897,7 @@ function fetchAiBotChat() {
   if (!currentAiBotId) return;
   fetch(`/api/ai_bot/chat?session_id=${currentAiBotId}&since=0`).then(r=>r.json()).then(d=>{
     const el = document.getElementById('aiBotChatLog');
-    el.innerHTML = d.messages.map(m=>`<div>[${m.time}] <strong>${m.sender}</strong>: ${m.text}</div>`).join('');
+    el.innerHTML = d.messages.map(m=>`<div>[${escapeHtml(m.time)}] <strong>${escapeHtml(m.sender)}</strong>: ${escapeHtml(m.text)}</div>`).join('');
     el.scrollTop = el.scrollHeight;
   });
 }
@@ -4078,7 +4078,7 @@ function fetchMultiAiChat() {
   if (!currentMultiAiId) return;
   fetch(`/api/ai_multi/chat?group_id=${currentMultiAiId}&since=0`).then(r=>r.json()).then(d=>{
     const el = document.getElementById('multiAiChatLog');
-    el.innerHTML = d.messages.map(m=>`<div>[${m.time}] <strong style="color:#00d992">${m.sender}</strong>: ${m.text}</div>`).join('');
+    el.innerHTML = d.messages.map(m=>`<div>[${escapeHtml(m.time)}] <strong style="color:#00d992">${escapeHtml(m.sender)}</strong>: ${escapeHtml(m.text)}</div>`).join('');
     el.scrollTop = el.scrollHeight;
   });
 }

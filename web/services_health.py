@@ -3,6 +3,7 @@
 import os, json, time, sqlite3
 from datetime import datetime, timezone
 import config
+from core.notifier import _html_escape
 try:
     from web import state
 except ImportError:
@@ -140,11 +141,11 @@ def _health_monitor_loop():
                             lines.append(f"<p><b>{addr}</b> - {s['prev']}人 → <span style='color:{delta_color}'>{s['curr']}人 ({delta_str})</span></p>")
                             lines.append(f"<p style='margin-left:20px;color:#666;'>进了 {s['joined']} 人，走了 {s['left']} 人</p>")
                             if s['player_names']:
-                                lines.append(f"<p style='margin-left:20px;color:#888;'>当前玩家: {', '.join(s['player_names'])}</p>")
+                                lines.append(f"<p style='margin-left:20px;color:#888;'>当前玩家: {', '.join(_html_escape(p) for p in s['player_names'])}</p>")
                             if s['new_players']:
-                                lines.append(f"<p style='margin-left:20px;color:#e94560;'>新增: {', '.join(s['new_players'])}</p>")
+                                lines.append(f"<p style='margin-left:20px;color:#e94560;'>新增: {', '.join(_html_escape(p) for p in s['new_players'])}</p>")
                             if s['left_players']:
-                                lines.append(f"<p style='margin-left:20px;color:#999;'>离开: {', '.join(s['left_players'])}</p>")
+                                lines.append(f"<p style='margin-left:20px;color:#999;'>离开: {', '.join(_html_escape(p) for p in s['left_players'])}</p>")
                             lines.append("<hr style='border:none;border-top:1px solid #eee;'>")
                         body = "\n".join(lines)
                         ok, err = send_email(

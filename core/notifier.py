@@ -12,6 +12,12 @@ from email.utils import formataddr
 from datetime import datetime
 
 
+def _html_escape(s):
+    if s is None:
+        return ""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
 def send_email(subject, body, html=False, cfg=None):
     """
     发送邮件。
@@ -75,16 +81,16 @@ def build_scan_report(results, targets_count, duration_sec, task_id=None):
     # 有人的服务器列表
     online_rows = ""
     for r in sorted(online, key=lambda x: x.get("players_online", 0), reverse=True)[:30]:
-        ip = r.get("ip", "?")
+        ip = _html_escape(r.get("ip", "?"))
         port = r.get("port", 25565)
-        ver = r.get("version", "") or "?"
+        ver = _html_escape(r.get("version", "") or "?")
         players = f"{r.get('players_online', 0)}/{r.get('players_max', 0)}"
-        motd = (r.get("motd") or "")[:40]
-        auth = r.get("auth", "?")
+        motd = _html_escape((r.get("motd") or "")[:40])
+        auth = _html_escape(r.get("auth", "?"))
         # 玩家列表
         sample = r.get("sample") or []
         if sample:
-            names = [p.get("name", "") for p in sample if p.get("name")][:10]
+            names = [_html_escape(p.get("name", "")) for p in sample if p.get("name")][:10]
             player_str = ", ".join(names)
             if len(sample) > 10:
                 player_str += f" 等{len(sample)}人"
