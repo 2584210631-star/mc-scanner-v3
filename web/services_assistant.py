@@ -350,7 +350,7 @@ def _assistant_keyword_match(msg):
 🤖 AI托管：说"托管1.2.3.4:25565"
 （配置API key后我能更聪明地理解你的话）"""
 
-    if any(k in msg for k in ["停止", "停下", "别扫了"]) and "扫描" in msg or low in ["停", "stop"]:
+    if low in ["停", "stop"] or (any(k in msg for k in ["停止", "停下", "别扫了", "停一下"]) and scan_state.get("thread") and scan_state["thread"].is_alive()):
         try:
             if scan_state["thread"] and scan_state["thread"].is_alive():
                 scan_state["stop_event"].set()
