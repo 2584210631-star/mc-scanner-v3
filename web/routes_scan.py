@@ -6,17 +6,28 @@ from datetime import datetime
 from collections import deque
 import config, logger
 from storage import db, favorites
+from scanner.exclude import Excluder
+from scanner.targets import parse_targets, parse_port_spec as parse_port_ranges
+from scanner.random_scan import random_scan
+from scanner.engine import ScanEngine
 try:
-    from scanner.masscan import has_masscan, get_masscan_version
+    from scanner.masscan import has_masscan, get_masscan_version, parse_masscan_json
 except ImportError:
     def has_masscan():
         return False
     def get_masscan_version():
         return None
+    def parse_masscan_json(*a, **kw):
+        return []
 try:
     from web import state
 except ImportError:
     import state  # type: ignore
+
+def _html_escape(s):
+    if s is None:
+        return ""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def register(app):
