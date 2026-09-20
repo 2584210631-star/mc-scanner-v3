@@ -1,9 +1,9 @@
 <div align="center">
 
-# MC Scanner v3.5.0
+# MC Scanner v3.6.0
 ### Minecraft 服务器扫描工具
 
-Python 3.8+ · 协议 340+ · Web 面板 · 离线检测 · 观察者模式 · AI托管 · 多AI吵架 · AI分层记忆
+Python 3.8+ · 协议 340+ · Web 面板 · 离线检测 · 观察者模式 · AI托管 · 多AI吵架 · AI分层记忆 · 防封禁扫描
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -51,6 +51,14 @@ MC Scanner 是一个 Minecraft 服务器扫描与探测工具，支持端口扫�
 - SLP 探测缓存（60 秒 TTL，避免重复探测）
 - 随机 IP 暴力扫描
 
+### 防封禁扫描（v3.6.0 新增）
+- 扫描模式分级：`stealth`（防封禁）/ `balanced`（平衡默认）/ `aggressive`（仅内网）
+- 端口随机化：打乱扫描顺序，去掉"顺序递增"特征
+- 批次冷却：每批扫完暂停，降低突发连接风暴
+- 自适应速率：超时率突变自动降速，连续高超时判定疑似封禁并记录事件
+- 断点续扫：中断/暂停后从上次位置继续（`--resume`）
+- CLI 新增 `--port '1-65535'` 端口范围参数（全端口扫描入口）
+
 ### 安全与运维
 - 全局只读模式（一键锁死警告/AI进服/观察者等危险操作）
 - API 按模块限流（scan/warn/ai，可配置次数/分钟）
@@ -74,11 +82,39 @@ python run.py
 
 敏感项可用环境变量：`MC_WEB_TOKEN` / `MC_AI_API_KEY` / `MC_AI_BASE_URL` / `MC_AI_MODEL` / `MC_DISCORD_WEBHOOK` / `MC_EMAIL_*` / `MC_AUTHME_PASSWORD`
 
+### 防封禁全端口扫描（v3.6.0 推荐用法）
+
+```bash
+# 单 IP 全端口，隐蔽模式（低速率+随机化+批次冷却+自适应降速）
+python3 cli.py scan 1.2.3.4 --port 1-65535 --mode stealth
+
+# 全端口 + 断点续扫（中断后再次运行同命令自动从断点继续）
+python3 cli.py scan 1.2.3.4 --port 1-65535 --mode stealth --resume
+
+# 只扫端口（不探测 MC），隐蔽模式
+python3 cli.py portscan 1.2.3.0/24 --port 1-65535 --mode stealth
+
+# masscan 全网（stealth 自动限速 100pps，防封）
+python3 cli.py masscan --targets 0.0.0.0/0 --port 1-65535 --mode stealth
+
+# 仅内网/信任网络用高速模式
+python3 cli.py scan 192.168.1.0/24 --mode aggressive
+```
+
 ---
 
 ## 更新日志
 
-### v3.5.0
+### v3.6.0
+- 新增防封禁扫描引擎（`scanner/stealth.py`）：stealth/balanced/aggressive 模式分级
+- 新增端口随机化：默认打乱扫描顺序，防 IDS 顺序扫描特征
+- 新增批次冷却：`--batch-cooldown` 控制批间暂停，防连接突发
+- 新增自适应速率：超时率突变自动降速，连续高超时判定疑似封禁并记录
+- 新增断点续扫：`--resume` 中断后从上次位置继续（进度存 `scan_progress.json`）
+- 新增 `--port '1-65535'` 端口范围参数（scan/portscan）
+- masscan 集成安全限速：`--mode stealth` 自动 100pps 并提示
+- 修复异步 CLI 逗号分隔多目标无法解析的问题
+- 配置新增：`scan_mode` / `shuffle` / `batch_cooldown` / `progress_file`
 - 新增 AI 三层记忆系统（短期原文 + 中期话题摘要 + 长期玩家档案）
 - 新增扫描任务队列（多任务排队执行）
 - 新增全局只读模式（危险 API 返回 403）

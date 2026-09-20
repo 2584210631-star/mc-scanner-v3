@@ -32,6 +32,11 @@ class ScanEngine:
         self.bot_timeout = bot_timeout
         self.stop_event = stop_event
         self.fingerprint = fingerprint  # 主动协议指纹（额外TCP连接，默认关闭）
+        # v3.6.0 防封禁扫描参数（None=按模式默认）
+        self.mode = None
+        self.shuffle = None
+        self.batch_cooldown = None
+        self.progress_file = None
         # v3.2.1 新增特性
         self.rescan_enabled = rescan_enabled
         self.duplicate_detection = duplicate_detection
@@ -198,7 +203,10 @@ class ScanEngine:
         port_results = scan_ports(targets, max_workers=scan_threads,
                                    timeout=scan_timeout, show_progress=True,
                                    rate=self.rate_limit,
-                                   progress_callback=progress_callback)
+                                   progress_callback=progress_callback,
+                                   mode=self.mode, shuffle=self.shuffle,
+                                   batch_cooldown=self.batch_cooldown,
+                                   progress_file=self.progress_file)
         open_ports = get_open_ports(port_results)
         print(f"[*] 阶段1完成，开放 {len(open_ports)} 个端口")
         if not open_ports:

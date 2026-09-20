@@ -18,21 +18,31 @@ class AsyncScanEngine:
     """异步综合扫描引擎"""
 
     def __init__(self, db_path: str = "mcscanner.db",
-                 concurrency: int = 1000,
+                 concurrency: int = None,
                  slp_concurrency: int = 200,
                  timeout: float = 4.0,
                  auth_check: bool = True,
-                 rate_limit: int = 0,
+                 rate_limit: int = None,
                  stop_event: Optional[threading.Event] = None,
-                 fingerprint: bool = False):
+                 fingerprint: bool = False,
+                 mode: str = None, shuffle: bool = None,
+                 batch_cooldown: float = None,
+                 progress_file: str = None):
         self.db_path = db_path
-        self.concurrency = concurrency      # 端口扫描并发
+        # v3.6.0: 并发/速率 None 时按扫描模式取默认
+        from scanner.stealth import get_profile
+        self._profile = get_profile(mode)
+        self.concurrency = concurrency if concurrency is not None else self._profile.concurrency
         self.slp_concurrency = slp_concurrency  # SLP 探测并发
         self.timeout = timeout
         self.auth_check = auth_check
-        self.rate_limit = rate_limit
+        self.rate_limit = rate_limit if rate_limit is not None else self._profile.rate
         self.stop_event = stop_event
         self.fingerprint = fingerprint  # 主动协议指纹（异步引擎暂未实现，预留）
+        self.mode = mode
+        self.shuffle = shuffle
+        self.batch_cooldown = batch_cooldown
+        self.progress_file = progress_file
         self.results = []
         self.counters = {
             "total": 0, "up": 0, "cracked": 0, "online": 0,
@@ -226,6 +236,10 @@ class AsyncScanEngine:
             rate_limit=self.rate_limit,
             stop_event=self.stop_event,
             progress_cb=progress_callback,
+            mode=self.mode,
+            shuffle=self.shuffle,
+            batch_cooldown=self.batch_cooldown,
+            progress_file=self.progress_file,
         )
         open_ports = get_open_ports_async(port_results)
         print(f"[*] 发现 {len(open_ports)} 个开放端口")

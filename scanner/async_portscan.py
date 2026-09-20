@@ -9,6 +9,9 @@ import socket
 import time
 from dataclasses import dataclass
 
+from scanner.stealth import (get_profile, shuffle_targets,
+                             AdaptiveRateController, ScanProgressStore)
+
 
 async def _open_connection(ip, port, timeout):
     """异步建立TCP连接，支持全局代理（有代理时走线程池+代理连接）。
@@ -107,7 +110,10 @@ async def _check_port(ip: str, port: int, timeout: float,
 async def _scan_async(targets, concurrency: int, timeout: float,
                       rate_limit: int = 0,
                       progress_cb=None,
-                      stop_event=None) -> list:
+                      stop_event=None,
+                      profile=None,
+                      progress_store=None,
+                      controller=None) -> list:
     """异步扫描核心逻辑。"""
     semaphore = asyncio.Semaphore(concurrency)
     results = []
@@ -119,9 +125,11 @@ async def _scan_async(targets, concurrency: int, timeout: float,
     last_req = 0.0
 
     async def _acquire_rate():
-        if rate_limit <= 0:
+        # 自适应开启时速率由 controller 动态调节，否则用固定 rate_limit
+        limit = controller.rate if controller is not None else rate_limit
+        if limit <= 0:
             return
-        min_interval = 1.0 / rate_limit
+        min_interval = 1.0 / limit
         nonlocal last_req
         async with rate_lock:
             now = time.time()
@@ -145,6 +153,19 @@ async def _scan_async(targets, concurrency: int, timeout: float,
         done += 1
         if r.is_open:
             open_count += 1
+        # 自适应控制：按结果类型喂给控制器
+        if controller is not None:
+            if r.is_open:
+                controller.record("open")
+            elif "timeout" in (r.error or "").lower():
+                controller.record("timeout")
+            elif "refused" in (r.error or "").lower():
+                controller.record("refused")
+            else:
+                controller.record("error")
+        # 断点续扫：标记完成
+        if progress_store is not None:
+            progress_store.done((ip, port))
         if progress_cb and (done % 200 == 0 or time.time() - last_report > 1.0):
             progress_cb(done, open_count)
             last_report = time.time()
@@ -170,6 +191,12 @@ async def _scan_async(targets, concurrency: int, timeout: float,
     while pending:
         done_set, pending_set = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
         pending = list(pending_set)
+        # 批次冷却：每完成 batch_size 个暂停（防止突发连接风暴）
+        if profile is not None and profile.batch_cooldown > 0:
+            if done > 0 and done % profile.batch_size == 0:
+                if not (stop_event and stop_event.is_set()):
+                    print(f"[*] 批次冷却 {profile.batch_cooldown:.1f}s（已扫 {done}）...")
+                    await asyncio.sleep(profile.batch_cooldown)
         _fill_batch()
 
     if progress_cb:
@@ -177,31 +204,63 @@ async def _scan_async(targets, concurrency: int, timeout: float,
     return results
 
 
-def scan_ports_async(targets, concurrency: int = 1000, timeout: float = 3.0,
-                     rate_limit: int = 0, progress_cb=None, stop_event=None) -> list:
+def scan_ports_async(targets, concurrency: int = None, timeout: float = 3.0,
+                     rate_limit: int = None, progress_cb=None, stop_event=None,
+                     mode: str = None, shuffle: bool = None,
+                     batch_cooldown: float = None, adaptive: bool = True,
+                     progress_file: str = None, seed: int = None,
+                     event_cb=None) -> list:
     """
     异步端口扫描（同步入口，内部运行事件循环）。
 
     Args:
         targets: 可迭代的 (ip, port) 元组
-        concurrency: 并发数（默认1000，协程很轻量可以开很大）
+        concurrency: 并发数（None 时按 mode 取默认）
         timeout: 连接超时秒数
-        rate_limit: 每秒最大连接数（0=不限）
+        rate_limit: 每秒最大连接数（None 时按 mode 取默认，0=不限）
         progress_cb: 进度回调 callback(done, open_count)
         stop_event: threading.Event，设置后停止扫描
+        mode: 扫描模式 stealth / balanced / aggressive（None=balanced）
+        shuffle: 是否打乱任务顺序（None 时按 mode 默认）
+        batch_cooldown: 批间冷却秒数（None 时按 mode 默认，0=关闭）
+        adaptive: 是否启用失败率自适应降速（默认 True）
+        progress_file: 断点续扫进度文件路径（默认 None=不启用）
+        seed: 随机种子（用于可复现测试，默认 None=真随机）
+        event_cb: 自适应/封禁事件回调 callback(event_dict)
 
     Returns:
         list[AsyncScanResult]
     """
-    target_list = list(targets)
-    if not target_list:
+    profile = get_profile(mode)
+    concurrency = concurrency if concurrency is not None else profile.concurrency
+    rate_limit = rate_limit if rate_limit is not None else profile.rate
+    do_shuffle = profile.shuffle if shuffle is None else shuffle
+    if batch_cooldown is not None:
+        profile.batch_cooldown = batch_cooldown
+
+    # 物化 + 随机化任务（防顺序扫描特征）；断点续扫优先
+    progress_store = ScanProgressStore(progress_file) if progress_file else None
+    if progress_store is not None and progress_store.enabled:
+        targets, _resumed = progress_store.begin(targets)
+    else:
+        targets = list(targets)
+    if do_shuffle:
+        targets = shuffle_targets(targets, seed=seed)
+
+    # 自适应速率控制器
+    controller = None
+    if adaptive and profile.adaptive and rate_limit > 0:
+        controller = AdaptiveRateController(profile, event_cb=event_cb)
+
+    if not targets:
         return []
 
     _install_uvloop()
 
     async def _run():
-        return await _scan_async(iter(target_list), concurrency, timeout,
-                                 rate_limit, progress_cb, stop_event)
+        return await _scan_async(targets, concurrency, timeout, rate_limit,
+                                  progress_cb, stop_event, profile,
+                                  progress_store, controller)
 
     try:
         loop = asyncio.get_event_loop()
@@ -211,7 +270,12 @@ def scan_ports_async(targets, concurrency: int = 1000, timeout: float = 3.0,
     except RuntimeError:
         pass
 
-    return asyncio.run(_run())
+    try:
+        result = asyncio.run(_run())
+    finally:
+        if progress_store is not None:
+            progress_store.finish()
+    return result
 
 
 def get_open_ports_async(results: list) -> list:
