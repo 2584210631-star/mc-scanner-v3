@@ -54,7 +54,8 @@ def parse_and_filter_targets(targets_str, ports=None, exclude_file=None):
 def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
                   rate=0, exclude_file=None, db_path=None, stop_event=None,
                   fingerprint=False, mode=None, shuffle=None,
-                  batch_cooldown=None, progress_file=None) -> list:
+                  batch_cooldown=None, progress_file=None,
+                  respect_mode=False) -> list:
     """完整扫描：端口扫描 + SLP探测 + 认证检测"""
     cfg = config.load_config()
     targets, total = parse_and_filter_targets(targets_str, exclude_file=exclude_file)
@@ -69,7 +70,8 @@ def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
     engine.progress_file = progress_file
     results = engine.scan_with_portscan(
         iter(targets),
-        scan_threads=cfg["scan_threads"],
+        # 用户显式指定 mode 时，端口扫描并发交给 mode 决定；否则保持配置默认
+        scan_threads=None if respect_mode else cfg["scan_threads"],
         scan_timeout=cfg["scan_timeout"],
     )
     logger.info(f"扫描完成，发现 {len(results)} 个 Minecraft 服务器")
@@ -78,7 +80,8 @@ def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
 
 def run_portscan_only(targets_str: str, scan_threads=None, scan_timeout=None,
                       rate=0, exclude_file=None, mode=None, shuffle=None,
-                      batch_cooldown=None, progress_file=None) -> list:
+                      batch_cooldown=None, progress_file=None,
+                      respect_mode=False) -> list:
     """只扫描端口，不做SLP探测"""
     cfg = config.load_config()
     targets, total = parse_and_filter_targets(targets_str, exclude_file=exclude_file)
@@ -88,7 +91,7 @@ def run_portscan_only(targets_str: str, scan_threads=None, scan_timeout=None,
     logger.info(f"开始端口扫描 {total} 个目标")
     results = scan_ports(
         targets,
-        max_workers=scan_threads or cfg["scan_threads"],
+        max_workers=None if respect_mode else (scan_threads or cfg["scan_threads"]),
         timeout=scan_timeout or cfg["scan_timeout"],
         rate=rate,
         mode=mode,

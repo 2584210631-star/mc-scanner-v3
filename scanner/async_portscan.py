@@ -7,7 +7,7 @@
 import asyncio
 import socket
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from scanner.stealth import (get_profile, shuffle_targets,
                              AdaptiveRateController, ScanProgressStore)
@@ -232,11 +232,12 @@ def scan_ports_async(targets, concurrency: int = None, timeout: float = 3.0,
         list[AsyncScanResult]
     """
     profile = get_profile(mode)
+    # 副本方式修改参数，绝不改动 SCAN_MODES 全局配置（防跨调用污染）
+    if batch_cooldown is not None:
+        profile = replace(profile, batch_cooldown=batch_cooldown)
     concurrency = concurrency if concurrency is not None else profile.concurrency
     rate_limit = rate_limit if rate_limit is not None else profile.rate
     do_shuffle = profile.shuffle if shuffle is None else shuffle
-    if batch_cooldown is not None:
-        profile.batch_cooldown = batch_cooldown
 
     # 物化 + 随机化任务（防顺序扫描特征）；断点续扫优先
     progress_store = ScanProgressStore(progress_file) if progress_file else None

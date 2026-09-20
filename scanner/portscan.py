@@ -8,7 +8,7 @@ import time
 import threading
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from scanner.stealth import (get_profile, shuffle_targets,
@@ -69,11 +69,12 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
     progress_file: 断点续扫进度文件路径（默认 None=不启用）
     """
     profile = get_profile(mode)
+    # 副本方式修改参数，绝不改动 SCAN_MODES 全局配置（防跨调用污染）
+    if batch_cooldown is not None:
+        profile = replace(profile, batch_cooldown=batch_cooldown)
     max_workers = max_workers if max_workers is not None else profile.concurrency
     rate = rate if rate is not None else profile.rate
     do_shuffle = profile.shuffle if shuffle is None else shuffle
-    if batch_cooldown is not None:
-        profile.batch_cooldown = batch_cooldown
     BATCH_SIZE = max(max_workers * 4, 200)
 
     # 物化 + 随机化 + 断点续扫
