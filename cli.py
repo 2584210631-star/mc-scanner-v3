@@ -72,22 +72,37 @@ def save_results(results, output_file: str, fmt: str = "json"):
         logger.info(f"[*] 结果已保存: {output_file} (JSON)")
 
 
+def _resolve_ports(args, cfg):
+    """解析端口参数：--port '25565,25566,1-65535' 或 config ports 列表"""
+    from scanner.targets import parse_port_spec
+    if getattr(args, 'port', None):
+        return parse_port_spec(args.port)
+    return cfg.get('ports', [25565])
+
+
 def cmd_portscan(args, cfg):
     from service import run_portscan_only
     if args.workers:
         config.set('scan_threads', args.workers)
     if args.timeout:
         config.set('scan_timeout', args.timeout)
+    mode = args.mode or cfg.get('scan_mode') or 'balanced'
     if not getattr(args, 'sync_mode', False):
         from scanner.async_portscan import scan_ports_async, get_open_ports_async, has_uvloop
         from scanner.targets import parse_targets
         print(f"[*] 异步端口扫描（uvloop: {'启用' if has_uvloop() else '未安装'}）")
-        targets = list(parse_targets([args.targets], default_ports=cfg.get('ports', [25565])))
+        targets = list(parse_targets(
+            [t.strip() for t in args.targets.split(',') if t.strip()],
+            default_ports=_resolve_ports(args, cfg)))
         results = scan_ports_async(
             targets,
-            concurrency=args.workers or 2000,
+            concurrency=args.workers,
             timeout=args.timeout or cfg['scan_timeout'],
-            rate_limit=args.rate or cfg['rate'],
+            rate_limit=args.rate,
+            mode=mode,
+            shuffle=not args.no_shuffle,
+            batch_cooldown=args.batch_cooldown,
+            progress_file=args.resume and "scan_progress.json",
         )
         open_ports = get_open_ports_async(results)
         print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
@@ -102,8 +117,12 @@ def cmd_portscan(args, cfg):
         args.targets,
         scan_threads=args.workers or cfg['scan_threads'],
         scan_timeout=args.timeout or cfg['scan_timeout'],
-        rate=args.rate or cfg['rate'],
+        rate=args.rate,
         exclude_file=args.exclude or cfg['exclude_file'],
+        mode=mode,
+        shuffle=not args.no_shuffle,
+        batch_cooldown=args.batch_cooldown,
+        progress_file=args.resume and "scan_progress.json",
     )
     open_ports = get_open_ports(results)
     print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
@@ -119,6 +138,7 @@ def cmd_scan(args, cfg):
         config.set('scan_threads', args.workers)
     if args.timeout:
         config.set('scan_timeout', args.timeout)
+    mode = args.mode or cfg.get('scan_mode') or 'balanced'
     if not getattr(args, 'sync_mode', False):
         from scanner.async_engine import AsyncScanEngine
         from scanner.async_portscan import has_uvloop
@@ -126,15 +146,21 @@ def cmd_scan(args, cfg):
         from scanner.targets import parse_targets
         print(f"[*] 异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}）")
-        targets = parse_targets([args.targets], default_ports=cfg.get('ports', [25565]))
+        targets = parse_targets(
+            [t.strip() for t in args.targets.split(',') if t.strip()],
+            default_ports=_resolve_ports(args, cfg))
         engine = AsyncScanEngine(
             db_path=args.db or cfg['db_path'],
-            concurrency=args.workers or 2000,
+            concurrency=args.workers,
             slp_concurrency=400,
             timeout=args.timeout or cfg['timeout'],
             auth_check=not args.no_auth,
-            rate_limit=args.rate or cfg['rate'],
+            rate_limit=args.rate,
             fingerprint=getattr(args, 'fingerprint', False),
+            mode=mode,
+            shuffle=not args.no_shuffle,
+            batch_cooldown=args.batch_cooldown,
+            progress_file=args.resume and "scan_progress.json",
         )
         results = engine.scan_with_portscan(targets)
         up_results = [r for r in results if r.get('state') == 'up']
@@ -153,10 +179,14 @@ def cmd_scan(args, cfg):
         workers=args.workers or cfg['workers'],
         timeout=args.timeout or cfg['timeout'],
         auth_check=not args.no_auth,
-        rate=args.rate or cfg['rate'],
+        rate=args.rate,
         exclude_file=args.exclude or cfg['exclude_file'],
         db_path=args.db or cfg['db_path'],
         fingerprint=getattr(args, 'fingerprint', False),
+        mode=mode,
+        shuffle=not args.no_shuffle,
+        batch_cooldown=args.batch_cooldown,
+        progress_file=args.resume and "scan_progress.json",
     )
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
     for s in sorted(results, key=lambda x: x.get('proto', 0)):
@@ -248,13 +278,14 @@ def cmd_masscan(args, cfg):
     result_path = run_masscan_scan(
         targets=args.targets or "0.0.0.0/0",
         port=args.port or "25565",
-        rate=args.rate or 1000,
+        rate=args.rate,
         exclude_file=args.exclude or cfg['exclude_file'],
         output_file=args.output or "scan_results.ndjson",
         auto_import=args.auto_import,
         workers=args.workers or 32,
         auth_check=not args.no_auth,
         db_path=args.db or cfg['db_path'],
+        mode=args.mode or cfg.get('scan_mode') or 'balanced',
     )
     logger.info(f"[*] masscan 结果: {result_path}")
 def cmd_import(args, cfg):
@@ -699,9 +730,16 @@ def main():
     p.add_argument("targets")
     p.add_argument("--workers", type=int)
     p.add_argument("--timeout", type=float)
-    p.add_argument("--rate", type=int, default=30)
+    p.add_argument("--rate", type=int, default=None)
+    p.add_argument("--port", default=None,
+                   help="端口范围，如 '25565' / '25565,25566' / '1-65535'（默认取配置 ports）")
     p.add_argument("--exclude")
     p.add_argument("-o", "--output")
+    p.add_argument("--mode", choices=["stealth", "balanced", "aggressive"],
+                   help="扫描模式: stealth=防封禁低速 / balanced=平衡(默认) / aggressive=高速仅内网")
+    p.add_argument("--no-shuffle", action="store_true", help="关闭端口顺序随机化")
+    p.add_argument("--batch-cooldown", type=float, help="批间冷却秒数(防突发)")
+    p.add_argument("--resume", action="store_true", help="断点续扫(中断后从上次继续)")
     p.add_argument("--sync", dest="sync_mode", action="store_true",
                    help="使用同步线程引擎（默认异步，更快）")
     p.set_defaults(func=cmd_portscan)
@@ -713,10 +751,17 @@ def main():
     s.add_argument("--timeout", type=float)
     s.add_argument("--no-auth", action="store_true")
     s.add_argument("--fingerprint", action="store_true", help="启用主动协议指纹（每台up服额外1次TCP连接）")
-    s.add_argument("--rate", type=int, default=30)
+    s.add_argument("--rate", type=int, default=None)
+    s.add_argument("--port", default=None,
+                   help="端口范围，如 '25565' / '25565,25566' / '1-65535'（默认取配置 ports）")
     s.add_argument("--exclude")
     s.add_argument("-o", "--output")
     s.add_argument("--web", type=int, default=0, help="扫描后启动Web面板端口")
+    s.add_argument("--mode", choices=["stealth", "balanced", "aggressive"],
+                   help="扫描模式: stealth=防封禁低速 / balanced=平衡(默认) / aggressive=高速仅内网")
+    s.add_argument("--no-shuffle", action="store_true", help="关闭端口顺序随机化")
+    s.add_argument("--batch-cooldown", type=float, help="批间冷却秒数(防突发)")
+    s.add_argument("--resume", action="store_true", help="断点续扫(中断后从上次继续)")
     s.add_argument("--sync", dest="sync_mode", action="store_true",
                    help="使用同步线程引擎（默认异步流水线，更快）")
     s.set_defaults(func=cmd_scan)
@@ -754,13 +799,15 @@ def main():
     # masscan
     m = sub.add_parser("masscan", help="masscan 全网端口发现")
     m.add_argument("--targets", default="0.0.0.0/0")
-    m.add_argument("--rate", type=int, default=1000)
+    m.add_argument("--rate", type=int, default=None)
     m.add_argument("--port", default="25565")
     m.add_argument("--output", default="scan_results.ndjson")
     m.add_argument("--exclude")
     m.add_argument("--auto-import", action="store_true")
     m.add_argument("--workers", type=int, default=16)
     m.add_argument("--no-auth", action="store_true")
+    m.add_argument("--mode", choices=["stealth", "balanced", "aggressive"],
+                   help="扫描模式: stealth=100pps防封 / balanced=1000pps(默认) / aggressive=5000pps仅内网")
     m.set_defaults(func=cmd_masscan)
 
     # import

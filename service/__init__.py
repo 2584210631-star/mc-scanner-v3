@@ -53,7 +53,8 @@ def parse_and_filter_targets(targets_str, ports=None, exclude_file=None):
 
 def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
                   rate=0, exclude_file=None, db_path=None, stop_event=None,
-                  fingerprint=False) -> list:
+                  fingerprint=False, mode=None, shuffle=None,
+                  batch_cooldown=None, progress_file=None) -> list:
     """完整扫描：端口扫描 + SLP探测 + 认证检测"""
     cfg = config.load_config()
     targets, total = parse_and_filter_targets(targets_str, exclude_file=exclude_file)
@@ -62,6 +63,10 @@ def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
         return []
     logger.info(f"开始扫描 {total} 个目标")
     engine = _build_engine(db_path, workers, timeout, auth_check, rate, stop_event, fingerprint)
+    engine.mode = mode
+    engine.shuffle = shuffle
+    engine.batch_cooldown = batch_cooldown
+    engine.progress_file = progress_file
     results = engine.scan_with_portscan(
         iter(targets),
         scan_threads=cfg["scan_threads"],
@@ -72,7 +77,8 @@ def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
 
 
 def run_portscan_only(targets_str: str, scan_threads=None, scan_timeout=None,
-                      rate=0, exclude_file=None) -> list:
+                      rate=0, exclude_file=None, mode=None, shuffle=None,
+                      batch_cooldown=None, progress_file=None) -> list:
     """只扫描端口，不做SLP探测"""
     cfg = config.load_config()
     targets, total = parse_and_filter_targets(targets_str, exclude_file=exclude_file)
@@ -85,6 +91,10 @@ def run_portscan_only(targets_str: str, scan_threads=None, scan_timeout=None,
         max_workers=scan_threads or cfg["scan_threads"],
         timeout=scan_timeout or cfg["scan_timeout"],
         rate=rate,
+        mode=mode,
+        shuffle=shuffle,
+        batch_cooldown=batch_cooldown,
+        progress_file=progress_file,
     )
     open_ports = get_open_ports(results)
     logger.info(f"端口扫描完成，开放 {len(open_ports)} 个端口")
@@ -108,9 +118,10 @@ def run_random_scan(count=1000, ports="25565-25575", workers=200, timeout=2.0,
             for ip, port in open_ports]
 
 
-def run_masscan_scan(targets="0.0.0.0/0", port="25565", rate=1000,
+def run_masscan_scan(targets="0.0.0.0/0", port="25565", rate=None,
                      exclude_file=None, output_file=None, auto_import=False,
-                     workers=None, auth_check=True, db_path=None, stop_event=None) -> str:
+                     workers=None, auth_check=True, db_path=None, stop_event=None,
+                     mode=None) -> str:
     """masscan高速端口扫描，返回结果文件路径"""
     cfg = config.load_config()
     if not has_masscan():
@@ -121,6 +132,7 @@ def run_masscan_scan(targets="0.0.0.0/0", port="25565", rate=1000,
     result_path = run_masscan(
         targets=targets, ports=port, rate=rate,
         exclude_file=exclude_file, output_file=output_file,
+        mode=mode,
     )
     logger.info(f"masscan 扫描完成: {result_path}")
     if auto_import:

@@ -25,14 +25,30 @@ def get_masscan_version() -> Optional[str]:
         return None
 
 
-def run_masscan(targets: str, ports: str = "25565", rate: int = 1000,
-                exclude_file: Optional[str] = None, output_file: Optional[str] = None) -> str:
+def run_masscan(targets: str, ports: str = "25565", rate: int = None,
+                exclude_file: Optional[str] = None, output_file: Optional[str] = None,
+                mode: str = None) -> str:
     """
     运行 masscan 扫描，输出 NDJSON 格式结果文件路径。
     targets: CIDR 网段，如 "0.0.0.0/0" 或 "1.2.3.0/24,5.6.7.0/24"
     ports: 端口，如 "25565" 或 "25565-25575"
-    rate: 每秒包数
+    rate: 每秒包数（None 时按 mode 取默认）
+    mode: stealth / balanced / aggressive（None=balanced）
+        - stealth: 默认 100 pps，适合公网全端口，防触发 IDS
+        - balanced: 默认 1000 pps（v3 现状）
+        - aggressive: 默认 5000 pps，仅内网/信任网络
     """
+    from scanner.stealth import get_profile
+    profile = get_profile(mode)
+    if rate is None:
+        rate = {"stealth": 100, "balanced": 1000, "aggressive": 5000}.get(profile.mode, 1000)
+    # aggressive 模式在函数内不强制，但保持安全提示
+    if profile.mode == "stealth":
+        print(f"[!] stealth 模式：masscan 限速 {rate} pps，全端口扫描请配合 --wait 等待收尾")
+    if rate > 1000:
+        print(f"[!] 警告：masscan 速率 {rate} pps 较高，公网扫描极易触发目标限流/封禁，"
+              f"建议使用 --mode stealth（100 pps）")
+
     if not has_masscan():
         raise RuntimeError("masscan 未安装，请先安装: sudo apt install masscan")
 
