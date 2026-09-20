@@ -123,7 +123,7 @@ def cmd_portscan(args, cfg):
         shuffle=not args.no_shuffle,
         batch_cooldown=args.batch_cooldown,
         progress_file=args.resume and "scan_progress.json",
-        respect_mode=bool(args.mode),
+        respect_mode=bool(args.mode or cfg.get('scan_mode')),
     )
     open_ports = get_open_ports(results)
     print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
@@ -188,7 +188,7 @@ def cmd_scan(args, cfg):
         shuffle=not args.no_shuffle,
         batch_cooldown=args.batch_cooldown,
         progress_file=args.resume and "scan_progress.json",
-        respect_mode=bool(args.mode),
+        respect_mode=bool(args.mode or cfg.get('scan_mode')),
     )
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
     for s in sorted(results, key=lambda x: x.get('proto', 0)):
