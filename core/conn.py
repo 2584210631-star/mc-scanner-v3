@@ -46,6 +46,17 @@ def set_global_proxy_manager(manager):
         _global_proxy_manager = manager
 
 
+def _recv_n(sock, n: int) -> bytes:
+    """从代理连接精确读取 n 字节，半包循环读完，断开抛 ConnectionError。"""
+    buf = b""
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise ConnectionError("代理连接提前关闭")
+        buf += chunk
+    return buf
+
+
 def _connect_via_socks5(sock, proxy_host, proxy_port, target_host, target_port, username="", password=""):
     """通过SOCKS5代理建立TCP连接。"""
     sock.connect((proxy_host, proxy_port))
@@ -54,13 +65,13 @@ def _connect_via_socks5(sock, proxy_host, proxy_port, target_host, target_port, 
         sock.sendall(b"\x05\x01\x02")  # 用户名密码认证
     else:
         sock.sendall(b"\x05\x01\x00")  # 无认证
-    resp = sock.recv(2)
+    resp = _recv_n(sock, 2)
     if resp[0] != 0x05:
         raise ConnectionError("SOCKS5代理响应错误")
     if resp[1] == 0x02:
         # 用户名密码认证
         sock.sendall(b"\x01" + bytes([len(username)]) + username.encode() + bytes([len(password)]) + password.encode())
-        auth_resp = sock.recv(2)
+        auth_resp = _recv_n(sock, 2)
         if auth_resp[1] != 0x00:
             raise ConnectionError("SOCKS5代理认证失败")
     elif resp[1] != 0x00:
@@ -73,9 +84,18 @@ def _connect_via_socks5(sock, proxy_host, proxy_port, target_host, target_port, 
         # 域名，用ATYP=3
         host_bytes = target_host.encode()
         sock.sendall(b"\x05\x01\x00\x03" + bytes([len(host_bytes)]) + host_bytes + struct.pack(">H", target_port))
-    resp = sock.recv(10)
-    if resp[1] != 0x00:
-        raise ConnectionError(f"SOCKS5代理连接失败，错误码={resp[1]}")
+    # CONNECT应答: VER CMD RSV ATYP + 地址 + 端口，按ATYP读取完整长度，避免截断
+    head = _recv_n(sock, 4)
+    if head[1] != 0x00:
+        raise ConnectionError(f"SOCKS5代理连接失败，错误码={head[1]}")
+    atyp = head[3]
+    if atyp == 0x01:
+        _recv_n(sock, 4 + 2)
+    elif atyp == 0x04:
+        _recv_n(sock, 16 + 2)
+    elif atyp == 0x03:
+        addr_len = _recv_n(sock, 1)[0]
+        _recv_n(sock, addr_len + 2)
 
 
 def _connect_via_http(sock, proxy_host, proxy_port, target_host, target_port, username="", password=""):
@@ -88,15 +108,17 @@ def _connect_via_http(sock, proxy_host, proxy_port, target_host, target_port, us
         auth_header = f"Proxy-Authorization: Basic {token}\r\n"
     request = f"CONNECT {target_host}:{target_port} HTTP/1.1\r\nHost: {target_host}:{target_port}\r\n{auth_header}\r\n"
     sock.sendall(request.encode())
-    # 读取响应头
+    # 读取响应头（限制大小防止无限增长）
     resp = b""
     while b"\r\n\r\n" not in resp:
         chunk = sock.recv(4096)
         if not chunk:
             break
         resp += chunk
+        if len(resp) > 65536:
+            raise ConnectionError("HTTP代理响应头过大")
     if b"200" not in resp.split(b"\r\n")[0]:
-        raise ConnectionError(f"HTTP代理连接失败: {resp.split(b'\\r\\n')[0].decode(errors='ignore')}")
+        raise ConnectionError(f"HTTP代理连接失败: {resp.split(b'\r\n')[0].decode(errors='ignore')}")
 
 
 class MCConnection:
@@ -228,7 +250,10 @@ class MCConnection:
                 self.close()
                 raise
         finally:
-            sel.unregister(self.sock)
+            # close() 会把 self.sock 置 None，此时不能再 unregister，
+            # 否则会抛 ValueError 掩蔽原始异常（socket.timeout/包过大等）
+            if self.sock is not None:
+                sel.unregister(self.sock)
             sel.close()
 
         if self.compression_threshold >= 0:
@@ -238,7 +263,15 @@ class MCConnection:
             if data_length == 0:
                 decompressed = remaining
             else:
-                decompressed = zlib.decompress(remaining)
+                # 解压上限8MB：防止恶意服务器发小压缩包解压出超大内存（zip炸弹）
+                if data_length > 8 * 1024 * 1024:
+                    self.close()
+                    raise ValueError(f"解压后数据过大: {data_length}")
+                try:
+                    decompressed = zlib.decompress(remaining, 8 * 1024 * 1024)
+                except zlib.error:
+                    self.close()
+                    raise ValueError("压缩包解压超限或损坏")
         else:
             decompressed = raw
         buf = io.BytesIO(decompressed)

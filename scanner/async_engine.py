@@ -181,16 +181,17 @@ class AsyncScanEngine:
 
             # 控制任务数量，避免百万级目标一次性创建太多协程
             if len(tasks) >= 5000:
-                done_batch = await asyncio.gather(*tasks)
-                self.results.extend(done_batch)
+                # return_exceptions: 单个任务异常不拖垮整批
+                done_batch = await asyncio.gather(*tasks, return_exceptions=True)
+                self.results.extend(r for r in done_batch if isinstance(r, dict))
                 done += len(done_batch)
                 tasks = []
                 if done % 1000 == 0:
                     self._print_progress(done)
 
         if tasks:
-            done_batch = await asyncio.gather(*tasks)
-            self.results.extend(done_batch)
+            done_batch = await asyncio.gather(*tasks, return_exceptions=True)
+            self.results.extend(r for r in done_batch if isinstance(r, dict))
             done += len(done_batch)
 
         # 保存剩余
