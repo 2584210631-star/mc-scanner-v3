@@ -61,7 +61,7 @@ def run_masscan(targets: str, ports: str = "25565", rate: int = None,
         "-p", ports,
         "--rate", str(rate),
         "-oJ", output_file,
-        "--wait", "3",
+        "--wait", "5" if profile.mode == "stealth" else "3",
     ]
     # Windows命令行长度限制8191字符，目标列表过长时用-iL文件传入
     if len(targets) > 500 or "," in targets:

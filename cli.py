@@ -115,7 +115,7 @@ def cmd_portscan(args, cfg):
         return
     results = run_portscan_only(
         args.targets,
-        scan_threads=args.workers or cfg['scan_threads'],
+        scan_threads=args.workers,
         scan_timeout=args.timeout or cfg['scan_timeout'],
         rate=args.rate,
         exclude_file=args.exclude or cfg['exclude_file'],
@@ -123,6 +123,7 @@ def cmd_portscan(args, cfg):
         shuffle=not args.no_shuffle,
         batch_cooldown=args.batch_cooldown,
         progress_file=args.resume and "scan_progress.json",
+        respect_mode=bool(args.mode),
     )
     open_ports = get_open_ports(results)
     print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
@@ -176,7 +177,7 @@ def cmd_scan(args, cfg):
         return results
     results = run_full_scan(
         args.targets,
-        workers=args.workers or cfg['workers'],
+        workers=args.workers,
         timeout=args.timeout or cfg['timeout'],
         auth_check=not args.no_auth,
         rate=args.rate,
@@ -187,6 +188,7 @@ def cmd_scan(args, cfg):
         shuffle=not args.no_shuffle,
         batch_cooldown=args.batch_cooldown,
         progress_file=args.resume and "scan_progress.json",
+        respect_mode=bool(args.mode),
     )
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
     for s in sorted(results, key=lambda x: x.get('proto', 0)):

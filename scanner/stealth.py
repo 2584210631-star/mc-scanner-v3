@@ -18,7 +18,8 @@ import json
 import os
 import random
 import time
-from dataclasses import dataclass, field
+from collections import deque
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 
@@ -112,7 +113,8 @@ class AdaptiveRateController:
         self.profile = profile
         self.window_size = window_size
         self.event_cb = event_cb or (lambda evt: None)
-        self._results = []          # 最近窗口结果（'timeout'/'refused'/'error'/'open'）
+        # 固定容量窗口：自动淘汰最旧结果，防止长时间扫描内存无限增长
+        self._results = deque(maxlen=window_size)
         self._current_rate = profile.rate
         self._consecutive_bad_windows = 0
         self.events = []            # 检测到的事件记录
@@ -127,10 +129,9 @@ class AdaptiveRateController:
         self._results.append(kind)
         if len(self._results) < self.window_size:
             return
-        # 窗口满：评估一次
-        window = self._results[-self.window_size:]
-        timeouts = window.count("timeout")
-        ratio = timeouts / len(window)
+        # 窗口满：评估一次（deque 自动保持最近 window_size 个）
+        timeouts = self._results.count("timeout")
+        ratio = timeouts / len(self._results)
         # refused 是正常关闭，不计入异常
         if ratio >= 0.8:
             self._consecutive_bad_windows += 1
@@ -177,6 +178,7 @@ class ScanProgressStore:
         self._dirty = False
         self._last_save = time.time()
         self._save_interval = 5.0   # 距上次保存至少间隔秒数
+        self.MAX_MATERIALIZE = 500_000  # 新任务物化上限，超限不启用续扫（防大网段 OOM）
 
     @property
     def enabled(self) -> bool:
@@ -197,6 +199,12 @@ class ScanProgressStore:
                     print(f"[*] 续扫模式：读取 {len(remaining)} 个剩余目标 ({self.progress_file})")
             except Exception as e:
                 print(f"[!] 读取续扫文件失败: {e}，重新开始")
+        # 新任务物化上限保护：超限则本次不启用断点续扫（进度文件也会过大）
+        if not resume and len(remaining) > self.MAX_MATERIALIZE:
+            print(f"[!] 任务数 {len(remaining)} 超过断点续扫上限 {self.MAX_MATERIALIZE}，"
+                  f"本次不启用断点续扫（可分批扫描）")
+            self.progress_file = None
+            return remaining, False
         if self.progress_file:
             self._remaining = set(remaining)
             self._save()
@@ -233,24 +241,3 @@ class ScanProgressStore:
             self._last_save = time.time()
         except Exception as e:
             print(f"[!] 保存续扫进度失败: {e}")
-
-
-# ---------------------------------------------------------------- 辅助：暂停/冷却
-
-def batch_cooldown_sleep(profile: ScanProfile, batch_done: int,
-                         stop_event=None):
-    """批次冷却：每完成 batch_size 个任务暂停 batch_cooldown 秒。
-    支持 stop_event 提前唤醒。"""
-    if profile.batch_cooldown <= 0:
-        return
-    if batch_done > 0 and batch_done % profile.batch_size == 0:
-        if stop_event and stop_event.is_set():
-            return
-        print(f"[*] 批次冷却 {profile.batch_cooldown:.1f}s（已扫 {batch_done}）...")
-        sleep_step = min(0.2, profile.batch_cooldown)
-        waited = 0.0
-        while waited < profile.batch_cooldown:
-            if stop_event and stop_event.is_set():
-                break
-            time.sleep(sleep_step)
-            waited += sleep_step
