@@ -173,7 +173,7 @@ def random_scan(
                 try:
                     if future.result():
                         open_ports.append((ip, port))
-                except:
+                except Exception:
                     pass
                 # 补充新任务
                 try:

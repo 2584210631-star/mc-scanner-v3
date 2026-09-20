@@ -291,6 +291,9 @@ class MCBot:
         while time.time() < deadline:
             try:
                 resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
+            except ConnectionError:
+                # 连接已断开：立即失败，避免在已关闭连接上空转忙循环
+                raise
             except Exception:
                 # 超时兜底：某些旧服务器/代理不主动发Finish，超时后才主动发
                 if not sent_finish and time.time() > deadline - 1.0 and cfg.get("sb_finish") is not None:
@@ -336,7 +339,8 @@ class MCBot:
 
         # 超时后强行进入Play（兼容不发finish的代理服）
         self.conn.state = PROTO_STATE_PLAY
-        self.conn.sock.settimeout(self.timeout)
+        if self.conn.sock is not None:
+            self.conn.sock.settimeout(self.timeout)
 
     def _handle_config_plugin_message(self, payload: bytes):
         """处理配置阶段插件消息（Custom Payload）。

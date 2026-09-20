@@ -345,24 +345,30 @@ class ScanEngine:
     # ===== v3.2.1 新增：探测后钩子 =====
 
     def _get_rescheduler(self):
-        """惰性初始化重扫调度器。"""
+        """惰性初始化重扫调度器（双重检查锁，防多 worker 并发重复创建）。"""
         if self._rescheduler is None:
-            from scanner.rescanner import RescanScheduler
-            self._rescheduler = RescanScheduler(self.db_path, enabled=self.rescan_enabled)
+            with self._lock:
+                if self._rescheduler is None:
+                    from scanner.rescanner import RescanScheduler
+                    self._rescheduler = RescanScheduler(self.db_path, enabled=self.rescan_enabled)
         return self._rescheduler
 
     def _get_dup_detector(self):
-        """惰性初始化重复检测器。"""
+        """惰性初始化重复检测器（双重检查锁）。"""
         if self._dup_detector is None:
-            from scanner.duplicate import DuplicateDetector
-            self._dup_detector = DuplicateDetector()
+            with self._lock:
+                if self._dup_detector is None:
+                    from scanner.duplicate import DuplicateDetector
+                    self._dup_detector = DuplicateDetector()
         return self._dup_detector
 
     def _get_discord(self):
-        """惰性初始化 Discord 通知器。"""
+        """惰性初始化 Discord 通知器（双重检查锁）。"""
         if self._discord is None:
-            from notify.discord import DiscordNotifier
-            self._discord = DiscordNotifier(self.discord_webhook)
+            with self._lock:
+                if self._discord is None:
+                    from notify.discord import DiscordNotifier
+                    self._discord = DiscordNotifier(self.discord_webhook)
         return self._discord
 
     def _post_probe_hooks(self, result: dict):

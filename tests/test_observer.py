@@ -21,7 +21,8 @@ from core.buffer import (read_varint_from_stream, read_string_from_stream,
                          write_string, write_uuid, write_varint)
 from core.bot import MCBot
 from tests.mock_server import SocketStream
-from web.app import ObserverSession, observer_sessions, observer_lock
+from web.observer_session import ObserverSession
+from web.state import observer_sessions, observer_lock
 
 PROTO = 767  # 1.21
 CB_KEEP_ALIVE = 0x26

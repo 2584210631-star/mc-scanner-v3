@@ -14,25 +14,27 @@ from .protocol import COMMON_PROTOCOLS
 
 socket_timeout = socket.timeout
 
-# SLP探测缓存：60秒内同一IP:端口不重复探测
+# SLP探测缓存：60秒内同一IP:端口+协议不重复探测
 _slp_cache = {}
 _slp_cache_ttl = 60.0
 
-def _slp_cache_get(host, port):
-    key = (host, port)
+def _slp_cache_get(host, port, protocol_version):
+    key = (host, port, protocol_version)
     item = _slp_cache.get(key)
     if item and (time.time() - item[0]) < _slp_cache_ttl:
         return item[1]
     return None
 
-def _slp_cache_set(host, port, result):
-    _slp_cache[(host, port)] = (time.time(), result)
-    # 缓存超过10000条时清理旧的
+def _slp_cache_set(host, port, protocol_version, result):
+    _slp_cache[(host, port, protocol_version)] = (time.time(), result)
+    # 缓存超过10000条时清理旧的；超20000条直接清空兜底，防止无界增长
     if len(_slp_cache) > 10000:
         cutoff = time.time() - _slp_cache_ttl
         for k in list(_slp_cache.keys()):
             if _slp_cache[k][0] < cutoff:
                 del _slp_cache[k]
+        if len(_slp_cache) > 20000:
+            _slp_cache.clear()
 
 # 认证状态常量
 STATE_ONLINE = "online"        # 正版验证
@@ -51,7 +53,7 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
     吸收 V2 的 JSON 截断容错：某些服务器声明的 JSON 长度比实际少几个字节。
     """
     # 缓存命中直接返回
-    cached = _slp_cache_get(host, port)
+    cached = _slp_cache_get(host, port, protocol_version)
     if cached is not None:
         return cached
     last_error = None
@@ -127,14 +129,14 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                     "fingerprint": fp,
                     "_raw": info,
                 }
-                _slp_cache_set(host, port, result)
+                _slp_cache_set(host, port, protocol_version, result)
                 return result
         except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError, IndexError) as e:
             last_error = str(e)
             continue
     result = {"state": STATE_OFFLINE if _is_offline_err(last_error) else STATE_ERROR,
             "error": last_error}
-    _slp_cache_set(host, port, result)
+    _slp_cache_set(host, port, protocol_version, result)
     return result
 
 
