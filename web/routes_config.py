@@ -238,3 +238,36 @@ def register(app):
             traceback.print_exc()
             return jsonify({"success": False, "error": str(e)})
 
+    @app.route('/api/msa/manual', methods=['POST'])
+    def msa_manual():
+        """手动粘贴Token登录（支持Minecraft access_token或MSA access_token）"""
+        from core.microsoft_auth import full_login_flow, mc_profile
+        data = request.get_json(silent=True) or {}
+        token = data.get("token", "").strip()
+        if not token:
+            return jsonify({"success": False, "error": "缺少token"})
+        try:
+            print(f"[MSA] 手动Token登录: {token[:30]}...")
+            result = None
+            # 先尝试直接当Minecraft access_token用（eyJ开头的JWT）
+            if token.startswith("eyJ"):
+                try:
+                    profile = mc_profile(token)
+                    result = {"access_token": token, "uuid": profile["uuid"], "name": profile["name"]}
+                    print("[MSA] 直接作为Minecraft token验证成功")
+                except Exception as e:
+                    print(f"[MSA] 作为Minecraft token失败: {e}，尝试走MSA流程")
+            # 如果直接用失败，走MSA→Xbox→XSTS→MC流程
+            if not result:
+                result = full_login_flow(token)
+            cfg = config.get_all()
+            cfg["msa_access_token"] = result["access_token"]
+            cfg["msa_uuid"] = result["uuid"]
+            cfg["msa_name"] = result["name"]
+            config.save_config(cfg)
+            return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"]})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"success": False, "error": str(e)})
+

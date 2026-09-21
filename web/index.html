@@ -1651,17 +1651,30 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div style="margin-top:16px;padding:14px;background:var(--bg-secondary);border-radius:8px;">
     <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
     <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
-    <div class="form-group">
-      <label style="font-size:12px;color:var(--text-secondary);">Azure 应用 Client ID（<a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" style="color:#4299e1;">点此注册</a>，选"任何组织+个人"，重定向URI选"公共客户端"）</label>
-      <input type="text" id="msaClientId" placeholder="粘贴你的Azure应用程序(客户端)ID" style="font-size:13px;">
-    </div>
-    <button class="btn btn-primary" onclick="startMsaDeviceLogin()">开始设备码登录</button>
-    <div id="msaDeviceBox" style="display:none;margin-top:12px;padding:12px;background:var(--bg-input);border-radius:6px;">
-      <p style="margin:0 0 8px 0;font-size:13px;">1. 浏览器打开: <b id="msaUri" style="color:#4299e1;">https://www.microsoft.com/link</b></p>
-      <p style="margin:0 0 8px 0;font-size:13px;">2. 输入代码: <b id="msaCode" style="color:#00d992;font-size:22px;letter-spacing:3px;font-weight:bold;"></b></p>
-      <p style="margin:0;font-size:12px;color:var(--text-secondary);">登录中... 完成后自动刷新（约5秒轮询一次）</p>
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="stopMsaPoll()">取消</button>
-    </div>
+    <details style="margin-bottom:10px;">
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式一：手动粘贴Token（推荐，不用注册）</summary>
+      <div style="margin-top:8px;">
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">从Minecraft启动器的 launcher_accounts.json 复制 minecraftToken 或 access_token 粘贴到下面</p>
+        <input type="text" id="msaManualToken" placeholder="粘贴Minecraft access_token（eyJ开头）" style="width:100%;font-size:12px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);box-sizing:border-box;">
+        <button class="btn btn-primary" style="margin-top:8px;" onclick="submitManualToken()">使用此Token登录</button>
+      </div>
+    </details>
+    <details>
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式二：Azure设备码登录（需自己注册应用）</summary>
+      <div style="margin-top:8px;">
+        <div class="form-group">
+          <label style="font-size:12px;color:var(--text-secondary);">Azure 应用 Client ID</label>
+          <input type="text" id="msaClientId" placeholder="粘贴你的Azure应用程序(客户端)ID" style="font-size:13px;">
+        </div>
+        <button class="btn btn-primary" onclick="startMsaDeviceLogin()">开始设备码登录</button>
+        <div id="msaDeviceBox" style="display:none;margin-top:12px;padding:12px;background:var(--bg-input);border-radius:6px;">
+          <p style="margin:0 0 8px 0;font-size:13px;">1. 浏览器打开: <b id="msaUri" style="color:#4299e1;">https://www.microsoft.com/link</b></p>
+          <p style="margin:0 0 8px 0;font-size:13px;">2. 输入代码: <b id="msaCode" style="color:#00d992;font-size:22px;letter-spacing:3px;font-weight:bold;"></b></p>
+          <p style="margin:0;font-size:12px;color:var(--text-secondary);">登录中... 完成后自动刷新</p>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="stopMsaPoll()">取消</button>
+        </div>
+      </div>
+    </details>
   </div>
 </div>
 <div class="modal-overlay hidden" id="warnModal">
@@ -3405,6 +3418,24 @@ async function checkMsaStatus() {
       el.style.color = 'var(--text-secondary)';
     }
   } catch(e) {}
+}
+async function submitManualToken() {
+  const token = document.getElementById('msaManualToken').value.trim();
+  if (!token) { alert('请粘贴Token'); return; }
+  try {
+    const res = await fetch('/api/msa/manual', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({token: token})
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('登录成功！欢迎 ' + data.name);
+      document.getElementById('msaManualToken').value = '';
+      checkMsaStatus();
+    } else {
+      alert('登录失败: ' + (data.error || '未知错误'));
+    }
+  } catch(e) { alert('请求失败: ' + e.message); }
 }
 let msaPollTimer = null;
 let msaDeviceCode = null;
