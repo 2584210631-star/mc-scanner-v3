@@ -173,7 +173,7 @@ def xbox_auth(msa_token):
 def xsts_auth(xbox_token):
     """Xbox token → XSTS token"""
     data = {
-        "Properties": {"SandboxId": "RETAIL", "UserToken": xbox_token},
+        "Properties": {"SandboxId": "RETAIL", "UserTokens": [xbox_token]},
         "RelyingParty": "rp://api.minecraftservices.com/",
         "TokenType": "JWT",
     }
