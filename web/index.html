@@ -1646,9 +1646,19 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       Gmail: smtp.gmail.com:465 (SSL)，需使用应用专用密码
     </div>
   </div>
-</div>
 
-<!-- 单独警告弹窗 -->
+  <!-- 正版账号登录 -->
+  <div style="margin-top:16px;padding:14px;background:var(--bg-secondary);border-radius:8px;">
+    <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
+    <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
+    <button class="btn btn-primary" onclick="startMsaLogin()">登录微软正版账号</button>
+    <div id="msaDevice" style="display:none;margin-top:12px;padding:10px;background:var(--bg-input);border-radius:6px;">
+      <p style="margin:0 0 8px 0;font-size:13px;">1. 在浏览器打开: <b id="msaUri"></b></p>
+      <p style="margin:0 0 8px 0;font-size:13px;">2. 输入代码: <b id="msaCode" style="color:#00d992;font-size:18px;letter-spacing:2px;"></b></p>
+      <p style="margin:0;font-size:12px;color:var(--text-secondary);">等待登录中...（约30秒轮询一次）</p>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay hidden" id="warnModal">
   <div class="modal">
     <h3>发送警告 - <span id="warnTarget"></span></h3>
@@ -3375,6 +3385,57 @@ async function testEmail() {
     }
   } catch(e) { status.textContent = '请求失败: ' + e.message; status.style.color = '#f56565'; }
 }
+
+// ===== 正版账号登录 =====
+async function checkMsaStatus() {
+  try {
+    const res = await fetch('/api/msa/status');
+    const data = await res.json();
+    const el = document.getElementById('msaStatus');
+    if (data.logged_in) {
+      el.innerHTML = `✅ 已登录: <b>${data.name}</b>`;
+      el.style.color = '#48bb78';
+    } else {
+      el.textContent = '未登录';
+      el.style.color = 'var(--text-secondary)';
+    }
+  } catch(e) {}
+}
+async function startMsaLogin() {
+  const devBox = document.getElementById('msaDevice');
+  devBox.style.display = 'block';
+  try {
+    const res = await fetch('/api/msa/start', {method:'POST'});
+    const data = await res.json();
+    if (!data.success) { alert('启动失败: ' + data.error); return; }
+    document.getElementById('msaUri').textContent = data.verification_uri;
+    document.getElementById('msaCode').textContent = data.user_code;
+    // 轮询
+    const interval = data.interval || 5;
+    pollMsa(interval);
+  } catch(e) { alert('请求失败: ' + e.message); }
+}
+async function pollMsa(interval) {
+  try {
+    const res = await fetch('/api/msa/poll');
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('msaDevice').style.display = 'none';
+      checkMsaStatus();
+      alert('登录成功！欢迎 ' + data.name);
+      return;
+    }
+    if (data.waiting) {
+      setTimeout(() => pollMsa(interval), interval * 1000);
+    } else {
+      alert('登录失败: ' + (data.error || ''));
+    }
+  } catch(e) {
+    setTimeout(() => pollMsa(interval), interval * 1000);
+  }
+}
+checkMsaStatus();
+
 let favCache = {};
 
 // ===== 健康监控 =====
