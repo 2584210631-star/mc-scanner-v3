@@ -147,9 +147,9 @@ def fcl_poll_device_code(device_code):
 
 
 def xbox_auth(msa_token):
-    """MSA token → Xbox Live token。v2.0 JWT直接用，v1.0加t=前缀"""
-    # v2.0返回的是JWT（eyJ开头），直接用；v1.0短token加t=前缀
-    rps_ticket = msa_token if msa_token.startswith("eyJ") else f"t={msa_token}"
+    """MSA token → Xbox Live token。v2.0端点用d=前缀（FCL同款）"""
+    # v2.0端点返回的token用d=前缀（FCL/Minecraft启动器都这么做）
+    rps_ticket = f"d={msa_token}"
     data = {
         "Properties": {
             "AuthMethod": "RPS",
