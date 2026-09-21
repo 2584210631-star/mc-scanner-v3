@@ -3420,6 +3420,10 @@ async function startMsaLogin() {
 async function submitMsaCode() {
   const input = document.getElementById('msaCodeInput').value.trim();
   if (!input) { alert('请粘贴登录成功后的URL'); return; }
+  if (!input.includes('code=')) {
+    alert('URL里没有code=参数！\n请确认登录成功（不是取消），地址栏应该是 ...?code=xxx...\n注意code只有5分钟有效期，要尽快粘贴');
+    return;
+  }
   // 从URL中提取code参数
   let code = input;
   if (input.includes('code=')) {
