@@ -1656,7 +1656,11 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <input type="text" id="msaClientId" placeholder="留空即可，一般不用填" style="font-size:13px;">
     </div>
     <button class="btn btn-primary" onclick="startMsaLogin()">登录微软正版账号</button>
-    <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-secondary);">点击后在APP内打开微软登录页，登录成功自动返回</p>
+    <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-secondary);">点击后打开微软登录页，登录成功后复制地址栏URL粘贴到下面</p>
+    <div style="margin-top:10px;">
+      <input type="text" id="msaCodeInput" placeholder="登录成功后粘贴浏览器地址栏的完整URL" style="width:100%;font-size:13px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);box-sizing:border-box;">
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="submitMsaCode()">提交完成登录</button>
+    </div>
   </div>
 </div>
 <div class="modal-overlay hidden" id="warnModal">
@@ -3411,6 +3415,29 @@ async function startMsaLogin() {
     if (!data.url) { alert('获取登录URL失败'); return; }
     // PCL2方式：直接在WebView里打开微软登录页
     window.location.href = data.url;
+  } catch(e) { alert('请求失败: ' + e.message); }
+}
+async function submitMsaCode() {
+  const input = document.getElementById('msaCodeInput').value.trim();
+  if (!input) { alert('请粘贴登录成功后的URL'); return; }
+  // 从URL中提取code参数
+  let code = input;
+  if (input.includes('code=')) {
+    code = input.split('code=')[1].split('&')[0];
+  }
+  try {
+    const res = await fetch('/api/msa/exchange', {
+      method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: 'code=' + encodeURIComponent(code)
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('登录成功！欢迎 ' + data.name);
+      document.getElementById('msaCodeInput').value = '';
+      checkMsaStatus();
+    } else {
+      alert('登录失败: ' + (data.error || '未知错误'));
+    }
   } catch(e) { alert('请求失败: ' + e.message); }
 }
 checkMsaStatus();
