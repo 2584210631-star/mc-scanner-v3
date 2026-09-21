@@ -2,7 +2,12 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#101010">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MC Scanner">
+<link rel="manifest" href="/manifest.json">
 <title>MC Scanner v3 - 控制面板</title>
 <style>
 /* ===== VoltAgent-inspired Design System ===== */
@@ -821,6 +826,14 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
 
   /* 观察者/AI聊天面板 */
   #aiBotChatPanel, #multiAiChatPanel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 150; max-height: 60vh; }
+
+  /* 移动端触摸优化 */
+  input, select, textarea { font-size: 16px !important; } /* 防iOS自动缩放 */
+  .btn { min-height: 44px; } /* 触摸友好 */
+  .mobile-nav-item { min-height: 48px; padding: 8px 6px; }
+  #assistantBtn { bottom: 90px !important; right: 12px !important; width: 48px !important; height: 48px !important; }
+  #assistantPanel { bottom: 150px !important; right: 8px !important; left: 8px !important; width: auto !important; }
+  .table-wrap { -webkit-overflow-scrolling: touch; }
 }
 
 @media (max-width: 480px) {
@@ -1800,10 +1813,13 @@ Protect your server NOW!</textarea></div>
 <nav class="mobile-nav" id="mobileNav">
   <div class="mobile-nav-item" data-tab="scan" onclick="switchTab('scan')"><span class="icon">⚡</span>扫描</div>
   <div class="mobile-nav-item" data-tab="results" onclick="switchTab('results')"><span class="icon">📋</span>结果</div>
-  <div class="mobile-nav-item" data-tab="database" onclick="switchTab('database')"><span class="icon">🗄️</span>数据库</div>
-  <div class="mobile-nav-item" data-tab="observer" onclick="switchTab('observer')"><span class="icon">👁</span>观察</div>
   <div class="mobile-nav-item" data-tab="favorites" onclick="switchTab('favorites')"><span class="icon">⭐</span>收藏</div>
+  <div class="mobile-nav-item" data-tab="observer" onclick="switchTab('observer')"><span class="icon">👁</span>观察</div>
   <div class="mobile-nav-item" data-tab="aibot" onclick="switchTab('aibot')"><span class="icon">🤖</span>AI</div>
+  <div class="mobile-nav-item" data-tab="autoscan" onclick="switchTab('autoscan')"><span class="icon">🔄</span>自动</div>
+  <div class="mobile-nav-item" data-tab="database" onclick="switchTab('database')"><span class="icon">🗄️</span>库</div>
+  <div class="mobile-nav-item" data-tab="history" onclick="switchTab('history')"><span class="icon">📜</span>历史</div>
+  <div class="mobile-nav-item" data-tab="tools" onclick="switchTab('tools')"><span class="icon">🔧</span>工具</div>
   <div class="mobile-nav-item" data-tab="settings" onclick="switchTab('settings')"><span class="icon">⚙️</span>设置</div>
 </nav>
 
@@ -1841,6 +1857,15 @@ Protect your server NOW!</textarea></div>
 </style>
 
 <div id="toast-container"></div>
+
+<script>
+// PWA: 注册 Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
 
 </body>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
