@@ -122,16 +122,21 @@ def register(app):
         return jsonify({"success": ok, "error": err})
 
     # ===== 正版账号登录 =====
-    _msa_state = {"step": "idle", "device_code": None, "interval": 5}
+    _msa_state = {"step": "idle", "device_code": None, "interval": 5, "client_id": ""}
 
     @app.route('/api/msa/start', methods=['POST'])
     def msa_start():
         from core.microsoft_auth import start_device_code
+        data = request.get_json(force=True) or {}
+        cid = data.get("client_id", "")
+        if not cid:
+            return jsonify({"success": False, "error": "请填写Client ID"})
         try:
-            r = start_device_code()
+            r = start_device_code(cid)
             _msa_state["step"] = "waiting"
             _msa_state["device_code"] = r["device_code"]
             _msa_state["interval"] = r.get("interval", 5)
+            _msa_state["client_id"] = cid
             return jsonify({"success": True, "user_code": r["user_code"],
                             "verification_uri": r["verification_uri"], "interval": r["interval"]})
         except Exception as e:
@@ -143,7 +148,7 @@ def register(app):
         if _msa_state["step"] != "waiting":
             return jsonify({"success": False, "error": "未开始登录"})
         try:
-            r = poll_token(_msa_state["device_code"])
+            r = poll_token(_msa_state["device_code"], _msa_state.get("client_id"))
             if "error" in r:
                 return jsonify({"success": False, "waiting": True})
             msa_token = r["access_token"]
