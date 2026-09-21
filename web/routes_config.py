@@ -178,6 +178,12 @@ def register(app):
             traceback.print_exc()
             return jsonify({"success": False, "error": str(e), "waiting": True})
 
+    @app.route('/api/msa/fcl_auth_url', methods=['GET'])
+    def msa_fcl_auth_url():
+        """返回FCL授权码流程的登录URL"""
+        from core.microsoft_auth import get_fcl_auth_url
+        return jsonify({"url": get_fcl_auth_url()})
+
     @app.route('/api/msa/status', methods=['GET'])
     def msa_status():
         name = config.get("msa_name", "")

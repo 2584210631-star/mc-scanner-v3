@@ -15,6 +15,9 @@ import urllib.error
 # v2.0设备码流程用Azure CLI的client_id（支持v2.0端点）
 CLIENT_ID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
 SCOPE = "XboxLive.signin offline_access"
+# FCL启动器的client_id（旧版MSA端点授权码流程，已验证可用）
+FCL_CLIENT_ID = "d903cc0e-c3b4-4a3c-b347-06c2e6269be0"
+FCL_REDIRECT_URI = "http://localhost:8090/auth-response"
 # 旧版client_id（保留，用于兼容）
 LEGACY_CLIENT_ID = "00000000402b5328"
 REDIRECT_URI = "https://login.live.com/oauth20_desktop.srf"
@@ -92,6 +95,30 @@ def exchange_code(code, client_id=None, redirect_uri=None):
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": rd,
+        "scope": SCOPE,
+    }
+    r = _post("https://login.live.com/oauth20_token.srf", data)
+    return r
+
+
+def get_fcl_auth_url():
+    """生成FCL授权码流程的登录URL（旧版MSA端点，已验证可用）"""
+    params = {
+        "client_id": FCL_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": FCL_REDIRECT_URI,
+        "scope": SCOPE,
+    }
+    return "https://login.live.com/oauth20_authorize.srf?" + urllib.parse.urlencode(params)
+
+
+def fcl_exchange_code(code):
+    """用FCL授权码换MSA access token（旧版MSA端点）"""
+    data = {
+        "client_id": FCL_CLIENT_ID,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": FCL_REDIRECT_URI,
         "scope": SCOPE,
     }
     r = _post("https://login.live.com/oauth20_token.srf", data)
