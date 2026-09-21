@@ -17,15 +17,23 @@ SCOPE = "service::user.auth.xboxlive.com::MBI_SSL"
 REDIRECT_URI = "https://login.live.com/oauth20_desktop.srf"  # 官方桌面重定向URI
 
 def _post(url, data=None, headers=None):
-    """简单POST请求"""
+    """简单POST请求，出错时返回错误详情"""
     body = urllib.parse.urlencode(data).encode() if data else b""
     req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
     if headers:
         for k, v in headers.items():
             req.add_header(k, v)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode(errors='replace')
+        print(f"[MSA] HTTP {e.code}: {err_body[:300]}")
+        return {"error": f"HTTP {e.code}", "error_description": err_body[:500]}
+    except Exception as e:
+        print(f"[MSA] 请求异常: {e}")
+        return {"error": str(e)}
 
 
 def start_device_code(client_id=None):
@@ -81,7 +89,7 @@ def exchange_code(code, client_id=None, redirect_uri=None):
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": rd,
-        "resource": "https://user.auth.xboxlive.com",
+        "scope": SCOPE,
     }
     r = _post("https://login.live.com/oauth20_token.srf", data)
     return r

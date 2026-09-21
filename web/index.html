@@ -3436,7 +3436,7 @@ async function submitMsaCode() {
       document.getElementById('msaCodeInput').value = '';
       checkMsaStatus();
     } else {
-      alert('登录失败: ' + (data.error || '未知错误'));
+      alert('登录失败: ' + (data.error || '未知错误') + '\n' + (data.error_description || ''));
     }
   } catch(e) { alert('请求失败: ' + e.message); }
 }
