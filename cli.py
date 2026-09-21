@@ -325,7 +325,11 @@ def cmd_query(args, cfg):
         print(f"  {r['ip']}:{r['port']} [{r['auth']}] {r['version']} "
               f"在线 {r['players_online']}/{r['players_max']} · {r['motd'][:40]}")
 def cmd_bot(args, cfg):
-    host, port = args.target.rsplit(":", 1)
+    # 与 cmd_fav/cmd_rcon 一致：目标无端口时默认 25565（原为直接 rsplit 解包，会 traceback）
+    if ":" in args.target:
+        host, port = args.target.rsplit(":", 1)
+    else:
+        host, port = args.target, "25565"
     bot = MCBot(host, int(port), protocol_version=args.proto,
                 username=args.username or cfg['username'], timeout=args.timeout or 15.0)
     try:

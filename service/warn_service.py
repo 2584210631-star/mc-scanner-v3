@@ -3,7 +3,7 @@
 警告业务服务。
 """
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 import config
 import logger
@@ -78,9 +78,11 @@ def warn_from_db(auth="cracked", modded=None, search=None, limit=0,
 
     logger.info(f"从数据库读取 {len(rows)} 个服务器，开始发送警告")
     results = []
+    # 分批提交：维持有界 futures 窗口（workers*2），避免大库一次性提交全部 future 导致内存峰值
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {}
-        for row in rows:
+        row_iter = iter(rows)
+        for row in row_iter:
             ip = row.get('ip')
             port = row.get('port', 25565)
             proto = row.get('proto', 0)
@@ -91,16 +93,34 @@ def warn_from_db(auth="cracked", modded=None, search=None, limit=0,
                             cfg["bot_timeout"], message_delay or cfg["message_delay"],
                             proto or None, authme_password or cfg.get("authme_password") or None)
             futures[fut] = (ip, port)
-        for i, fut in enumerate(as_completed(futures), 1):
-            ip, port = futures[fut]
-            try:
-                r = fut.result()
-                results.append(r)
-                if i % 10 == 0:
-                    logger.info(f"警告进度: {i}/{len(rows)}")
-            except Exception as e:
-                from core.bot import BotResult
-                results.append(BotResult(ip=ip, port=port, error=str(e)))
+            if len(futures) >= workers * 2:
+                break
+        while futures:
+            done_set, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for fut in done_set:
+                ip, port = futures.pop(fut)
+                try:
+                    r = fut.result()
+                    results.append(r)
+                except Exception as e:
+                    from core.bot import BotResult
+                    results.append(BotResult(ip=ip, port=port, error=str(e)))
+                if len(results) % 10 == 0:
+                    logger.info(f"警告进度: {len(results)}/{len(rows)}")
+                # 完成一个补一个，窗口始终有界
+                try:
+                    row = next(row_iter)
+                except StopIteration:
+                    continue
+                n_ip = row.get('ip')
+                n_port = row.get('port', 25565)
+                n_proto = row.get('proto', 0)
+                if n_ip:
+                    n_fut = ex.submit(join_and_warn, n_ip, n_port,
+                                      username or cfg["username"], messages,
+                                      cfg["bot_timeout"], message_delay or cfg["message_delay"],
+                                      n_proto or None, authme_password or cfg.get("authme_password") or None)
+                    futures[n_fut] = (n_ip, n_port)
     success = sum(1 for r in results if r.success)
     msg_sent = sum(r.messages_sent for r in results)
     logger.info(f"警告完成: 成功 {success}/{len(results)}, 发送消息 {msg_sent} 条")

@@ -201,7 +201,8 @@ async def async_random_scan(
     except ImportError:
         from async_portscan import scan_ports_async
     excluder = Excluder(exclude_file) if exclude_file else None
-    targets = list(generate_random_targets(target_count, port_ranges, excluder))
+    # 惰性生成器直接传入，scan_ports_async 内部统一物化+打乱一次（原为双重物化，大 count 内存翻倍）
+    targets = generate_random_targets(target_count, port_ranges, excluder)
 
     def _progress(done, opened):
         if progress_callback:

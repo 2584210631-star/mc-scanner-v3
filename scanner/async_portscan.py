@@ -172,20 +172,22 @@ async def _scan_async(targets, concurrency: int, timeout: float,
         return r
 
     # 分批创建协程，避免一次性创建百万协程导致OOM
-    BATCH_SIZE = max(concurrency * 5, 1000)
+    # 保持总在途协程有界（MAX_PENDING）：慢速扫描时完成速度赶不上补充速度，
+    # 若每轮都补满 BATCH_SIZE，pending 会累积到目标总数（百万级 → GB 级内存）
+    MAX_PENDING = max(concurrency * 2, 200)
     pending = []
     target_iter = iter(targets)
 
     def _fill_batch():
-        """从迭代器填充一批协程"""
-        count = 0
-        for ip, port in target_iter:
+        """从迭代器填充协程，保持总 pending ≤ MAX_PENDING"""
+        while len(pending) < MAX_PENDING:
+            try:
+                ip, port = next(target_iter)
+            except StopIteration:
+                break
             if stop_event and stop_event.is_set():
                 break
             pending.append(asyncio.create_task(_wrapped(ip, port)))
-            count += 1
-            if count >= BATCH_SIZE:
-                break
 
     _fill_batch()
     while pending:

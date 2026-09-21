@@ -9,6 +9,7 @@ import time
 import threading
 from typing import Optional
 
+import logger
 from scanner.async_portscan import _check_port, has_uvloop
 from scanner.async_probe import async_slp_probe, async_auth_probe, has_simdjson
 from storage import db
@@ -158,8 +159,9 @@ class AsyncScanEngine:
                 # 放到线程池写库，避免阻塞事件循环
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, db.upsert_many, self.db_path, batch)
-            except Exception:
-                pass
+            except Exception as e:
+                # 写库失败要留痕（原为静默吞错，批量数据丢失不可见）
+                logger.warning(f"异步批量写库失败({len(batch)}条): {e}")
 
         return result
 

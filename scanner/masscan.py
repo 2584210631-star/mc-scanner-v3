@@ -90,18 +90,18 @@ def run_masscan(targets: str, ports: str = "25565", rate: int = None,
     return output_file
 
 
-def parse_masscan_json(filepath: str) -> list:
+def parse_masscan_json(filepath: str):
     """
-    解析 masscan 的 JSON 输出文件，返回 [(ip, port, banner), ...] 列表。
+    解析 masscan 的 JSON 输出文件，返回 (ip, port, banner) 生成器。
     支持 masscan 的 -oJ 格式（JSON 数组）和 NDJSON 格式。
-    流式逐行读取，避免大文件整读内存。
+    流式逐行 yield，避免大文件全量累积内存（原实现注释称流式但实际全量返回 list）。
+    调用点（services_scan/probe_list、routes_scan、engine.import_masscan）均为迭代消费，兼容生成器。
     """
-    results = []
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             first_line = f.readline().strip()
             if not first_line:
-                return results
+                return
             # 判断格式：以 '[' 开头是 JSON 数组，否则是 NDJSON
             is_json_array = first_line.startswith('[')
             lines_to_process = [first_line] if not is_json_array else []
@@ -120,14 +120,13 @@ def parse_masscan_json(filepath: str) -> list:
                     port = p.get("port")
                     banner = p.get("banner", {}).get("service", {}).get("banner", "")
                     if ip and port:
-                        results.append((ip, port, banner))
+                        yield (ip, port, banner)
 
             # 处理第一行（NDJSON格式）
             for line in lines_to_process:
-                _parse_item(line)
+                yield from _parse_item(line)
             # 流式逐行处理剩余内容
             for line in f:
-                _parse_item(line)
+                yield from _parse_item(line)
     except FileNotFoundError:
         print(f"[!] 文件不存在: {filepath}")
-    return results
