@@ -58,6 +58,9 @@ public class PythonActivity extends Activity {
 
     /** MSA正版登录：拦截到code后提交给本地后端 */
     private static void handleMsaCode(final WebView view, final String url) {
+        try {
+            Toast.makeText(mActivity, "[MSA] 捕获到登录code，正在处理...", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {}
         new Thread(new Runnable() {
             @Override
             public void run() {
