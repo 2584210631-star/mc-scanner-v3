@@ -169,3 +169,33 @@ def register(app):
         name = config.get("msa_name", "")
         return jsonify({"logged_in": bool(name), "name": name})
 
+    @app.route('/api/msa/auth_url', methods=['GET'])
+    def msa_auth_url():
+        """PCL2方式：获取授权码登录URL，WebView直接打开"""
+        from core.microsoft_auth import get_auth_url
+        cid = request.args.get("client_id", "")
+        url = get_auth_url(cid or None)
+        return jsonify({"url": url})
+
+    @app.route('/api/msa/exchange', methods=['POST'])
+    def msa_exchange():
+        """WebView拦截到code后，用code换token"""
+        from core.microsoft_auth import exchange_code, full_login_flow
+        code = request.form.get("code", "") or (request.get_json(silent=True) or {}).get("code", "")
+        if not code:
+            return jsonify({"success": False, "error": "缺少code"})
+        try:
+            r = exchange_code(code)
+            if "access_token" not in r:
+                return jsonify({"success": False, "error": r.get("error_description", str(r))})
+            msa_token = r["access_token"]
+            result = full_login_flow(msa_token)
+            cfg = config.get_all()
+            cfg["msa_access_token"] = result["access_token"]
+            cfg["msa_uuid"] = result["uuid"]
+            cfg["msa_name"] = result["name"]
+            config.save_config(cfg)
+            return jsonify({"success": True, "name": result["name"]})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+

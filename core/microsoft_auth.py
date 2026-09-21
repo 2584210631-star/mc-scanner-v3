@@ -14,6 +14,7 @@ import urllib.error
 
 CLIENT_ID = "00000000402b5328"  # Minecraft Launcher 官方ID
 SCOPE = "service::user.auth.xboxlive.com::MBI_SSL"
+REDIRECT_URI = "https://login.live.com/oauth20_desktop.srf"  # 官方桌面重定向URI
 
 def _post(url, data=None, headers=None):
     """简单POST请求"""
@@ -51,6 +52,35 @@ def poll_token(device_code, client_id=None, interval=5):
         "client_id": cid,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "code": device_code,
+        "resource": "https://user.auth.xboxlive.com",
+    }
+    r = _post("https://login.microsoftonline.com/common/oauth2/token", data)
+    return r
+
+
+def get_auth_url(client_id=None, redirect_uri=None):
+    """生成授权码流程的登录URL（PCL2方式）"""
+    cid = client_id or CLIENT_ID
+    rd = redirect_uri or REDIRECT_URI
+    params = {
+        "client_id": cid,
+        "response_type": "code",
+        "redirect_uri": rd,
+        "scope": SCOPE,
+        "response_mode": "query",
+    }
+    return "https://login.microsoftonline.com/common/oauth2/authorize?" + urllib.parse.urlencode(params)
+
+
+def exchange_code(code, client_id=None, redirect_uri=None):
+    """用授权码换MSA access token"""
+    cid = client_id or CLIENT_ID
+    rd = redirect_uri or REDIRECT_URI
+    data = {
+        "client_id": cid,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": rd,
         "resource": "https://user.auth.xboxlive.com",
     }
     r = _post("https://login.microsoftonline.com/common/oauth2/token", data)

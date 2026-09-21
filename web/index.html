@@ -1656,11 +1656,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <input type="text" id="msaClientId" placeholder="留空即可，一般不用填" style="font-size:13px;">
     </div>
     <button class="btn btn-primary" onclick="startMsaLogin()">登录微软正版账号</button>
-    <div id="msaDevice" style="display:none;margin-top:12px;padding:10px;background:var(--bg-input);border-radius:6px;">
-      <p style="margin:0 0 8px 0;font-size:13px;">1. 在浏览器打开: <b id="msaUri"></b></p>
-      <p style="margin:0 0 8px 0;font-size:13px;">2. 输入代码: <b id="msaCode" style="color:#00d992;font-size:18px;letter-spacing:2px;"></b></p>
-      <p style="margin:0;font-size:12px;color:var(--text-secondary);">等待登录中...（约30秒轮询一次）</p>
-    </div>
+    <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-secondary);">点击后在APP内打开微软登录页，登录成功自动返回</p>
   </div>
 </div>
 <div class="modal-overlay hidden" id="warnModal">
@@ -3406,43 +3402,16 @@ async function checkMsaStatus() {
   } catch(e) {}
 }
 async function startMsaLogin() {
-  const devBox = document.getElementById('msaDevice');
   const clientId = document.getElementById('msaClientId').value.trim();
-  devBox.style.display = 'block';
   try {
-    const body = {};
-    if (clientId) body.client_id = clientId;
-    const res = await fetch('/api/msa/start', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
-    });
+    let url = '/api/msa/auth_url';
+    if (clientId) url += '?client_id=' + encodeURIComponent(clientId);
+    const res = await fetch(url);
     const data = await res.json();
-    if (!data.success) { alert('启动失败: ' + data.error); return; }
-    document.getElementById('msaUri').textContent = data.verification_uri;
-    document.getElementById('msaCode').textContent = data.user_code;
-    // 轮询
-    const interval = data.interval || 5;
-    pollMsa(interval);
+    if (!data.url) { alert('获取登录URL失败'); return; }
+    // PCL2方式：直接在WebView里打开微软登录页
+    window.location.href = data.url;
   } catch(e) { alert('请求失败: ' + e.message); }
-}
-async function pollMsa(interval) {
-  try {
-    const res = await fetch('/api/msa/poll');
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('msaDevice').style.display = 'none';
-      checkMsaStatus();
-      alert('登录成功！欢迎 ' + data.name);
-      return;
-    }
-    if (data.waiting) {
-      setTimeout(() => pollMsa(interval), interval * 1000);
-    } else {
-      alert('登录失败: ' + (data.error || ''));
-    }
-  } catch(e) {
-    setTimeout(() => pollMsa(interval), interval * 1000);
-  }
 }
 checkMsaStatus();
 
