@@ -35,7 +35,7 @@ def start_device_code(client_id=None):
         "client_id": cid,
         "scope": SCOPE,
     }
-    r = _post("https://login.microsoftonline.com/consumers/oauth2/devicecode?api-version=1.0", data)
+    r = _post("https://login.live.com/oauth20_token.srf", data)
     return {
         "user_code": r["user_code"],
         "verification_uri": r["verification_url"],
@@ -54,7 +54,7 @@ def poll_token(device_code, client_id=None, interval=5):
         "code": device_code,
         "resource": "https://user.auth.xboxlive.com",
     }
-    r = _post("https://login.microsoftonline.com/consumers/oauth2/token", data)
+    r = _post("https://login.live.com/oauth20_token.srf", data)
     return r
 
 
@@ -69,7 +69,7 @@ def get_auth_url(client_id=None, redirect_uri=None):
         "scope": SCOPE,
         "response_mode": "query",
     }
-    return "https://login.microsoftonline.com/consumers/oauth2/authorize?" + urllib.parse.urlencode(params)
+    return "https://login.live.com/oauth20_authorize.srf?" + urllib.parse.urlencode(params)
 
 
 def exchange_code(code, client_id=None, redirect_uri=None):
@@ -83,7 +83,7 @@ def exchange_code(code, client_id=None, redirect_uri=None):
         "redirect_uri": rd,
         "resource": "https://user.auth.xboxlive.com",
     }
-    r = _post("https://login.microsoftonline.com/consumers/oauth2/token", data)
+    r = _post("https://login.live.com/oauth20_token.srf", data)
     return r
 
 
