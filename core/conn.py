@@ -135,8 +135,11 @@ class MCConnection:
         self._decryptor = None
 
     def enable_encryption(self, shared_secret: bytes):
-        """启用AES/CFB8加密（正版服），用Java Cipher"""
-        from jnius import autoclass
+        """启用AES/CFB8加密（正版服），用Java Cipher（仅APK环境支持）"""
+        try:
+            from jnius import autoclass
+        except ImportError:
+            raise RuntimeError("当前环境不支持正版服加密（缺少pyjnius），请在APK中使用正版登录功能")
         SecretKeySpec = autoclass('javax.crypto.spec.SecretKeySpec')
         Cipher = autoclass('javax.crypto.Cipher')
         self._aes_key = SecretKeySpec(shared_secret, "AES")

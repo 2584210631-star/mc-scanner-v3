@@ -228,8 +228,11 @@ class MCBot:
                         # 生成shared secret
                         import os as _os
                         shared_secret = _os.urandom(16)
-                        # RSA加密（用Java Cipher）
-                        from jnius import autoclass
+                        # RSA加密（用Java Cipher，仅APK环境支持）
+                        try:
+                            from jnius import autoclass
+                        except ImportError:
+                            raise RuntimeError("当前环境不支持正版服加密（缺少pyjnius），请在APK中使用正版登录功能")
                         KeyFactory = autoclass('java.security.KeyFactory')
                         X509EncodedKeySpec = autoclass('java.security.spec.X509EncodedKeySpec')
                         Cipher = autoclass('javax.crypto.Cipher')
