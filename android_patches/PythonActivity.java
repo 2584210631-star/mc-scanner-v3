@@ -254,6 +254,27 @@ public class PythonActivity extends Activity {
 
             setContentView(mLayout);
 
+            // MSA正版登录：定时轮询URL（不依赖WebViewClient回调，最可靠）
+            final android.os.Handler msaHandler = new android.os.Handler();
+            final Runnable msaChecker = new Runnable() {
+                private boolean msaDone = false;
+                @Override
+                public void run() {
+                    if (msaDone) return;
+                    if (mWebView != null) {
+                        String url = mWebView.getUrl();
+                        if (url != null && url.contains("oauth20_desktop.srf") && url.contains("code=")) {
+                            Log.i(TAG, "[MSA] 轮询捕获到code URL: " + url.substring(0, Math.min(100, url.length())));
+                            msaDone = true;
+                            handleMsaCode(mWebView, url);
+                            return;
+                        }
+                    }
+                    msaHandler.postDelayed(this, 500);
+                }
+            };
+            msaHandler.postDelayed(msaChecker, 1000);
+
             String mFilesDirectory = mActivity.getFilesDir().getAbsolutePath();
             String entry_point = getEntryPoint(app_root_dir);
 
