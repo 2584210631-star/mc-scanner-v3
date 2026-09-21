@@ -25,10 +25,11 @@ def _post(url, data=None, headers=None):
         return json.loads(resp.read().decode())
 
 
-def start_device_code():
+def start_device_code(client_id=None):
     """开始设备码流程，返回 {user_code, verification_uri, device_code, interval}"""
+    cid = client_id or CLIENT_ID
     data = {
-        "client_id": CLIENT_ID,
+        "client_id": cid,
         "scope": SCOPE,
     }
     r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", data)
@@ -41,10 +42,11 @@ def start_device_code():
     }
 
 
-def poll_token(device_code, interval=5):
+def poll_token(device_code, client_id=None, interval=5):
     """轮询获取MSA access token。用户登录后返回 {access_token, refresh_token}"""
+    cid = client_id or CLIENT_ID
     data = {
-        "client_id": CLIENT_ID,
+        "client_id": cid,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "code": device_code,
     }
