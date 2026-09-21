@@ -87,32 +87,52 @@ if __name__ == "__main__":
 
         # 自定义WebViewClient，拦截MSA登录redirect
         class MSAWebViewClient(PythonJavaClass):
-            __javainterfaces__ = ['android/webkit/WebViewClient']
+            __javaclass__ = 'android/webkit/WebViewClient'
             __javacontext__ = 'app'
+
+            @java_method('()V')
+            def __init__(self):
+                pass
 
             @java_method('(Landroid/webkit/WebView;Ljava/lang/String;)Z')
             def shouldOverrideUrlLoading(self, view, url):
-                # 拦截MSA登录成功后的redirect
-                if 'oauth20_desktop.srf?code=' in url or 'oauth20_desktop.srf?code=' in url:
+                print(f"[MSA] shouldOverrideUrlLoading: {url[:100]}")
+                if 'oauth20_desktop.srf' in url and 'code=' in url:
                     try:
                         code = url.split('code=')[1].split('&')[0]
-                        # 调用后端换token
+                        print(f"[MSA] 捕获到code: {code[:20]}...")
                         import urllib.request, urllib.parse
                         data = urllib.parse.urlencode({'code': code}).encode()
                         req = urllib.request.Request('http://127.0.0.1:8090/api/msa/exchange', data=data, method='POST')
-                        with urllib.request.urlopen(req, timeout=10) as resp:
+                        with urllib.request.urlopen(req, timeout=15) as resp:
                             result = resp.read().decode()
-                        # 回到主页
+                        print(f"[MSA] exchange结果: {result[:100]}")
                         view.loadUrl('http://127.0.0.1:8090')
                     except Exception as e:
                         print(f"[MSA] 交换token失败: {e}")
+                        import traceback
+                        traceback.print_exc()
                     return True
-                # 其他URL用默认行为（不拦截，让WebView自己加载）
                 return False
 
             @java_method('(Landroid/webkit/WebView;Ljava/lang/String;)V')
             def onPageFinished(self, view, url):
-                pass
+                print(f"[MSA] onPageFinished: {url[:100]}")
+                if 'oauth20_desktop.srf' in url and 'code=' in url:
+                    try:
+                        code = url.split('code=')[1].split('&')[0]
+                        print(f"[MSA] onPageFinished捕获code: {code[:20]}...")
+                        import urllib.request, urllib.parse
+                        data = urllib.parse.urlencode({'code': code}).encode()
+                        req = urllib.request.Request('http://127.0.0.1:8090/api/msa/exchange', data=data, method='POST')
+                        with urllib.request.urlopen(req, timeout=15) as resp:
+                            result = resp.read().decode()
+                        print(f"[MSA] exchange结果: {result[:100]}")
+                        view.loadUrl('http://127.0.0.1:8090')
+                    except Exception as e:
+                        print(f"[MSA] 交换token失败: {e}")
+                        import traceback
+                        traceback.print_exc()
 
         # 设置自定义WebViewClient
         webview = PythonActivity.mWebView
