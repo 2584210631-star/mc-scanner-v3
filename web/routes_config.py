@@ -203,3 +203,24 @@ def register(app):
         except Exception as e:
             return jsonify({"success": False, "error": str(e)})
 
+    @app.route('/api/msa/token', methods=['POST'])
+    def msa_token():
+        """直接用MSA access_token登录（隐式流程）"""
+        from core.microsoft_auth import full_login_flow
+        msa_token = request.form.get("access_token", "") or (request.get_json(silent=True) or {}).get("access_token", "")
+        if not msa_token:
+            return jsonify({"success": False, "error": "缺少access_token"})
+        try:
+            print(f"[MSA] 收到MSA token: {msa_token[:30]}...")
+            result = full_login_flow(msa_token)
+            cfg = config.get_all()
+            cfg["msa_access_token"] = result["access_token"]
+            cfg["msa_uuid"] = result["uuid"]
+            cfg["msa_name"] = result["name"]
+            config.save_config(cfg)
+            return jsonify({"success": True, "name": result["name"]})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"success": False, "error": str(e)})
+

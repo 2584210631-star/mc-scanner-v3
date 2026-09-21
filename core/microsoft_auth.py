@@ -67,15 +67,14 @@ def poll_token(device_code, client_id=None, interval=5):
 
 
 def get_auth_url(client_id=None, redirect_uri=None):
-    """生成授权码流程的登录URL（PCL2方式）"""
+    """生成授权URL（隐式流程，直接返回access_token）"""
     cid = client_id or CLIENT_ID
     rd = redirect_uri or REDIRECT_URI
     params = {
         "client_id": cid,
-        "response_type": "code",
+        "response_type": "token",
         "redirect_uri": rd,
         "scope": SCOPE,
-        "response_mode": "query",
     }
     return "https://login.live.com/oauth20_authorize.srf?" + urllib.parse.urlencode(params)
 

@@ -56,26 +56,33 @@ public class PythonActivity extends Activity {
     protected static ViewGroup mLayout;
     protected static WebView mWebView;
 
-    /** MSA正版登录：拦截到code后提交给本地后端 */
+    /** MSA正版登录：拦截到token后提交给本地后端 */
     private static void handleMsaCode(final WebView view, final String url) {
         try {
-            Toast.makeText(mActivity, "[MSA] 捕获到登录code，正在处理...", Toast.LENGTH_LONG).show();
+            Toast.makeText(mActivity, "[MSA] 捕获到登录token，正在处理...", Toast.LENGTH_LONG).show();
         } catch (Exception e) {}
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    String code = url;
-                    int idx = url.indexOf("code=");
-                    if (idx >= 0) {
-                        code = url.substring(idx + 5);
-                        int amp = code.indexOf("&");
-                        if (amp >= 0) code = code.substring(0, amp);
+                    String token = url;
+                    // 支持 #access_token= 和 ?code= 两种格式
+                    if (url.contains("access_token=")) {
+                        token = url.substring(url.indexOf("access_token=") + 13);
+                        int amp = token.indexOf("&");
+                        if (amp >= 0) token = token.substring(0, amp);
+                    } else if (url.contains("code=")) {
+                        token = url.substring(url.indexOf("code=") + 5);
+                        int amp = token.indexOf("&");
+                        if (amp >= 0) token = token.substring(0, amp);
                     }
-                    Log.i(TAG, "[MSA] 捕获到code: " + code.substring(0, Math.min(20, code.length())) + "...");
-                    // 提交给本地后端
-                    String postData = "code=" + java.net.URLEncoder.encode(code, "UTF-8");
-                    HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:8090/api/msa/exchange").openConnection();
+                    Log.i(TAG, "[MSA] 捕获到token: " + token.substring(0, Math.min(20, token.length())) + "...");
+                    // 根据token类型选择接口
+                    boolean isAccessToken = url.contains("access_token=");
+                    String apiUrl = isAccessToken ? "http://127.0.0.1:8090/api/msa/token" : "http://127.0.0.1:8090/api/msa/exchange";
+                    String paramName = isAccessToken ? "access_token" : "code";
+                    String postData = paramName + "=" + java.net.URLEncoder.encode(token, "UTF-8");
+                    HttpURLConnection conn = (HttpURLConnection) new URL(apiUrl).openConnection();
                     conn.setRequestMethod("POST");
                     conn.setDoOutput(true);
                     conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -88,8 +95,7 @@ public class PythonActivity extends Activity {
                     String line;
                     while ((line = br.readLine()) != null) resp.append(line);
                     br.close();
-                    Log.i(TAG, "[MSA] exchange响应: " + respCode + " " + resp.toString().substring(0, Math.min(200, resp.length())));
-                    // 跳回主页
+                    Log.i(TAG, "[MSA] 响应: " + respCode + " " + resp.toString().substring(0, Math.min(200, resp.length())));
                     view.post(new Runnable() {
                         @Override
                         public void run() {
@@ -97,7 +103,7 @@ public class PythonActivity extends Activity {
                         }
                     });
                 } catch (Exception e) {
-                    Log.e(TAG, "[MSA] 处理code失败: " + e.getMessage(), e);
+                    Log.e(TAG, "[MSA] 处理token失败: " + e.getMessage(), e);
                 }
             }
         }).start();
@@ -224,7 +230,7 @@ public class PythonActivity extends Activity {
                         @Override
                         public boolean shouldOverrideUrlLoading(WebView view, String url) {
                             // MSA正版登录拦截
-                            if (url.contains("oauth20_desktop.srf") && url.contains("code=")) {
+                            if (url.contains("oauth20_desktop.srf") && (url.contains("access_token=") || url.contains("code="))) {
                                 handleMsaCode(view, url);
                                 return true;
                             }
@@ -244,7 +250,7 @@ public class PythonActivity extends Activity {
                         public void onPageFinished(WebView view, String url) {
                             CookieManager.getInstance().flush();
                             // MSA正版登录拦截（双重保险）
-                            if (url.contains("oauth20_desktop.srf") && url.contains("code=")) {
+                            if (url.contains("oauth20_desktop.srf") && (url.contains("access_token=") || url.contains("code="))) {
                                 handleMsaCode(view, url);
                             }
                         }
@@ -263,7 +269,7 @@ public class PythonActivity extends Activity {
                     if (msaDone) return;
                     if (mWebView != null) {
                         String url = mWebView.getUrl();
-                        if (url != null && url.contains("oauth20_desktop.srf") && url.contains("code=")) {
+                        if (url != null && url.contains("oauth20_desktop.srf") && (url.contains("access_token=") || url.contains("code="))) {
                             Log.i(TAG, "[MSA] 轮询捕获到code URL: " + url.substring(0, Math.min(100, url.length())));
                             msaDone = true;
                             handleMsaCode(mWebView, url);
