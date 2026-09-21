@@ -1651,6 +1651,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div style="margin-top:16px;padding:14px;background:var(--bg-secondary);border-radius:8px;">
     <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
     <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
+    <div class="form-group">
+      <label style="font-size:12px;color:var(--text-secondary);">Azure 应用 Client ID（<a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" style="color:#4299e1;">点此注册</a>，选"任何组织+个人"，重定向URI选"公共客户端"）</label>
+      <input type="text" id="msaClientId" placeholder="粘贴你的Azure应用程序(客户端)ID" style="font-size:13px;">
+    </div>
     <button class="btn btn-primary" onclick="startMsaDeviceLogin()">开始设备码登录</button>
     <div id="msaDeviceBox" style="display:none;margin-top:12px;padding:12px;background:var(--bg-input);border-radius:6px;">
       <p style="margin:0 0 8px 0;font-size:13px;">1. 浏览器打开: <b id="msaUri" style="color:#4299e1;">https://www.microsoft.com/link</b></p>
@@ -3405,8 +3409,10 @@ async function checkMsaStatus() {
 let msaPollTimer = null;
 let msaDeviceCode = null;
 async function startMsaDeviceLogin() {
+  const clientId = document.getElementById('msaClientId').value.trim();
+  if (!clientId) { alert('请先填写Azure应用Client ID\n\n注册步骤：\n1. 打开 portal.azure.com\n2. 搜索"应用注册"\n3. 新注册，名称随便填\n4. 账户类型选"任何组织目录中的账户和个人Microsoft账户"\n5. 重定向URI选"公共客户端/本机"，填 https://login.microsoftonline.com/common/oauth2/nativeclient\n6. 注册后复制"应用程序(客户端)ID"粘贴到上面'); return; }
   try {
-    const res = await fetch('/api/msa/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    const res = await fetch('/api/msa/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({client_id: clientId})});
     const data = await res.json();
     if (!data.success || !data.user_code) {
       alert('获取设备码失败: ' + (data.error || JSON.stringify(data)));
