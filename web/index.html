@@ -1651,15 +1651,12 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div style="margin-top:16px;padding:14px;background:var(--bg-secondary);border-radius:8px;">
     <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
     <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
-    <div class="form-group">
-      <label style="font-size:12px;color:var(--text-secondary);">Azure Client ID（可选，留空用Minecraft官方ID）</label>
-      <input type="text" id="msaClientId" placeholder="留空即可，一般不用填" style="font-size:13px;">
-    </div>
-    <button class="btn btn-primary" onclick="startMsaLogin()">登录微软正版账号</button>
-    <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-secondary);">点击后打开微软登录页，登录成功后复制地址栏URL粘贴到下面</p>
-    <div style="margin-top:10px;">
-      <input type="text" id="msaCodeInput" placeholder="登录成功后粘贴浏览器地址栏的完整URL" style="width:100%;font-size:13px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);box-sizing:border-box;">
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="submitMsaCode()">提交完成登录</button>
+    <button class="btn btn-primary" onclick="startMsaDeviceLogin()">开始设备码登录</button>
+    <div id="msaDeviceBox" style="display:none;margin-top:12px;padding:12px;background:var(--bg-input);border-radius:6px;">
+      <p style="margin:0 0 8px 0;font-size:13px;">1. 浏览器打开: <b id="msaUri" style="color:#4299e1;">https://www.microsoft.com/link</b></p>
+      <p style="margin:0 0 8px 0;font-size:13px;">2. 输入代码: <b id="msaCode" style="color:#00d992;font-size:22px;letter-spacing:3px;font-weight:bold;"></b></p>
+      <p style="margin:0;font-size:12px;color:var(--text-secondary);">登录中... 完成后自动刷新（约5秒轮询一次）</p>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="stopMsaPoll()">取消</button>
     </div>
   </div>
 </div>
@@ -3405,55 +3402,49 @@ async function checkMsaStatus() {
     }
   } catch(e) {}
 }
-async function startMsaLogin() {
-  const clientId = document.getElementById('msaClientId').value.trim();
+let msaPollTimer = null;
+let msaDeviceCode = null;
+async function startMsaDeviceLogin() {
   try {
-    let url = '/api/msa/auth_url';
-    if (clientId) url += '?client_id=' + encodeURIComponent(clientId);
-    const res = await fetch(url);
+    const res = await fetch('/api/msa/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
     const data = await res.json();
-    if (!data.url) { alert('获取登录URL失败'); return; }
-    // PCL2方式：直接在WebView里打开微软登录页
-    window.location.href = data.url;
+    if (!data.success || !data.user_code) {
+      alert('获取设备码失败: ' + (data.error || JSON.stringify(data)));
+      return;
+    }
+    document.getElementById('msaUri').textContent = data.verification_uri;
+    document.getElementById('msaCode').textContent = data.user_code;
+    document.getElementById('msaDeviceBox').style.display = 'block';
+    msaDeviceCode = data.device_code;
+    const interval = (data.interval || 5) * 1000;
+    msaPollTimer = setInterval(() => pollMsaDevice(), interval);
   } catch(e) { alert('请求失败: ' + e.message); }
 }
-async function submitMsaCode() {
-  const input = document.getElementById('msaCodeInput').value.trim();
-  if (!input) { alert('请粘贴登录成功后的URL'); return; }
-  // 支持两种格式：?code=xxx 或 #access_token=xxx
-  let code = null, accessToken = null;
-  if (input.includes('access_token=')) {
-    accessToken = input.split('access_token=')[1].split('&')[0];
-  } else if (input.includes('code=')) {
-    code = input.split('code=')[1].split('&')[0];
-  } else {
-    alert('URL里没有code=或access_token=参数！\n请确认登录成功（不是取消）');
-    return;
-  }
+function stopMsaPoll() {
+  if (msaPollTimer) { clearInterval(msaPollTimer); msaPollTimer = null; }
+  document.getElementById('msaDeviceBox').style.display = 'none';
+}
+async function pollMsaDevice() {
+  if (!msaDeviceCode) return;
   try {
-    let res, data;
-    if (accessToken) {
-      // 隐式流程：直接用MSA access_token
-      res = await fetch('/api/msa/token', {
-        method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'access_token=' + encodeURIComponent(accessToken)
-      });
-    } else {
-      // 授权码流程：用code换token
-      res = await fetch('/api/msa/exchange', {
-        method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'code=' + encodeURIComponent(code)
-      });
-    }
-    data = await res.json();
+    const res = await fetch('/api/msa/poll', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({device_code: msaDeviceCode})
+    });
+    const data = await res.json();
     if (data.success) {
+      stopMsaPoll();
       alert('登录成功！欢迎 ' + data.name);
-      document.getElementById('msaCodeInput').value = '';
       checkMsaStatus();
-    } else {
-      alert('登录失败: ' + (data.error || '未知错误') + '\n' + (data.error_description || ''));
+    } else if (data.waiting) {
+      // 继续等待
+    } else if (data.error === 'expired') {
+      stopMsaPoll();
+      alert('设备码已过期，请重新开始');
+    } else if (data.error && data.error !== 'authorization_pending') {
+      // 其他错误先不中断，继续等
     }
-  } catch(e) { alert('请求失败: ' + e.message); }
+  } catch(e) {}
 }
 checkMsaStatus();
 

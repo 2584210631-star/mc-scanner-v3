@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """微软/Minecraft正版认证模块。
-OAuth设备码流程(v1.0 ADAL) + RSA/AES加密握手。
-用Minecraft Launcher官方client_id，无需自己注册Azure。
+Azure AD v2.0 设备码流程 + RSA/AES加密握手。
+用Azure CLI官方client_id，支持v2.0端点。
 """
 import json
 import os
@@ -12,9 +12,12 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-CLIENT_ID = "00000000402b5328"  # Minecraft Launcher 官方ID
-SCOPE = "service::user.auth.xboxlive.com::MBI_SSL"
-REDIRECT_URI = "https://login.live.com/oauth20_desktop.srf"  # 官方桌面重定向URI
+# v2.0设备码流程用Azure CLI的client_id（支持v2.0端点）
+CLIENT_ID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+SCOPE = "XboxLive.signin offline_access"
+# 旧版client_id（保留，用于兼容）
+LEGACY_CLIENT_ID = "00000000402b5328"
+REDIRECT_URI = "https://login.live.com/oauth20_desktop.srf"
 
 def _post(url, data=None, headers=None):
     """简单POST请求，出错时返回错误详情"""
@@ -37,16 +40,18 @@ def _post(url, data=None, headers=None):
 
 
 def start_device_code(client_id=None):
-    """开始设备码流程(v1.0)，返回 {user_code, verification_uri, device_code, interval}"""
+    """开始设备码流程(v2.0)，返回 {user_code, verification_uri, device_code, interval}"""
     cid = client_id or CLIENT_ID
     data = {
         "client_id": cid,
         "scope": SCOPE,
     }
-    r = _post("https://login.live.com/oauth20_token.srf", data)
+    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", data)
+    if "error" in r and "user_code" not in r:
+        return r
     return {
         "user_code": r["user_code"],
-        "verification_uri": r["verification_url"],
+        "verification_uri": r.get("verification_uri", "https://www.microsoft.com/link"),
         "device_code": r["device_code"],
         "interval": r.get("interval", 5),
         "expires_in": r.get("expires_in", 900),
@@ -54,15 +59,14 @@ def start_device_code(client_id=None):
 
 
 def poll_token(device_code, client_id=None, interval=5):
-    """轮询获取MSA access token(v1.0)。用户登录后返回 {access_token, refresh_token}"""
+    """轮询获取MSA access token(v2.0)。用户登录后返回 {access_token, refresh_token}"""
     cid = client_id or CLIENT_ID
     data = {
         "client_id": cid,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-        "code": device_code,
-        "resource": "https://user.auth.xboxlive.com",
+        "device_code": device_code,
     }
-    r = _post("https://login.live.com/oauth20_token.srf", data)
+    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", data)
     return r
 
 
@@ -95,12 +99,14 @@ def exchange_code(code, client_id=None, redirect_uri=None):
 
 
 def xbox_auth(msa_token):
-    """MSA token → Xbox Live token。v1.0用t=前缀"""
+    """MSA token → Xbox Live token。v2.0 JWT直接用，v1.0加t=前缀"""
+    # v2.0返回的是JWT（eyJ开头），直接用；v1.0短token加t=前缀
+    rps_ticket = msa_token if msa_token.startswith("eyJ") else f"t={msa_token}"
     data = {
         "Properties": {
             "AuthMethod": "RPS",
             "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": f"t={msa_token}",
+            "RpsTicket": rps_ticket,
         },
         "RelyingParty": "http://auth.xboxlive.com",
         "TokenType": "JWT",

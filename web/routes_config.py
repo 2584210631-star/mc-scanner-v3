@@ -142,18 +142,28 @@ def register(app):
         except Exception as e:
             return jsonify({"success": False, "error": str(e)})
 
-    @app.route('/api/msa/poll', methods=['GET'])
+    @app.route('/api/msa/poll', methods=['GET', 'POST'])
     def msa_poll():
         from core.microsoft_auth import poll_token, full_login_flow
-        if _msa_state["step"] != "waiting":
-            return jsonify({"success": False, "error": "未开始登录"})
+        # 支持POST传device_code，或GET用全局state
+        device_code = None
+        if request.method == 'POST':
+            device_code = (request.get_json(silent=True) or {}).get("device_code", "") or request.form.get("device_code", "")
+        if not device_code and _msa_state.get("step") == "waiting":
+            device_code = _msa_state["device_code"]
+        if not device_code:
+            return jsonify({"success": False, "error": "未开始登录", "waiting": False})
         try:
-            r = poll_token(_msa_state["device_code"], _msa_state.get("client_id"))
+            r = poll_token(device_code, _msa_state.get("client_id"))
             if "error" in r:
-                return jsonify({"success": False, "waiting": True})
+                err = r.get("error", "")
+                if err == "expired_token" or err == "expired":
+                    return jsonify({"success": False, "error": "expired", "waiting": False})
+                # authorization_pending 或 slow_down 继续等
+                return jsonify({"success": False, "waiting": True, "error": err})
             msa_token = r["access_token"]
+            print(f"[MSA] 轮询成功，获取MSA token: {msa_token[:30]}...")
             result = full_login_flow(msa_token)
-            # 保存到config
             cfg = config.get_all()
             cfg["msa_access_token"] = result["access_token"]
             cfg["msa_uuid"] = result["uuid"]
@@ -162,6 +172,8 @@ def register(app):
             _msa_state["step"] = "done"
             return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"]})
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return jsonify({"success": False, "error": str(e), "waiting": True})
 
     @app.route('/api/msa/status', methods=['GET'])
