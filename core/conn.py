@@ -131,6 +131,19 @@ class MCConnection:
         self.state = PROTO_STATE_HANDSHAKE
         self._send_lock = threading.Lock()
         self.proxy = proxy  # Proxy对象或None
+        self._encryptor = None
+        self._decryptor = None
+
+    def enable_encryption(self, shared_secret: bytes):
+        """启用AES/CFB8加密（正版服），用Java Cipher"""
+        from jnius import autoclass
+        SecretKeySpec = autoclass('javax.crypto.spec.SecretKeySpec')
+        Cipher = autoclass('javax.crypto.Cipher')
+        self._aes_key = SecretKeySpec(shared_secret, "AES")
+        self._enc_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
+        self._dec_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
+        self._enc_cipher.init(Cipher.ENCRYPT_MODE, self._aes_key)
+        self._dec_cipher.init(Cipher.DECRYPT_MODE, self._aes_key)
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -214,7 +227,10 @@ class MCConnection:
                 events = sel.select(timeout=self.timeout)
                 if not events:
                     raise socket.timeout("send 等待写就绪超时")
-                self.sock.sendall(frame)
+                data = frame
+                if hasattr(self, '_enc_cipher') and self._enc_cipher:
+                    data = bytes(self._enc_cipher.update(data))
+                self.sock.sendall(data)
             finally:
                 sel.unregister(self.sock)
                 sel.close()
@@ -310,5 +326,7 @@ class MCConnection:
                 continue  # 短暂超时继续，但受 total_timeout 总限制
             if not chunk:
                 raise ConnectionError("连接在读取中关闭")
+            if hasattr(self, '_dec_cipher') and self._dec_cipher:
+                chunk = bytes(self._dec_cipher.update(chunk))
             buf.extend(chunk)
         return bytes(buf)

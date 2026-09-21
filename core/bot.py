@@ -140,9 +140,22 @@ class MCBot:
         self._chat_lock = threading.Lock()
         self.chat_callback = None  # callable(text: str, sender: str) -> None
         self.protocol_handler = None  # 版本协议处理器，按版本模块化
+        # 正版认证
+        self.msa_token = None
+        self.msa_uuid = None
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
+        # 自动加载正版token
+        try:
+            import config as _cfg
+            if not self.msa_token:
+                self.msa_token = _cfg.get("msa_access_token", "") or None
+                self.msa_uuid = _cfg.get("msa_uuid", "") or None
+            if self.msa_token and self.msa_uuid:
+                self.username = _cfg.get("msa_name", self.username)
+        except Exception:
+            pass
         # 获取服务器信息（protocol_version已知时跳过探测，直接握手，避免重复连接）
         if self.protocol_version is None:
             info = probe_with_fallback(self.host, self.port, timeout=5.0)
@@ -202,7 +215,49 @@ class MCBot:
                         raise ConnectionError(f"登录被拒绝: {msg[:100]}")
                     if resp_id == self.login_packets["cb_encryption"]:
                         self.auth_mode = "online"
-                        raise ConnectionError("服务器要求正版验证（encryption）")
+                        if not self.msa_token:
+                            raise ConnectionError("服务器要求正版验证，但未登录正版账号")
+                        # 解析encryption request
+                        from .buffer import read_varint_from_stream, read_string_from_stream
+                        s = BytesStream(resp_payload)
+                        server_id = read_string_from_stream(s)
+                        pubkey_len = read_varint_from_stream(s)
+                        pubkey_bytes = s.read(pubkey_len)
+                        vtoken_len = read_varint_from_stream(s)
+                        vtoken = s.read(vtoken_len)
+                        # 生成shared secret
+                        import os as _os
+                        shared_secret = _os.urandom(16)
+                        # RSA加密（用Java Cipher）
+                        from jnius import autoclass
+                        KeyFactory = autoclass('java.security.KeyFactory')
+                        X509EncodedKeySpec = autoclass('java.security.spec.X509EncodedKeySpec')
+                        Cipher = autoclass('javax.crypto.Cipher')
+                        PKCS8EncodedKeySpec = autoclass('java.security.spec.PKCS8EncodedKeySpec')
+                        keySpec = X509EncodedKeySpec(pubkey_bytes)
+                        kf = KeyFactory.getInstance("RSA")
+                        pubKey = kf.generatePublic(keySpec)
+                        cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
+                        cipher.init(Cipher.ENCRYPT_MODE, pubKey)
+                        enc_secret = bytes(cipher.doFinal(shared_secret))
+                        enc_vtoken = bytes(cipher.doFinal(vtoken))
+                        # 计算server ID hash
+                        import hashlib as _hl
+                        sid_hash = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).hexdigest()
+                        # 向Mojang join
+                        from .microsoft_auth import join_server
+                        if not join_server(self.msa_token, self.msa_uuid, sid_hash):
+                            raise ConnectionError("正版joinServer验证失败")
+                        # 发送encryption response
+                        resp = b""
+                        resp += bytes([len(enc_secret)])
+                        resp += enc_secret
+                        resp += bytes([len(enc_vtoken)])
+                        resp += enc_vtoken
+                        self.conn.send_packet(0x01, resp)
+                        # 启用AES加密
+                        self.conn.enable_encryption(shared_secret)
+                        continue
                     if resp_id == self.login_packets["cb_compress"]:
                         threshold = read_varint_from_stream(BytesStream(resp_payload))
                         self.conn.set_compression(threshold)

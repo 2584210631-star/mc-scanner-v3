@@ -121,3 +121,46 @@ def register(app):
         ok, err = send_email(subject, body, html=True, cfg=cfg)
         return jsonify({"success": ok, "error": err})
 
+    # ===== 正版账号登录 =====
+    _msa_state = {"step": "idle", "device_code": None, "interval": 5}
+
+    @app.route('/api/msa/start', methods=['POST'])
+    def msa_start():
+        from core.microsoft_auth import start_device_code
+        try:
+            r = start_device_code()
+            _msa_state["step"] = "waiting"
+            _msa_state["device_code"] = r["device_code"]
+            _msa_state["interval"] = r.get("interval", 5)
+            return jsonify({"success": True, "user_code": r["user_code"],
+                            "verification_uri": r["verification_uri"], "interval": r["interval"]})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+
+    @app.route('/api/msa/poll', methods=['GET'])
+    def msa_poll():
+        from core.microsoft_auth import poll_token, full_login_flow
+        if _msa_state["step"] != "waiting":
+            return jsonify({"success": False, "error": "未开始登录"})
+        try:
+            r = poll_token(_msa_state["device_code"])
+            if "error" in r:
+                return jsonify({"success": False, "waiting": True})
+            msa_token = r["access_token"]
+            result = full_login_flow(msa_token)
+            # 保存到config
+            cfg = config.get_all()
+            cfg["msa_access_token"] = result["access_token"]
+            cfg["msa_uuid"] = result["uuid"]
+            cfg["msa_name"] = result["name"]
+            config.save_config(cfg)
+            _msa_state["step"] = "done"
+            return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"]})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e), "waiting": True})
+
+    @app.route('/api/msa/status', methods=['GET'])
+    def msa_status():
+        name = config.get("msa_name", "")
+        return jsonify({"logged_in": bool(name), "name": name})
+
