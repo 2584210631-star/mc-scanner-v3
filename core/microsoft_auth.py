@@ -125,6 +125,27 @@ def fcl_exchange_code(code):
     return r
 
 
+def fcl_get_device_code():
+    """FCL设备码流程：获取设备码（v2.0端点，FCL同款）"""
+    data = {
+        "client_id": FCL_CLIENT_ID,
+        "scope": SCOPE,
+    }
+    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", data)
+    return r
+
+
+def fcl_poll_device_code(device_code):
+    """FCL设备码流程：轮询获取MSA token（v2.0端点）"""
+    data = {
+        "client_id": FCL_CLIENT_ID,
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "device_code": device_code,
+    }
+    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", data)
+    return r
+
+
 def xbox_auth(msa_token):
     """MSA token → Xbox Live token。v2.0 JWT直接用，v1.0加t=前缀"""
     # v2.0返回的是JWT（eyJ开头），直接用；v1.0短token加t=前缀
