@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """微软/Minecraft正版认证模块。
-OAuth设备码流程 + RSA/AES加密握手。
+OAuth设备码流程(v1.0 ADAL) + RSA/AES加密握手。
+用Minecraft Launcher官方client_id，无需自己注册Azure。
 """
 import json
 import os
@@ -9,9 +10,10 @@ import struct
 import hashlib
 import urllib.request
 import urllib.parse
+import urllib.error
 
-CLIENT_ID = "872cd9fa-d31f-45e0-9eab-6e460a0e7d1f"  # Minecraft for Windows
-SCOPE = "XboxLive.signin offline_access"
+CLIENT_ID = "00000000402b5328"  # Minecraft Launcher 官方ID
+SCOPE = "service::user.auth.xboxlive.com::MBI_SSL"
 
 def _post(url, data=None, headers=None):
     """简单POST请求"""
@@ -26,16 +28,16 @@ def _post(url, data=None, headers=None):
 
 
 def start_device_code(client_id=None):
-    """开始设备码流程，返回 {user_code, verification_uri, device_code, interval}"""
+    """开始设备码流程(v1.0)，返回 {user_code, verification_uri, device_code, interval}"""
     cid = client_id or CLIENT_ID
     data = {
         "client_id": cid,
         "scope": SCOPE,
     }
-    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", data)
+    r = _post("https://login.microsoftonline.com/common/oauth2/devicecode?api-version=1.0", data)
     return {
         "user_code": r["user_code"],
-        "verification_uri": r["verification_uri"],
+        "verification_uri": r["verification_url"],
         "device_code": r["device_code"],
         "interval": r.get("interval", 5),
         "expires_in": r.get("expires_in", 900),
@@ -43,24 +45,25 @@ def start_device_code(client_id=None):
 
 
 def poll_token(device_code, client_id=None, interval=5):
-    """轮询获取MSA access token。用户登录后返回 {access_token, refresh_token}"""
+    """轮询获取MSA access token(v1.0)。用户登录后返回 {access_token, refresh_token}"""
     cid = client_id or CLIENT_ID
     data = {
         "client_id": cid,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "code": device_code,
+        "resource": "https://user.auth.xboxlive.com",
     }
-    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", data)
+    r = _post("https://login.microsoftonline.com/common/oauth2/token", data)
     return r
 
 
 def xbox_auth(msa_token):
-    """MSA token → Xbox Live token"""
+    """MSA token → Xbox Live token。v1.0用t=前缀"""
     data = {
         "Properties": {
             "AuthMethod": "RPS",
             "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": f"d={msa_token}",
+            "RpsTicket": f"t={msa_token}",
         },
         "RelyingParty": "http://auth.xboxlive.com",
         "TokenType": "JWT",

@@ -1652,8 +1652,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
     <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
     <div class="form-group">
-      <label style="font-size:12px;color:var(--text-secondary);">Azure应用Client ID（自己去portal.azure.com注册，5分钟免费）</label>
-      <input type="text" id="msaClientId" placeholder="例如: 872cd9fa-d31f-45e0-9eab-6e460a0e7d1f" style="font-size:13px;">
+      <label style="font-size:12px;color:var(--text-secondary);">Azure Client ID（可选，留空用Minecraft官方ID）</label>
+      <input type="text" id="msaClientId" placeholder="留空即可，一般不用填" style="font-size:13px;">
     </div>
     <button class="btn btn-primary" onclick="startMsaLogin()">登录微软正版账号</button>
     <div id="msaDevice" style="display:none;margin-top:12px;padding:10px;background:var(--bg-input);border-radius:6px;">
@@ -3408,12 +3408,13 @@ async function checkMsaStatus() {
 async function startMsaLogin() {
   const devBox = document.getElementById('msaDevice');
   const clientId = document.getElementById('msaClientId').value.trim();
-  if (!clientId) { alert('请先填写Azure Client ID'); return; }
   devBox.style.display = 'block';
   try {
+    const body = {};
+    if (clientId) body.client_id = clientId;
     const res = await fetch('/api/msa/start', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({client_id: clientId})
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (!data.success) { alert('启动失败: ' + data.error); return; }
