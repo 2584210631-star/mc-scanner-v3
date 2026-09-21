@@ -268,7 +268,10 @@ class MCConnection:
                     self.close()
                     raise ValueError(f"解压后数据过大: {data_length}")
                 try:
-                    decompressed = zlib.decompress(remaining, 8 * 1024 * 1024)
+                    decompressed = zlib.decompress(remaining, 15)
+                    if len(decompressed) > 8 * 1024 * 1024:
+                        self.close()
+                        raise ValueError("解压后数据过大")
                 except zlib.error:
                     self.close()
                     raise ValueError("压缩包解压超限或损坏")
