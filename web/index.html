@@ -1651,16 +1651,23 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div style="margin-top:16px;padding:14px;background:var(--bg-secondary);border-radius:8px;">
     <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
     <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
-    <details style="margin-bottom:10px;">
-      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式一：手动粘贴Token（推荐，不用注册）</summary>
+    <details open style="margin-bottom:10px;">
+      <summary style="font-size:13px;color:#00d992;cursor:pointer;font-weight:bold;">方式一：FCL授权码登录（推荐，一键登录）</summary>
       <div style="margin-top:8px;">
-        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">从Minecraft启动器的 launcher_accounts.json 复制 minecraftToken 或 access_token 粘贴到下面</p>
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">点击下方按钮，在APP内打开微软登录页，登录后自动完成认证</p>
+        <button class="btn btn-primary" onclick="startFclLogin()">🚀 开始正版登录</button>
+      </div>
+    </details>
+    <details style="margin-bottom:10px;">
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式二：手动粘贴Token</summary>
+      <div style="margin-top:8px;">
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">从其他启动器复制 minecraftToken 粘贴到下面</p>
         <input type="text" id="msaManualToken" placeholder="粘贴Minecraft access_token（eyJ开头）" style="width:100%;font-size:12px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);box-sizing:border-box;">
         <button class="btn btn-primary" style="margin-top:8px;" onclick="submitManualToken()">使用此Token登录</button>
       </div>
     </details>
     <details>
-      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式二：Azure设备码登录（需自己注册应用）</summary>
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式三：Azure设备码登录（需自己注册应用）</summary>
       <div style="margin-top:8px;">
         <div class="form-group">
           <label style="font-size:12px;color:var(--text-secondary);">Azure 应用 Client ID</label>
@@ -3435,6 +3442,15 @@ async function submitManualToken() {
     } else {
       alert('登录失败: ' + (data.error || '未知错误'));
     }
+  } catch(e) { alert('请求失败: ' + e.message); }
+}
+async function startFclLogin() {
+  try {
+    const res = await fetch('/api/msa/fcl_auth_url');
+    const data = await res.json();
+    if (!data.url) { alert('获取登录URL失败'); return; }
+    // 在WebView里打开微软登录页，登录后自动重定向到/auth-response完成认证
+    window.location.href = data.url;
   } catch(e) { alert('请求失败: ' + e.message); }
 }
 let msaPollTimer = null;
