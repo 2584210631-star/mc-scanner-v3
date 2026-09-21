@@ -1652,14 +1652,27 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <h3 style="margin:0 0 10px 0;font-size:15px;">🎮 正版账号登录</h3>
     <div id="msaStatus" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">未登录</div>
     <details open style="margin-bottom:10px;">
-      <summary style="font-size:13px;color:#00d992;cursor:pointer;font-weight:bold;">方式一：FCL授权码登录（推荐，一键登录）</summary>
+      <summary style="font-size:13px;color:#00d992;cursor:pointer;font-weight:bold;">方式一：FCL设备码登录（推荐，和FCL启动器一样）</summary>
       <div style="margin-top:8px;">
-        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">点击下方按钮，在APP内打开微软登录页，登录后自动完成认证</p>
-        <button class="btn btn-primary" onclick="startFclLogin()">🚀 开始正版登录</button>
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">点击获取设备码，用浏览器打开验证URL输入代码登录</p>
+        <button class="btn btn-primary" onclick="startFclDeviceLogin()">🔑 获取设备码</button>
+        <div id="fclDeviceBox" style="display:none;margin-top:12px;padding:12px;background:var(--bg-input);border-radius:6px;">
+          <p style="margin:0 0 8px 0;font-size:13px;">1. 浏览器打开: <b id="fclUri" style="color:#4299e1;">https://www.microsoft.com/link</b></p>
+          <p style="margin:0 0 8px 0;font-size:13px;">2. 输入代码: <b id="fclCode" style="color:#00d992;font-size:28px;letter-spacing:4px;font-weight:bold;cursor:pointer;" onclick="copyFclCode()">点击复制</b></p>
+          <p id="fclStatus" style="margin:0;font-size:12px;color:var(--text-secondary);">等待输入代码并登录...</p>
+          <button class="btn btn-secondary" style="margin-top:8px;" onclick="stopFclDevicePoll()">取消</button>
+        </div>
       </div>
     </details>
     <details style="margin-bottom:10px;">
-      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式二：手动粘贴Token</summary>
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式二：FCL授权码登录（APP内一键登录）</summary>
+      <div style="margin-top:8px;">
+        <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">在APP内打开微软登录页，登录后自动完成认证</p>
+        <button class="btn btn-primary" onclick="startFclLogin()">🚀 开始授权码登录</button>
+      </div>
+    </details>
+    <details style="margin-bottom:10px;">
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式三：手动粘贴Token</summary>
       <div style="margin-top:8px;">
         <p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px 0;">从其他启动器复制 minecraftToken 粘贴到下面</p>
         <input type="text" id="msaManualToken" placeholder="粘贴Minecraft access_token（eyJ开头）" style="width:100%;font-size:12px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);box-sizing:border-box;">
@@ -1667,7 +1680,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       </div>
     </details>
     <details>
-      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式三：Azure设备码登录（需自己注册应用）</summary>
+      <summary style="font-size:13px;color:#4299e1;cursor:pointer;">方式四：Azure设备码登录（需自己注册应用）</summary>
       <div style="margin-top:8px;">
         <div class="form-group">
           <label style="font-size:12px;color:var(--text-secondary);">Azure 应用 Client ID</label>
@@ -3452,6 +3465,61 @@ async function startFclLogin() {
     // 在WebView里打开微软登录页，登录后自动重定向到/auth-response完成认证
     window.location.href = data.url;
   } catch(e) { alert('请求失败: ' + e.message); }
+}
+let fclDevicePollTimer = null;
+async function startFclDeviceLogin() {
+  try {
+    const res = await fetch('/api/msa/fcl_device_start', {method: 'POST'});
+    const data = await res.json();
+    if (!data.success) { alert('获取设备码失败: ' + (data.error || '未知错误')); return; }
+    document.getElementById('fclDeviceBox').style.display = 'block';
+    document.getElementById('fclCode').textContent = data.user_code;
+    document.getElementById('fclUri').textContent = data.verification_uri;
+    document.getElementById('fclStatus').textContent = '等待输入代码并登录...';
+    // 自动复制设备码
+    try { navigator.clipboard.writeText(data.user_code); } catch(e) {}
+    // 开始轮询
+    fclDevicePollTimer = setInterval(pollFclDevice, 3000);
+  } catch(e) { alert('请求失败: ' + e.message); }
+}
+async function pollFclDevice() {
+  try {
+    const res = await fetch('/api/msa/fcl_device_poll');
+    const data = await res.json();
+    if (data.success) {
+      clearInterval(fclDevicePollTimer);
+      fclDevicePollTimer = null;
+      document.getElementById('fclStatus').textContent = '✅ 登录成功！欢迎 ' + data.name;
+      alert('登录成功！欢迎 ' + data.name);
+      document.getElementById('fclDeviceBox').style.display = 'none';
+      checkMsaStatus();
+    } else if (data.waiting) {
+      document.getElementById('fclStatus').textContent = data.message || '等待登录...';
+    } else {
+      clearInterval(fclDevicePollTimer);
+      fclDevicePollTimer = null;
+      document.getElementById('fclStatus').textContent = '❌ ' + (data.error || '登录失败');
+      alert('登录失败: ' + (data.error || '未知错误'));
+    }
+  } catch(e) {
+    // 轮询出错不提示，继续等
+  }
+}
+function stopFclDevicePoll() {
+  if (fclDevicePollTimer) {
+    clearInterval(fclDevicePollTimer);
+    fclDevicePollTimer = null;
+  }
+  document.getElementById('fclDeviceBox').style.display = 'none';
+}
+function copyFclCode() {
+  const code = document.getElementById('fclCode').textContent;
+  try {
+    navigator.clipboard.writeText(code);
+    alert('已复制: ' + code);
+  } catch(e) {
+    alert('复制失败，请手动复制');
+  }
 }
 let msaPollTimer = null;
 let msaDeviceCode = null;

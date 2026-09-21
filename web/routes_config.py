@@ -184,6 +184,66 @@ def register(app):
         from core.microsoft_auth import get_fcl_auth_url
         return jsonify({"url": get_fcl_auth_url()})
 
+    @app.route('/api/msa/fcl_device_start', methods=['POST'])
+    def msa_fcl_device_start():
+        """FCL设备码流程：开始登录，返回设备码和验证URL"""
+        from core.microsoft_auth import fcl_get_device_code
+        try:
+            r = fcl_get_device_code()
+            if "user_code" not in r:
+                return jsonify({"success": False, "error": r.get("error_description", str(r))})
+            _msa_state["step"] = "fcl_device"
+            _msa_state["device_code"] = r.get("device_code", "")
+            _msa_state["user_code"] = r.get("user_code", "")
+            _msa_state["verification_uri"] = r.get("verification_uri", "https://www.microsoft.com/link")
+            _msa_state["expires_in"] = r.get("expires_in", 900)
+            print(f"[MSA] FCL设备码获取成功: {r.get('user_code')}")
+            return jsonify({
+                "success": True,
+                "user_code": r.get("user_code"),
+                "device_code": r.get("device_code"),
+                "verification_uri": r.get("verification_uri", "https://www.microsoft.com/link"),
+                "expires_in": r.get("expires_in", 900),
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"success": False, "error": str(e)})
+
+    @app.route('/api/msa/fcl_device_poll', methods=['GET'])
+    def msa_fcl_device_poll():
+        """FCL设备码流程：轮询登录状态"""
+        from core.microsoft_auth import fcl_poll_device_code, full_login_flow
+        device_code = _msa_state.get("device_code", "")
+        if not device_code:
+            return jsonify({"success": False, "error": "未开始设备码登录", "waiting": True})
+        try:
+            r = fcl_poll_device_code(device_code)
+            if "access_token" in r:
+                msa_token = r["access_token"]
+                print(f"[MSA] FCL设备码轮询成功，获取MSA token: {msa_token[:30]}...")
+                result = full_login_flow(msa_token)
+                cfg = config.get_all()
+                cfg["msa_access_token"] = result["access_token"]
+                cfg["msa_uuid"] = result["uuid"]
+                cfg["msa_name"] = result["name"]
+                config.save_config(cfg)
+                _msa_state["step"] = "done"
+                return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"], "waiting": False})
+            elif r.get("error") == "authorization_pending":
+                return jsonify({"success": False, "waiting": True, "message": "等待用户登录..."})
+            elif r.get("error") == "slow_down":
+                return jsonify({"success": False, "waiting": True, "message": "请求过快，稍后重试..."})
+            elif r.get("error") == "expired_token":
+                _msa_state["step"] = "idle"
+                return jsonify({"success": False, "waiting": False, "error": "设备码已过期，请重新开始"})
+            else:
+                return jsonify({"success": False, "waiting": True, "message": r.get("error_description", str(r))})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"success": False, "error": str(e), "waiting": True})
+
     @app.route('/api/msa/status', methods=['GET'])
     def msa_status():
         name = config.get("msa_name", "")
