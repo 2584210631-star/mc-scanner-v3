@@ -23,6 +23,18 @@ except AttributeError:
     app.config["JSON_AS_ASCII"] = False
 
 
+# PWA 文件路由
+@app.route('/manifest.json')
+def _manifest():
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(os.path.dirname(__file__), 'static'), 'manifest.json', mimetype='application/manifest+json')
+
+@app.route('/sw.js')
+def _sw():
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(os.path.dirname(__file__), 'static'), 'sw.js', mimetype='application/javascript')
+
+
 @app.before_request
 def _check_token():
     token = state.get_web_token()
