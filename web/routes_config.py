@@ -126,13 +126,13 @@ def register(app):
 
     @app.route('/api/msa/start', methods=['POST'])
     def msa_start():
-        from core.microsoft_auth import start_device_code
-        data = request.get_json(force=True) or {}
-        cid = data.get("client_id", "")
-        if not cid:
-            return jsonify({"success": False, "error": "请填写Client ID"})
+        from core.microsoft_auth import start_device_code, CLIENT_ID
+        data = request.get_json(silent=True) or {}
+        cid = data.get("client_id", "") or CLIENT_ID
         try:
             r = start_device_code(cid)
+            if "error" in r:
+                return jsonify({"success": False, "error": r.get("error_description", str(r))})
             _msa_state["step"] = "waiting"
             _msa_state["device_code"] = r["device_code"]
             _msa_state["interval"] = r.get("interval", 5)
@@ -140,6 +140,8 @@ def register(app):
             return jsonify({"success": True, "user_code": r["user_code"],
                             "verification_uri": r["verification_uri"], "interval": r["interval"]})
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return jsonify({"success": False, "error": str(e)})
 
     @app.route('/api/msa/poll', methods=['GET', 'POST'])
