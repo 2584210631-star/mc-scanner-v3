@@ -3420,21 +3420,32 @@ async function startMsaLogin() {
 async function submitMsaCode() {
   const input = document.getElementById('msaCodeInput').value.trim();
   if (!input) { alert('请粘贴登录成功后的URL'); return; }
-  if (!input.includes('code=')) {
-    alert('URL里没有code=参数！\n请确认登录成功（不是取消），地址栏应该是 ...?code=xxx...\n注意code只有5分钟有效期，要尽快粘贴');
+  // 支持两种格式：?code=xxx 或 #access_token=xxx
+  let code = null, accessToken = null;
+  if (input.includes('access_token=')) {
+    accessToken = input.split('access_token=')[1].split('&')[0];
+  } else if (input.includes('code=')) {
+    code = input.split('code=')[1].split('&')[0];
+  } else {
+    alert('URL里没有code=或access_token=参数！\n请确认登录成功（不是取消）');
     return;
   }
-  // 从URL中提取code参数
-  let code = input;
-  if (input.includes('code=')) {
-    code = input.split('code=')[1].split('&')[0];
-  }
   try {
-    const res = await fetch('/api/msa/exchange', {
-      method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: 'code=' + encodeURIComponent(code)
-    });
-    const data = await res.json();
+    let res, data;
+    if (accessToken) {
+      // 隐式流程：直接用MSA access_token
+      res = await fetch('/api/msa/token', {
+        method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'access_token=' + encodeURIComponent(accessToken)
+      });
+    } else {
+      // 授权码流程：用code换token
+      res = await fetch('/api/msa/exchange', {
+        method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'code=' + encodeURIComponent(code)
+      });
+    }
+    data = await res.json();
     if (data.success) {
       alert('登录成功！欢迎 ' + data.name);
       document.getElementById('msaCodeInput').value = '';
