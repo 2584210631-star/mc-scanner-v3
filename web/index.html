@@ -1109,6 +1109,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-info" onclick="openBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
         <button class="btn btn-primary" onclick="openBatchAiModal()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
+        <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllServers')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
       </div>
@@ -1163,6 +1164,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
         <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
         <button class="btn btn-primary" onclick="openBatchAiModal('db')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
+        <button class="btn btn-secondary" onclick="toggleAllVisible(this,'dbSelectAll')">全选</button>
         <button class="btn btn-secondary" onclick="exportDb('txt')">导出TXT</button>
         <button class="btn btn-secondary" onclick="exportDb('csv')">导出CSV</button>
         <button class="btn btn-secondary" onclick="exportDb('html')">导出HTML</button>
@@ -1215,6 +1217,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-danger" onclick="openFavBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-info" onclick="openFavBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-primary" onclick="openBatchAiModal('fav')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
+        <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllFav')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
         <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
         <button class="btn btn-secondary" onclick="exportFavorites('txt')">导出TXT</button>
@@ -2765,6 +2768,16 @@ async function confirmWarn() {
   document.getElementById('warnResult').innerHTML = data.success
     ? `<div style="color:#48bb78;">成功！认证模式: ${data.auth_mode}, 发送消息: ${data.messages_sent}条</div>`
     : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+}
+
+function toggleAllVisible(btn, checkboxId) {
+  const cb = document.getElementById(checkboxId);
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  if (checkboxId === 'dbSelectAll') dbToggleSelectAll(cb);
+  else if (checkboxId === 'selectAllFav') toggleSelectAllFav(cb);
+  else toggleSelectAll(cb);
+  btn.textContent = cb.checked ? '取消全选' : '全选';
 }
 
 function toggleSelectAll(cb) {
