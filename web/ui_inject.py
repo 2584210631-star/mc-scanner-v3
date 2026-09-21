@@ -6,12 +6,18 @@ from flask import Response, send_from_directory
 _PERSONA_JS = r"""
 <script>
 (function(){
+  // 人格 label/name/preview 可经 API 自定义，拼 innerHTML 前必须转义（防存储型 XSS）
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
   function upgradePersonaUI(personas) {
     const sel = document.getElementById('aiBotPersonaSelect');
     if (sel && personas && personas.length) {
       const cur = sel.value;
       sel.innerHTML = '<option value="">选择预设人格...</option>' +
-        personas.map(function(p,i){return '<option value="'+i+'">'+(p.label||p.name)+'</option>';}).join('');
+        personas.map(function(p,i){return '<option value="'+i+'">'+esc(p.label||p.name)+'</option>';}).join('');
       if (cur) sel.value = cur;
     }
     var host = document.getElementById('personaCardGrid');
@@ -31,12 +37,12 @@ _PERSONA_JS = r"""
     }
     if (!personas || !personas.length) return;
     host.innerHTML = personas.map(function(p,i){
-      var label = p.label || p.name || ('人格'+(i+1));
-      var prev = (p.preview || p.persona || '').slice(0, 42);
+      var label = esc(p.label || p.name || ('人格'+(i+1)));
+      var prev = esc((p.preview || p.persona || '').slice(0, 42));
       return '<label class="persona-card" data-idx="'+i+'">' +
         '<input type="checkbox" class="persona-cb" value="'+i+'">' +
         '<div class="pc-label">'+label+'</div>' +
-        '<div class="pc-name">'+(p.name||'')+'</div>' +
+        '<div class="pc-name">'+esc(p.name||'')+'</div>' +
         '<div class="pc-preview">'+prev+'</div></label>';
     }).join('');
     host.querySelectorAll('.persona-card').forEach(function(card){

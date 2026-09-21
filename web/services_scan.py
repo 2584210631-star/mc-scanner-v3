@@ -220,7 +220,9 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     timeout=scan_cfg.get("timeout", 4.0),
                     auth_check=scan_cfg.get("auth_check", True),
                 )
-                results = engine.probe_list(open_ports, progress_callback=_on_progress)
+                # ScanEngine.probe_list 无 progress_callback 参数（原调用抛 TypeError，
+                # 导致 masscan 导入后的 SLP 探测 100% 失败）；先恢复功能，进度由任务完成态兜底
+                results = engine.probe_list(open_ports)
             else:
                 results = [{"ip": ip, "port": port, "state": "open",
                             "version": "", "motd": "", "players_online": 0, "players_max": 0,

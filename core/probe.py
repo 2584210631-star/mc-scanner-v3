@@ -5,6 +5,7 @@
 """
 import json
 import socket
+import threading
 import time
 from .buffer import (write_varint, write_string, read_string, write_uuid,
                      read_varint, offline_uuid)
@@ -15,26 +16,31 @@ from .protocol import COMMON_PROTOCOLS
 socket_timeout = socket.timeout
 
 # SLP探测缓存：60秒内同一IP:端口+协议不重复探测
+# 多线程扫描（同步引擎 32 workers / 异步引擎 executor）并发读写，须加锁，
+# 否则清理分支的"读-删"之间存在竞态（其他线程先删该键 → KeyError）
 _slp_cache = {}
 _slp_cache_ttl = 60.0
+_slp_cache_lock = threading.Lock()
 
 def _slp_cache_get(host, port, protocol_version):
-    key = (host, port, protocol_version)
-    item = _slp_cache.get(key)
-    if item and (time.time() - item[0]) < _slp_cache_ttl:
-        return item[1]
+    with _slp_cache_lock:
+        key = (host, port, protocol_version)
+        item = _slp_cache.get(key)
+        if item and (time.time() - item[0]) < _slp_cache_ttl:
+            return item[1]
     return None
 
 def _slp_cache_set(host, port, protocol_version, result):
-    _slp_cache[(host, port, protocol_version)] = (time.time(), result)
-    # 缓存超过10000条时清理旧的；超20000条直接清空兜底，防止无界增长
-    if len(_slp_cache) > 10000:
-        cutoff = time.time() - _slp_cache_ttl
-        for k in list(_slp_cache.keys()):
-            if _slp_cache[k][0] < cutoff:
-                del _slp_cache[k]
-        if len(_slp_cache) > 20000:
-            _slp_cache.clear()
+    with _slp_cache_lock:
+        _slp_cache[(host, port, protocol_version)] = (time.time(), result)
+        # 缓存超过10000条时清理旧的；超20000条直接清空兜底，防止无界增长
+        if len(_slp_cache) > 10000:
+            cutoff = time.time() - _slp_cache_ttl
+            for k in list(_slp_cache.keys()):
+                if _slp_cache[k][0] < cutoff:
+                    del _slp_cache[k]
+            if len(_slp_cache) > 20000:
+                _slp_cache.clear()
 
 # 认证状态常量
 STATE_ONLINE = "online"        # 正版验证

@@ -161,6 +161,9 @@ class AdaptiveRateController:
     def _add_event(self, evt_type: str, msg: str):
         event = {"type": evt_type, "msg": msg, "ts": time.strftime("%H:%M:%S")}
         self.events.append(event)
+        # 事件记录有界（portscan.py 用 [-10:] 取最近），防长扫描无界增长
+        if len(self.events) > 100:
+            del self.events[: len(self.events) - 100]
         self.event_cb(event)
 
 

@@ -134,8 +134,9 @@ class MCBot:
         self.player_callback = None  # callable(name: str, action: str) -> None  action: join/leave
         # 模组服握手期间观察到的插件频道（Forge/Fabric 等）
         self.modded_channels = set()
-        # 聊天消息监听（用于插件抓取等）
+        # 聊天消息监听（用于插件抓取等）；有界：防长时运行无界增长
         self.chat_messages: list[str] = []
+        self.MAX_CHAT_MESSAGES = 2000
         self._chat_lock = threading.Lock()
         self.chat_callback = None  # callable(text: str, sender: str) -> None
         self.protocol_handler = None  # 版本协议处理器，按版本模块化
@@ -558,6 +559,10 @@ class MCBot:
                         if text:
                             with self._chat_lock:
                                 self.chat_messages.append(text)
+                                # 截断而非 deque：保持 routes_tools/plugins/command_runner 的
+                                # [before:] 切片用法兼容，同时防止长时运行内存无界增长
+                                if len(self.chat_messages) > self.MAX_CHAT_MESSAGES:
+                                    del self.chat_messages[: len(self.chat_messages) - self.MAX_CHAT_MESSAGES]
                             if self.chat_callback:
                                 try:
                                     self.chat_callback(text, sender)

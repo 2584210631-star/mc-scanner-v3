@@ -154,6 +154,8 @@ PRESET_SCRIPTS = {
         delay=1.0,
         stop_on_error=False,
     ),
+    # ⚠ 占位示例：password 不是真实密码！实际使用请用命令行 --authme 你的密码
+    # （走 bot.authme_login 处理，无需手写此脚本），或修改下面的命令为真实密码
     "auth": CommandScript(
         commands=[
             "login password",

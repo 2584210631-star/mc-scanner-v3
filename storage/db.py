@@ -11,6 +11,8 @@ import threading
 import atexit
 from datetime import datetime, timezone, timedelta
 
+import logger
+
 # 线程局部连接池：每个线程每个db_path复用一个连接，避免频繁创建
 _local = threading.local()
 # 全局连接注册表，用于程序退出时统一关闭（防文件描述符泄漏）
@@ -152,8 +154,9 @@ def upsert_many(db_path: str, records: list) -> int:
                 'INSERT INTO server_popularity (ip, port, players_online, players_max, recorded_at) VALUES (?,?,?,?,?)',
                 pop_rows
             )
-    except Exception:
-        pass
+    except Exception as e:
+        # 人数趋势是附加数据，失败不阻塞主流程，但要留痕（原为静默吞错，难排查）
+        logger.warning(f"记录人数趋势失败: {e}")
     conn.commit()
     return len(rows)
 
