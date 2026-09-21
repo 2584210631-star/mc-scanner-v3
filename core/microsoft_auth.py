@@ -10,7 +10,7 @@ import hashlib
 import urllib.request
 import urllib.parse
 
-CLIENT_ID = "00000000402b5328"  # 官方MC客户端ID
+CLIENT_ID = "872cd9fa-d31f-45e0-9eab-6e460a0e7d1f"  # Minecraft for Windows
 SCOPE = "XboxLive.signin offline_access"
 
 def _post(url, data=None, headers=None):
