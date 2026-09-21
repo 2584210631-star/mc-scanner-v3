@@ -184,6 +184,10 @@ def register(app):
         code = request.form.get("code", "") or (request.get_json(silent=True) or {}).get("code", "")
         if not code:
             return jsonify({"success": False, "error": "缺少code"})
+        # URL解码
+        import urllib.parse as _up
+        code = _up.unquote(code)
+        print(f"[MSA] 收到code: {code[:30]}... (长度{len(code)})")
         try:
             r = exchange_code(code)
             if "access_token" not in r:
