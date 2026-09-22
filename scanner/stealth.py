@@ -48,11 +48,11 @@ SCAN_MODES = {
         batch_size=400, batch_cooldown=1.5,
         shuffle=True, adaptive=True, max_rate=40,
     ),
-    # 平衡模式（默认）：接近 v3 现状，但默认随机化 + 自适应
+    # 平衡模式（默认）：保守默认，接近 stealth 但保留一定速度
     "balanced": ScanProfile(
-        mode="balanced", concurrency=2000, rate=30,
-        batch_size=5000, batch_cooldown=0.0,
-        shuffle=True, adaptive=True, max_rate=60,
+        mode="balanced", concurrency=400, rate=25,
+        batch_size=2000, batch_cooldown=0.5,
+        shuffle=True, adaptive=True, max_rate=50,
     ),
     # 激进模式：仅内网/信任网络，关闭保护
     "aggressive": ScanProfile(

@@ -8,8 +8,17 @@ import struct
 import time
 import threading
 import socket
+import os
 from dataclasses import dataclass, field
 from typing import Optional
+
+# 正版调试开关：默认关闭，设环境变量 MC_DEBUG=1 开启
+_DEBUG = os.environ.get("MC_DEBUG", "") == "1"
+
+def _dprint(msg):
+    """正版调试输出，默认关闭"""
+    if _DEBUG:
+        print(msg)
 
 from .buffer import (write_varint, write_string, read_varint_from_stream,
                      read_string_from_stream, read_uuid_from_stream,
@@ -166,11 +175,11 @@ class MCBot:
                         _token = _accounts[0].get("access_token")
                         _uuid = _accounts[0].get("uuid")
                         _name = _accounts[0].get("name")
-                # 兼容旧字段
+                # 兼容旧字段（优先mc_，兜底msa_）
                 if not _token:
-                    _token = _cfg.get("msa_access_token", "") or None
-                    _uuid = _cfg.get("msa_uuid", "") or None
-                    _name = _cfg.get("msa_name", "")
+                    _token = _cfg.get("mc_access_token", "") or _cfg.get("msa_access_token", "") or None
+                    _uuid = _cfg.get("mc_uuid", "") or _cfg.get("msa_uuid", "") or None
+                    _name = _cfg.get("mc_name", "") or _cfg.get("msa_name", "")
                 if _token and _uuid:
                     self.msa_token = _token
                     self.msa_uuid = _uuid
@@ -202,10 +211,10 @@ class MCBot:
                             self.msa_uuid = _accounts[0].get("uuid")
                             self.username = _accounts[0].get("name", self.username)
                     if not self.msa_token:
-                        self.msa_token = _cfg.get("msa_access_token", "") or None
-                        self.msa_uuid = _cfg.get("msa_uuid", "") or None
+                        self.msa_token = _cfg.get("mc_access_token", "") or _cfg.get("msa_access_token", "") or None
+                        self.msa_uuid = _cfg.get("mc_uuid", "") or _cfg.get("msa_uuid", "") or None
                 if self.msa_token and self.msa_uuid and not self.username:
-                    self.username = _cfg.get("msa_name", self.username)
+                    self.username = _cfg.get("mc_name", "") or _cfg.get("msa_name", self.username)
             except Exception:
                 pass
         # 获取服务器信息（protocol_version已知时跳过探测，直接握手，避免重复连接）
@@ -258,7 +267,7 @@ class MCBot:
                 while self.conn.state == PROTO_STATE_LOGIN:
                     resp_id, resp_payload = self.conn.recv_packet(timeout=self.timeout)
                     if self.msa_token:
-                        print(f"[正版调试] 收到Login包: id=0x{resp_id:02x}, payload_len={len(resp_payload)}")
+                        _dprint(f"[正版调试] 收到Login包: id=0x{resp_id:02x}, payload_len={len(resp_payload)}")
                     if resp_id == self.login_packets["cb_disconnect"]:
                         msg = read_string_from_stream(BytesStream(resp_payload))
                         low = msg.lower()
@@ -278,11 +287,11 @@ class MCBot:
                         pubkey_bytes = s.read(pubkey_len)
                         vtoken_len = read_varint_from_stream(s)
                         vtoken = s.read(vtoken_len)
-                        print(f"[正版调试] 收到Encryption Request: server_id={server_id!r}, pubkey_len={pubkey_len}, vtoken_len={vtoken_len}")
+                        _dprint(f"[正版调试] 收到Encryption Request: server_id={server_id!r}, pubkey_len={pubkey_len}, vtoken_len={vtoken_len}")
                         # 生成shared secret
                         import os as _os
                         shared_secret = _os.urandom(16)
-                        print(f"[正版调试] 生成shared_secret: {shared_secret.hex()[:16]}...")
+                        _dprint(f"[正版调试] 生成shared_secret: {shared_secret.hex()[:16]}...")
                         # RSA加密（优先pycryptodome，备选pyjnius/APK）
                         enc_secret = None
                         enc_vtoken = None
@@ -294,7 +303,7 @@ class MCBot:
                             cipher = PKCS1_v1_5.new(pub_key)
                             enc_secret = cipher.encrypt(shared_secret)
                             enc_vtoken = cipher.encrypt(vtoken)
-                            print(f"[正版调试] RSA加密成功(pycryptodome): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
+                            _dprint(f"[正版调试] RSA加密成功(pycryptodome): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
                         except ImportError:
                             pass
                         # 备选pyjnius（APK环境，调用Java Cipher）
@@ -311,7 +320,7 @@ class MCBot:
                                 cipher.init(Cipher.ENCRYPT_MODE, pubKey)
                                 enc_secret = bytes(cipher.doFinal(shared_secret))
                                 enc_vtoken = bytes(cipher.doFinal(vtoken))
-                                print(f"[正版调试] RSA加密成功(pyjnius): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
+                                _dprint(f"[正版调试] RSA加密成功(pyjnius): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
                             except ImportError:
                                 raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
                         # 计算server ID hash（Java风格有符号十六进制，和Minecraft服务器一致）
@@ -319,12 +328,12 @@ class MCBot:
                         _hash_bytes = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).digest()
                         _bigint = int.from_bytes(_hash_bytes, 'big', signed=True)
                         sid_hash = ('-' + format(-_bigint, 'x')) if _bigint < 0 else format(_bigint, 'x')
-                        print(f"[正版调试] server_id_hash={sid_hash}")
+                        _dprint(f"[正版调试] server_id_hash={sid_hash}")
                         # 向Mojang join（selectedProfile必须是不带横线的32字符UUID）
                         from .microsoft_auth import join_server
                         _uuid_no_dash = self.msa_uuid.replace('-', '') if self.msa_uuid else ''
                         _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
-                        print(f"[正版调试] join_server返回: {_join_ok}, uuid={_uuid_no_dash}")
+                        _dprint(f"[正版调试] join_server返回: {_join_ok}, uuid={_uuid_no_dash}")
                         if not _join_ok:
                             raise ConnectionError("正版joinServer验证失败")
                         # 发送encryption response（注意：长度必须用VarInt，不能用1字节，RSA加密后256字节会溢出）
@@ -334,11 +343,11 @@ class MCBot:
                         resp += enc_secret
                         resp += write_varint(len(enc_vtoken))
                         resp += enc_vtoken
-                        print(f"[正版调试] 发送Encryption Response: 总长度={len(resp)}")
+                        _dprint(f"[正版调试] 发送Encryption Response: 总长度={len(resp)}")
                         self.conn.send_packet(0x01, resp)
                         # 启用AES加密
                         self.conn.enable_encryption(shared_secret)
-                        print(f"[正版调试] AES加密已启用: backend={self.conn._crypto_backend}")
+                        _dprint(f"[正版调试] AES加密已启用: backend={self.conn._crypto_backend}")
                         continue
                     if resp_id == self.login_packets["cb_compress"]:
                         threshold = read_varint_from_stream(BytesStream(resp_payload))
@@ -350,16 +359,16 @@ class MCBot:
                         self._handle_login_plugin_request(resp_payload)
                         continue
                     if resp_id == self.login_packets["cb_success"]:
-                        print(f"[正版调试] 收到Login Success! payload_len={len(resp_payload)}")
+                        _dprint(f"[正版调试] 收到Login Success! payload_len={len(resp_payload)}")
                         # 解析服务器返回的真实UUID（离线服可能与offline_uuid不同）
                         try:
                             ss = BytesStream(resp_payload)
                             real_uuid = read_uuid_from_stream(ss)
                             if real_uuid:
                                 self.uuid = real_uuid
-                                print(f"[正版调试] 服务器返回UUID: {real_uuid}")
+                                _dprint(f"[正版调试] 服务器返回UUID: {real_uuid}")
                         except Exception as _e:
-                            print(f"[正版调试] 解析UUID失败: {_e}")
+                            _dprint(f"[正版调试] 解析UUID失败: {_e}")
                         break
 
                 # Configuration 阶段（仅 1.20.2+ 需要 Login Acknowledged）

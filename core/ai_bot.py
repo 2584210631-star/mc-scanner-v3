@@ -239,6 +239,13 @@ class AIBotSession:
 
         while not self.stop_event.is_set():
             try:
+                # 重连前关闭旧bot，避免线程/FD泄漏
+                if self.bot is not None:
+                    try:
+                        self.bot.close()
+                    except Exception:
+                        pass
+                    self.bot = None
                 self.bot = MCBot(host=self.host, port=self.port, username=self.username,
                                  timeout=self.timeout, protocol_version=self.protocol_version)
                 self.bot.chat_callback = self._on_chat
@@ -254,7 +261,10 @@ class AIBotSession:
                     try:
                         self.bot.authme_login(self.authme_password, register=False)
                     except Exception:
-                        pass
+                        try:
+                            self.bot.authme_login(self.authme_password, register=True)
+                        except Exception:
+                            pass
                 while not self.stop_event.is_set():
                     if not getattr(self.bot, "connected", True):
                         with self.lock:
