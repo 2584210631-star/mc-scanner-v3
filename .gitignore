@@ -72,3 +72,11 @@ observer_logs/
 
 # 本地私密配置
 config.local.json
+config.json
+
+# 个人/实验脚本（不进仓库）
+find_*.py
+run_*_bot.py
+monitor_*.py
+debug_*.py
+!tests/
