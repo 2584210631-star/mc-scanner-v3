@@ -106,6 +106,30 @@ def _check_auth():
 
 
 @app.before_request
+def _audit_log():
+    """写操作审计日志：记录所有POST/DELETE/PUT请求"""
+    try:
+        if request.method in ("POST", "DELETE", "PUT") and request.path.startswith("/api/"):
+            ip = request.remote_addr or "unknown"
+            # 提取目标信息（从请求体里取ip/port/target等关键字段）
+            target = ""
+            try:
+                data = request.get_json(silent=True) or {}
+                if data.get("ip") and data.get("port"):
+                    target = f" {data['ip']}:{data['port']}"
+                elif data.get("targets"):
+                    target = f" targets={str(data['targets'])[:50]}"
+                elif data.get("username"):
+                    target = f" user={data['username']}"
+            except Exception:
+                pass
+            logger.info(f"[审计] {ip} {request.method} {request.path}{target}")
+    except Exception:
+        pass
+    return None
+
+
+@app.before_request
 def _serious_mode_check():
     """正经模式：危险操作需要confirm=true确认"""
     try:
