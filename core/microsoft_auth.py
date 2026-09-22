@@ -253,3 +253,36 @@ def join_server(mc_token, uuid, server_id_hash):
     except Exception as e:
         print(f"[正版] joinServer失败: {e}")
         return False
+
+
+def refresh_msa_token(refresh_token, client_id=None):
+    """用refresh_token刷新MSA access_token。返回 {access_token, refresh_token} 或 None"""
+    if not refresh_token:
+        return None
+    cid = client_id or FCL_CLIENT_ID  # FCL流程用FCL_CLIENT_ID
+    data = {
+        "client_id": cid,
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "scope": SCOPE,
+    }
+    r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", data)
+    if r.get("access_token"):
+        return {"access_token": r["access_token"], "refresh_token": r.get("refresh_token", refresh_token)}
+    print(f"[正版] MSA token刷新失败: {r.get('error', 'unknown')}")
+    return None
+
+
+def refresh_mc_token(refresh_token, client_id=None):
+    """完整刷新流程：MSA refresh_token → 新MC token。返回 {access_token, uuid, name, refresh_token} 或 None"""
+    msa = refresh_msa_token(refresh_token, client_id)
+    if not msa:
+        return None
+    try:
+        result = full_login_flow(msa["access_token"])
+        result["refresh_token"] = msa["refresh_token"]
+        print(f"[正版] token自动刷新成功: {result.get('name')}")
+        return result
+    except Exception as e:
+        print(f"[正版] MC token刷新失败: {e}")
+        return None
