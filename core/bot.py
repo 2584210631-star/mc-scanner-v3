@@ -276,14 +276,17 @@ class MCBot:
                                 print(f"[正版调试] RSA加密成功(pyjnius): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
                             except ImportError:
                                 raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
-                        # 计算server ID hash
+                        # 计算server ID hash（Java风格有符号十六进制，和Minecraft服务器一致）
                         import hashlib as _hl
-                        sid_hash = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).hexdigest()
+                        _hash_bytes = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).digest()
+                        _bigint = int.from_bytes(_hash_bytes, 'big', signed=True)
+                        sid_hash = ('-' + format(-_bigint, 'x')) if _bigint < 0 else format(_bigint, 'x')
                         print(f"[正版调试] server_id_hash={sid_hash}")
-                        # 向Mojang join
+                        # 向Mojang join（selectedProfile必须是不带横线的32字符UUID）
                         from .microsoft_auth import join_server
-                        _join_ok = join_server(self.msa_token, self.msa_uuid, sid_hash)
-                        print(f"[正版调试] join_server返回: {_join_ok}")
+                        _uuid_no_dash = self.msa_uuid.replace('-', '') if self.msa_uuid else ''
+                        _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
+                        print(f"[正版调试] join_server返回: {_join_ok}, uuid={_uuid_no_dash}")
                         if not _join_ok:
                             raise ConnectionError("正版joinServer验证失败")
                         # 发送encryption response（注意：长度必须用VarInt，不能用1字节，RSA加密后256字节会溢出）
