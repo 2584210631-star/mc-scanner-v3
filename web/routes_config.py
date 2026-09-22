@@ -36,7 +36,7 @@ def register(app):
                 pass
         return accounts
 
-    def _msa_save_account(name, uuid, access_token):
+    def _msa_save_account(name, uuid, access_token, refresh_token=None):
         """保存/更新一个正版账户，并设为活跃"""
         accounts = _msa_accounts()
         found = False
@@ -44,16 +44,23 @@ def register(app):
             if a.get("uuid") == uuid:
                 a["name"] = name
                 a["access_token"] = access_token
+                if refresh_token:
+                    a["refresh_token"] = refresh_token
                 found = True
                 break
         if not found:
-            accounts.append({"name": name, "uuid": uuid, "access_token": access_token})
+            acct = {"name": name, "uuid": uuid, "access_token": access_token}
+            if refresh_token:
+                acct["refresh_token"] = refresh_token
+            accounts.append(acct)
         config.set("msa_accounts", accounts)
         config.set("msa_active_uuid", uuid)
         # 新字段（清晰命名）
         config.set("mc_access_token", access_token)
         config.set("mc_uuid", uuid)
         config.set("mc_name", name)
+        if refresh_token:
+            config.set("msa_refresh_token", refresh_token)
         # 兼容旧字段
         config.set("msa_access_token", access_token)
         config.set("msa_uuid", uuid)
@@ -224,9 +231,10 @@ def register(app):
                 # authorization_pending 或 slow_down 继续等
                 return jsonify({"success": False, "waiting": True, "error": err})
             msa_token = r["access_token"]
+            refresh_token = r.get("refresh_token", "")
             print(f"[MSA] 轮询成功，获取MSA token: {msa_token[:30]}...")
             result = full_login_flow(msa_token)
-            _msa_save_account(result["name"], result["uuid"], result["access_token"])
+            _msa_save_account(result["name"], result["uuid"], result["access_token"], refresh_token)
             _msa_state["step"] = "done"
             return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"]})
         except Exception as e:
@@ -277,9 +285,10 @@ def register(app):
             r = fcl_poll_device_code(device_code)
             if "access_token" in r:
                 msa_token = r["access_token"]
+                refresh_token = r.get("refresh_token", "")
                 print(f"[MSA] FCL设备码轮询成功，获取MSA token: {msa_token[:30]}...")
                 result = full_login_flow(msa_token)
-                _msa_save_account(result["name"], result["uuid"], result["access_token"])
+                _msa_save_account(result["name"], result["uuid"], result["access_token"], refresh_token)
                 _msa_state["step"] = "done"
                 return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"], "waiting": False})
             elif r.get("error") == "authorization_pending":
@@ -387,8 +396,9 @@ def register(app):
             if "access_token" not in r:
                 return jsonify({"success": False, "error": r.get("error_description", str(r))})
             msa_token = r["access_token"]
+            refresh_token = r.get("refresh_token", "")
             result = full_login_flow(msa_token)
-            _msa_save_account(result["name"], result["uuid"], result["access_token"])
+            _msa_save_account(result["name"], result["uuid"], result["access_token"], refresh_token)
             return jsonify({"success": True, "name": result["name"]})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)})

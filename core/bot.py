@@ -97,6 +97,7 @@ class MCBot:
         # 正版认证
         self.msa_token = None
         self.msa_uuid = None
+        self._refresh_token = None
         # 创建时自动加载正版token（这样观察者列表能直接显示正版用户名）
         if self.use_premium:
             try:
@@ -114,11 +115,13 @@ class MCBot:
                                 _token = _a.get("access_token")
                                 _uuid = _a.get("uuid")
                                 _name = _a.get("name")
+                                self._refresh_token = _a.get("refresh_token", "")
                                 break
                     if not _token:
                         _token = _accounts[0].get("access_token")
                         _uuid = _accounts[0].get("uuid")
                         _name = _accounts[0].get("name")
+                        self._refresh_token = _accounts[0].get("refresh_token", "")
                 # 兼容旧字段（优先mc_，兜底msa_）
                 if not _token:
                     _token = _cfg.get("mc_access_token", "") or _cfg.get("msa_access_token", "") or None
@@ -149,11 +152,13 @@ class MCBot:
                                     self.msa_token = _a.get("access_token")
                                     self.msa_uuid = _a.get("uuid")
                                     self.username = _a.get("name", self.username)
+                                    self._refresh_token = _a.get("refresh_token", "")
                                     break
                         if not self.msa_token:
                             self.msa_token = _accounts[0].get("access_token")
                             self.msa_uuid = _accounts[0].get("uuid")
                             self.username = _accounts[0].get("name", self.username)
+                            self._refresh_token = _accounts[0].get("refresh_token", "")
                     if not self.msa_token:
                         self.msa_token = _cfg.get("mc_access_token", "") or _cfg.get("msa_access_token", "") or None
                         self.msa_uuid = _cfg.get("mc_uuid", "") or _cfg.get("msa_uuid", "") or None
@@ -274,10 +279,33 @@ class MCBot:
                         sid_hash = ('-' + format(-_bigint, 'x')) if _bigint < 0 else format(_bigint, 'x')
                         _dprint(f"[正版调试] server_id_hash={sid_hash}")
                         # 向Mojang join（selectedProfile必须是不带横线的32字符UUID）
-                        from .microsoft_auth import join_server
+                        from .microsoft_auth import join_server, refresh_mc_token
                         _uuid_no_dash = self.msa_uuid.replace('-', '') if self.msa_uuid else ''
                         _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
                         _dprint(f"[正版调试] join_server返回: {_join_ok}, uuid={_uuid_no_dash}")
+                        if not _join_ok and self._refresh_token:
+                            # token可能过期，尝试自动刷新
+                            print("[正版] joinServer失败，尝试自动刷新token...")
+                            _refreshed = refresh_mc_token(self._refresh_token)
+                            if _refreshed and _refreshed.get("access_token"):
+                                self.msa_token = _refreshed["access_token"]
+                                self._refresh_token = _refreshed.get("refresh_token", self._refresh_token)
+                                # 更新配置中的token
+                                try:
+                                    import config as _cfg
+                                    _accounts = _cfg.get("msa_accounts", []) or []
+                                    for _a in _accounts:
+                                        if _a.get("uuid") == self.msa_uuid:
+                                            _a["access_token"] = self.msa_token
+                                            _a["refresh_token"] = self._refresh_token
+                                            break
+                                    _cfg.set("msa_accounts", _accounts)
+                                    _cfg.set("mc_access_token", self.msa_token)
+                                    _cfg.save_config()
+                                except Exception:
+                                    pass
+                                _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
+                                print(f"[正版] 刷新后joinServer: {'成功' if _join_ok else '失败'}")
                         if not _join_ok:
                             raise ConnectionError("正版joinServer验证失败")
                         # 发送encryption response（注意：长度必须用VarInt，不能用1字节，RSA加密后256字节会溢出）
