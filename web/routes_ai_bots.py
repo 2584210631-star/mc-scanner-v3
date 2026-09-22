@@ -55,6 +55,7 @@ def register(app):
             duration=float(data.get("duration", 0) or 0),
             protocol_version=data.get("protocol_version"),
             ai_config=ai_cfg,
+            use_premium=bool(data.get("use_premium", True)),
         )
         session.session_id = session_id
         session.start()

@@ -1297,6 +1297,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group"><label>端口</label><input type="number" id="aiPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="aiUsername" value="StoryBot"></div>
         <div class="form-group"><label>AuthMe密码</label><input type="text" id="aiAuthme" placeholder="可选"></div>
+        <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="aiPremium" checked> 正版验证</label></div>
       </div>
       <div class="form-group"><label>API Key（留空用全局配置）</label><input type="password" id="aiApiKey" placeholder="sk-..."></div>
       <div style="display:flex;gap:8px;margin-top:8px;">
@@ -1373,6 +1374,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div class="form-row">
       <input type="password" id="aiBotAuthme" placeholder="AuthMe密码(可选)" style="flex:1">
       <input type="number" id="aiBotDuration" placeholder="时长秒(0=无限)" value="0" style="width:120px">
+      <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="aiBotPremium" checked> 正版验证</label>
     </div>
     <div class="form-row">
       <select id="aiBotPersonaSelect" onchange="applyPresetPersona()" style="width:150px">
@@ -1484,6 +1486,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>端口</label><input type="number" id="storyPort" value="25565" style="width:100px"></div>
       <div class="form-group"><label>用户名</label><input type="text" id="storyUser" value="StoryBot" style="width:120px"></div>
       <div class="form-group"><label>AuthMe</label><input type="password" id="storyAuthme" placeholder="可选" style="width:100px"></div>
+      <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="storyPremium" checked> 正版</label></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <button class="btn btn-primary" onclick="storyGenerate()">仅生成预览</button>
@@ -2921,6 +2924,7 @@ function _aiParams() {
     port: parseInt(document.getElementById('aiPort').value) || 25565,
     username: document.getElementById('aiUsername').value,
     authme_password: document.getElementById('aiAuthme').value || null,
+    use_premium: document.getElementById('aiPremium').checked,
   };
 }
 async function aiGenerateOnly() {
@@ -3003,6 +3007,7 @@ async function storyGenerateAndSend() {
         port: parseInt(document.getElementById('storyPort').value) || 25565,
         username: document.getElementById('storyUser').value || 'StoryBot',
         authme_password: document.getElementById('storyAuthme').value || null,
+        use_premium: document.getElementById('storyPremium').checked,
       })
     });
     const data = await res.json();
@@ -4162,6 +4167,7 @@ function startAiBot() {
       username: document.getElementById('aiBotName').value || 'AIBot',
       authme_password: document.getElementById('aiBotAuthme').value || null,
       duration: parseInt(document.getElementById('aiBotDuration').value) || 0,
+      use_premium: document.getElementById('aiBotPremium').checked,
       ai_config: {
         persona: document.getElementById('aiBotPersona').value,
         reply_enabled: document.getElementById('aiBotReply').checked,
