@@ -270,7 +270,7 @@ def _execute_tool(tool, args):
             sid = f"assistant_{state._ai_bot_seq}"
             session = AIBotSession(
                 host=host, port=port, username="AssistantBot",
-                authme_password="""", timeout=20, duration=0,
+                authme_password=config.get("authme_password", ""), timeout=20, duration=0,
                 ai_config={
                     "api_key": api_key, "base_url": base_url, "model": model,
                     "persona": "你是一个MC玩家，喜欢和人聊天，说话简短有趣，不超过30字。",
@@ -301,7 +301,7 @@ def _execute_tool(tool, args):
             group_id = multi_ai_bot.start_group(
                 host=host, port=port, bot_count=bot_count,
                 topic=topic, duration=0,
-                authme_password="""",
+                authme_password=config.get("authme_password", ""),
                 ai_config=ai_cfg,
             )
             return f"多AI群聊已启动：{host}:{port}，{bot_count}个AI互喷，话题：{topic}，群ID：{group_id}"
@@ -315,7 +315,7 @@ def _execute_tool(tool, args):
         if not host:
             return "错误：没有指定服务器地址"
         try:
-            session = ObserverSession(host, port, username, authme_password="""", timeout=20, duration=0)
+            session = ObserverSession(host, port, username, authme_password=config.get("authme_password", ""), timeout=20, duration=0)
             session.session_id = f"{int(time.time()*1000)}-{os.getpid()}-observer"
             session.thread = threading.Thread(target=session.run, daemon=True)
             with observer_lock:
@@ -476,7 +476,7 @@ def _assistant_keyword_match(msg):
             state._ai_bot_seq += 1
             sid = f"assistant_{state._ai_bot_seq}"
             session = AIBotSession(host=host, port=port, username="AssistantBot",
-                authme_password="""", timeout=20, duration=0,
+                authme_password=config.get("authme_password", ""), timeout=20, duration=0,
                 ai_config={"api_key": config.get("ai_api_key",""), "base_url": config.get("ai_base_url","https://api.openai.com/v1"),
                     "model": config.get("ai_model","gpt-3.5-turbo"), "persona": "你是一个MC玩家，喜欢和人聊天，说话简短有趣。",
                     "reply_enabled": True, "reply_cooldown": config.get("ai_reply_cooldown", 2.0), "trigger_keywords": [], "auto_talk_enabled": False})
