@@ -1,22 +1,55 @@
-# MC Scanner v3 - 来源与致谢
+# MC Scanner v3 - 来源与许可审计
 
-本项目整合了多个开源项目的优点，在此致谢。
+本项目整合了多个开源项目的设计思路，在此致谢并明确许可边界。
 
-## 直接改编（保留原许可）
+## 许可状态
 
-无。本项目所有代码为重新实现，采用 MIT 许可。
+- **本项目许可**：MIT License
+- **创建时间**：2026年9月
+- **代码性质**：全部为重新实现，未直接复制任何 GPL 代码
 
-## 实际参考（代码中有明确引用）
+## 前身项目
 
-- **2584210631-star/mc-scanner** (v1/v2) — 本项目前身，功能完整性、协议实现、Web 面板设计
-- **matscan** — 两阶段分离架构、扫描引擎设计、被动/主动协议指纹识别（代码中多处标注参考）
-- **PrismarineJS/minecraft-data** — 协议数据包 ID 数据源（`tools/gen_packets.py` 自动下载生成）
+| 项目 | 许可 | 关系 | 说明 |
+|------|------|------|------|
+| mc-scanner (v1) | MIT | 前身 | 初始版本，纯标准库实现，协议表自动生成 |
+| mc-scanner-v2 (v2) | GPL-3.0 | 前身 | 重构版本，NOTICE 标注参考 14 个项目；v3 未继承其代码，仅继承设计思路 |
 
-## 许可说明
+**重要说明**：v2 采用 GPL-3.0 并标注改编自 mdberkey 等项目。v3 为独立重新实现，不包含 v2 的任何代码文件，因此不构成 GPL 衍生作品。如对许可边界有疑问，建议咨询法律专业人士。
 
-本项目整体采用 **MIT License**。所有代码均为重新实现，未直接复制 GPL 代码。
-协议数据包 ID 信息来自 PrismarineJS/minecraft-data（MIT License）。
+## 设计思路参考（非代码复制）
+
+| 来源 | 参考内容 | 对应模块 |
+|------|----------|----------|
+| **matscan** | 两阶段分离架构（端口探活→协议探测）、智能重扫策略、被动/主动协议指纹 | `scanner/masscan.py`, `scanner/engine.py`, `core/probe.py` |
+| **mdberkey/minecraft-protocol** | Minecraft 协议握手流程、加密握手思路 | `core/bot.py`, `core/conn.py` |
+| **PrismarineJS/minecraft-data** | 协议数据包 ID 数据源 | `tools/gen_packets.py`（自动下载生成，MIT 许可） |
+| **Fold Craft Launcher (FCL)** | 微软 OAuth 设备码流程的 client_id | `core/microsoft_auth.py`（仅使用公开 client_id） |
+
+## 直接依赖（第三方库）
+
+| 库 | 许可 | 用途 |
+|----|------|------|
+| Flask | BSD-3-Clause | Web 框架（`libs/flask/`） |
+| pycryptodome | BSD-2-Clause | AES/RSA 加密（可选） |
+| cryptography | Apache-2.0/BSD | AES/CFB8 加密（推荐） |
+| simdjson | Apache-2.0 | JSON 加速（`libs/csimdjson*.so`） |
+| uvloop | MIT | 异步事件循环加速（`libs/uvloop/`） |
+
+## 代码中的参考标注
+
+以下文件包含明确的"参考"注释，标明设计思路来源：
+- `core/bot.py` — 加密握手参考 Minecraft 官方协议文档
+- `core/conn.py` — AES/CFB8 实现参考 Java Cipher 行为
+- `scanner/masscan.py` — 两阶段架构参考 matscan 设计
+- `core/microsoft_auth.py` — OAuth 流程参考 FCL 开源实现
 
 ## 免责声明
 
 本工具仅供安全研究和授权测试使用。使用者需自行承担使用本工具的法律责任。
+扫描、登录、发消息等功能仅可用于：
+1. 自己拥有或已获书面授权的服务器
+2. 内网安全测试
+3. 授权的渗透测试评估
+
+禁止用于未授权访问、骚扰、破坏他人服务器等违法行为。
