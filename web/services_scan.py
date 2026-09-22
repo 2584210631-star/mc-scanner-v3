@@ -159,14 +159,19 @@ def _scan_worker(task_id, targets_list, scan_cfg):
         portscan_only = scan_cfg.get("portscan_only", False)
         results = []
 
-        # auto模式：目标数>256 或 端口数>50 且系统有masscan时自动启用
+        # auto模式：目标数>=256 或 端口数>50 且系统有masscan时自动启用
         if use_masscan == "auto":
             from scanner.masscan import has_masscan
             target_count = len(targets_list) if isinstance(targets_list, list) else 1
             port_count = len(scan_cfg.get("ports", [25565]))
-            use_masscan = has_masscan() and (target_count > 256 or port_count > 50)
+            has_mc = has_masscan()
+            use_masscan = has_mc and (target_count >= 256 or port_count > 50)
             if use_masscan:
                 _log(f"自动启用masscan加速（目标{target_count}个，端口{port_count}个）", task_id=task_id)
+            elif not has_mc:
+                _log("未检测到masscan，使用Python端口扫描（安装masscan可大幅提速）", task_id=task_id)
+            else:
+                _log(f"目标规模较小（目标{target_count}/端口{port_count}），使用Python扫描", task_id=task_id)
 
         # 连续扫描模式
         if scan_cfg.get("continuous"):
@@ -219,7 +224,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
             masscan_ports = ",".join(str(p) for p in scan_cfg.get("ports", [25565]))
             output_file = run_masscan(masscan_targets, ports=masscan_ports,
                                       rate=scan_cfg.get("masscan_rate", 1000))
-            open_ports = parse_masscan_json(output_file)
+            open_ports = list(parse_masscan_json(output_file))
             _log(f"masscan 发现 {len(open_ports)} 个开放端口，开始SLP探测")
             if not portscan_only:
                 from scanner.engine import ScanEngine
@@ -229,9 +234,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     timeout=scan_cfg.get("timeout", 4.0),
                     auth_check=scan_cfg.get("auth_check", True),
                 )
-                # ScanEngine.probe_list 无 progress_callback 参数（原调用抛 TypeError，
-                # 导致 masscan 导入后的 SLP 探测 100% 失败）；先恢复功能，进度由任务完成态兜底
-                results = engine.probe_list(open_ports)
+                results = engine.probe_list(open_ports, progress_callback=_on_progress)
             else:
                 results = [{"ip": ip, "port": port, "state": "open",
                             "version": "", "motd": "", "players_online": 0, "players_max": 0,

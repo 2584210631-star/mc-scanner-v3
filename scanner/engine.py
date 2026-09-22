@@ -136,14 +136,16 @@ class ScanEngine:
             self._bump("error")
         return result
 
-    def _run_batch(self, targets, fn, save_callback=None, save_every=50):
+    def _run_batch(self, targets, fn, save_callback=None, save_every=50, progress_callback=None):
         """分批提交任务到线程池，避免大网段一次性提交导致OOM。
         fn: 接收 (ip, port) 返回结果的函数
         save_callback: 每save_every个结果调用一次，接收结果列表
+        progress_callback: 每完成一个调用一次，接收 (done, total)
         """
         BATCH_SIZE = max(self.workers * 4, 200)
         results = []
         done = 0
+        total = len(targets) if hasattr(targets, '__len__') else 0
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as ex:
             futures = {}
             target_iter = iter(targets)
@@ -168,6 +170,8 @@ class ScanEngine:
                     results.append(r)
                     done += 1
                     self._bump("total")
+                    if progress_callback:
+                        progress_callback(done, total)
                     if save_callback and done % save_every == 0:
                         save_callback(results[-save_every:])
                         self._print_progress(done)
@@ -189,9 +193,9 @@ class ScanEngine:
         self.results = results
         return results
 
-    def probe_list(self, targets: list) -> list:
+    def probe_list(self, targets: list, progress_callback=None) -> list:
         """批量探测 (ip, port) 列表，返回结果（不存数据库，分批提交不OOM）"""
-        results, _ = self._run_batch(targets, self.probe_one)
+        results, _ = self._run_batch(targets, self.probe_one, progress_callback=progress_callback)
         self.results = results
         return results
 

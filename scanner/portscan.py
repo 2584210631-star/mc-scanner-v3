@@ -112,7 +112,8 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
             nonlocal last_submit
             # 疑似封禁时自动暂停（每提交一个检查一次）
             if controller is not None and controller.ban_suspected:
-                on_ban = globals().get("ON_BAN_SUSPECT", "pause")
+                import config as _cfg
+                on_ban = _cfg.get("on_ban_suspect", "pause")
                 if on_ban == "abort":
                     if stop_event:
                         stop_event.set()
