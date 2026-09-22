@@ -652,6 +652,10 @@ def cmd_rcon(args, cfg):
     if not args.host:
         print("用法: python cli.py rcon <host:port> -p <password> -c <command>")
         return
+    if not getattr(args, "yes", False):
+        print("[!] 警告：RCON可执行服务器管理命令（op/ban/stop等），仅限授权服务器使用")
+        print("[!] 确认执行请加 --yes 参数")
+        return
     if ":" in args.host:
         host, port = args.host.rsplit(":", 1)
         port = int(port)
@@ -691,6 +695,10 @@ def cmd_commands(args, cfg):
     from core.command_runner import run_commands_on_server, CommandScript
     if not args.target:
         print("用法: python cli.py commands <host:port> -u <用户名> [选项]")
+        return
+    if not getattr(args, "yes", False):
+        print("[!] 警告：命令执行可对服务器运行任意指令，仅限授权服务器使用")
+        print("[!] 确认执行请加 --yes 参数")
         return
     if ":" in args.target:
         host, port = args.target.rsplit(":", 1)
@@ -914,6 +922,7 @@ def main():
     rc.add_argument("-f", "--commands-file", help="从文件加载命令列表")
     rc.add_argument("--delay", type=float, help="命令间延迟(秒)")
     rc.add_argument("--timeout", type=float, help="超时秒数")
+    rc.add_argument("--yes", action="store_true", help="确认执行高风险操作")
     rc.set_defaults(func=cmd_rcon)
     # commands - 登录后自动执行命令（v3.3 新增）
     cm = sub.add_parser("commands", help="登录服务器后自动执行命令列表")
@@ -924,6 +933,7 @@ def main():
     cm.add_argument("--delay", type=float, help="命令间延迟(秒)")
     cm.add_argument("--timeout", type=float, help="超时秒数")
     cm.add_argument("--authme", help="AuthMe 密码")
+    cm.add_argument("--yes", action="store_true", help="确认执行高风险操作")
     cm.set_defaults(func=cmd_commands)
 
     args = parser.parse_args()
