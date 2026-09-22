@@ -9,7 +9,7 @@
 [![Protocol](https://img.shields.io/badge/MC%20Protocol-340%2B-orange.svg)](#)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)](#)
 
-**端口扫描 · SLP探测 · 认证检测 · 观察者模式 · AI托管 · 防封禁扫描 · Web面板**
+**端口扫描 · SLP探测 · 认证检测 · 观察者模式 · AI托管 · 安全扫描 · Web面板**
 
 </div>
 
@@ -68,17 +68,17 @@ MC Scanner 是一个用 Python 编写的 Minecraft 服务器扫描与探测工�
 | 三层记忆系统 | 短期原文（50条）+ 中期话题摘要（3段）+ 长期玩家档案 |
 | 自动重连 | 指数退避，最多 10 次，保留聊天记录和记忆 |
 
-### 🛡️ 防封禁扫描（v3.6.0）
+### 🛡️ 安全扫描（v3.6.0）
 
 | 模式 | 并发 | 速率 | 适用场景 |
 |------|------|------|---------|
-| `stealth` | 低 | 自适应降速 | 公网/授权测试，防 IDS 检测 |
+| `safe` | 低 | 自适应降速 | 公网/授权测试，低速安全扫描 |
 | `balanced` | 中 | 适中 | 默认模式，日常扫描 |
 | `aggressive` | 高 | 全速 | 仅内网/信任网络 |
 
 - 端口随机化：打乱扫描顺序，去除顺序递增特征
 - 批次冷却：每批扫完暂停，降低连接风暴
-- 自适应速率：超时率突变自动降速，疑似封禁时暂停/中止
+- 自适应速率：超时率突变自动降速，连接异常时暂停/中止
 - 断点续扫：中断后 `--resume` 从上次位置继续
 
 ### 🌐 Web 面板
@@ -124,17 +124,17 @@ python3 cli.py web --port 8090 --host 127.0.0.1
 ### 命令行扫描
 
 ```bash
-# 单 IP 全端口，隐蔽模式
-python3 cli.py scan 1.2.3.4 --port 1-65535 --mode stealth
+# 单 IP 全端口，安全模式
+python3 cli.py scan 1.2.3.4 --port 1-65535 --mode safe
 
 # 网段扫描，平衡模式
 python3 cli.py scan 192.168.1.0/24 --mode balanced
 
 # 全端口 + 断点续扫
-python3 cli.py scan 1.2.3.4 --port 1-65535 --mode stealth --resume
+python3 cli.py scan 1.2.3.4 --port 1-65535 --mode safe --resume
 
 # 只扫端口（不探测 MC 协议）
-python3 cli.py portscan 192.168.1.0/24 --port 1-65535 --mode stealth
+python3 cli.py portscan 192.168.1.0/24 --port 1-65535 --mode safe
 
 # masscan 大范围扫描（自动两阶段）
 python3 cli.py scan 10.0.0.0/8 --port 25565 --use-masscan auto
@@ -178,7 +178,7 @@ mc-scanner-v3/
 │   ├── ai_personas.py      # AI 人格预设
 │   └── protocols/          # 各版本协议实现
 ├── scanner/
-│   ├── stealth.py          # 防封禁扫描配置
+│   ├── safe.py          # 安全扫描配置
 │   ├── portscan.py         # 同步端口扫描
 │   └── engine.py           # 扫描引擎
 ├── web/
@@ -207,8 +207,8 @@ mc-scanner-v3/
 ### v3.6.0
 
 **扫描引擎**
-- 新增防封禁扫描引擎：`stealth` / `balanced` / `aggressive` 三档模式
-- 端口随机化、批次冷却、自适应降速、疑似封禁检测
+- 新增安全扫描引擎：`safe` / `balanced` / `aggressive` 三档模式
+- 端口随机化、批次冷却、自适应降速、连接异常检测
 - 断点续扫（`--resume`）
 - masscan 两阶段集成（大范围自动启用）
 - 扫描任务队列（多任务排队执行）
@@ -267,7 +267,7 @@ mc-scanner-v3/
 | 观察者 / AI 进服 | 自有服务器、授权测试 | 未授权登录第三方服务器、骚扰服务器 |
 | 命令执行 / RCON | 自有服务器管理、授权运维 | 未授权执行命令、提权、破坏服务器 |
 | 多机器人警告 | 自有服务器压力测试 | 对第三方服务器进行消息轰炸或骚扰 |
-| 防封禁扫描 | 授权范围内的低速测试 | 规避检测进行未授权扫描 |
+| 安全扫描 | 授权范围内的低速测试 | 规避检测进行未授权扫描 |
 
 ### 数据隐私
 

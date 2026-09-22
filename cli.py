@@ -741,8 +741,8 @@ def main():
                    help="端口范围，如 '25565' / '25565,25566' / '1-65535'（默认取配置 ports）")
     p.add_argument("--exclude")
     p.add_argument("-o", "--output")
-    p.add_argument("--mode", choices=["stealth", "balanced", "aggressive"],
-                   help="扫描模式: stealth=防封禁低速 / balanced=平衡(默认) / aggressive=高速仅内网")
+    p.add_argument("--mode", choices=["safe", "balanced", "aggressive"],
+                   help="扫描模式: safe=安全低速 / balanced=平衡(默认) / aggressive=高速仅内网")
     p.add_argument("--no-shuffle", action="store_true", help="关闭端口顺序随机化")
     p.add_argument("--batch-cooldown", type=float, help="批间冷却秒数(防突发)")
     p.add_argument("--resume", action="store_true", help="断点续扫(中断后从上次继续)")
@@ -763,8 +763,8 @@ def main():
     s.add_argument("--exclude")
     s.add_argument("-o", "--output")
     s.add_argument("--web", type=int, default=0, help="扫描后启动Web面板端口")
-    s.add_argument("--mode", choices=["stealth", "balanced", "aggressive"],
-                   help="扫描模式: stealth=防封禁低速 / balanced=平衡(默认) / aggressive=高速仅内网")
+    s.add_argument("--mode", choices=["safe", "balanced", "aggressive"],
+                   help="扫描模式: safe=安全低速 / balanced=平衡(默认) / aggressive=高速仅内网")
     s.add_argument("--no-shuffle", action="store_true", help="关闭端口顺序随机化")
     s.add_argument("--batch-cooldown", type=float, help="批间冷却秒数(防突发)")
     s.add_argument("--resume", action="store_true", help="断点续扫(中断后从上次继续)")
@@ -812,8 +812,8 @@ def main():
     m.add_argument("--auto-import", action="store_true")
     m.add_argument("--workers", type=int, default=16)
     m.add_argument("--no-auth", action="store_true")
-    m.add_argument("--mode", choices=["stealth", "balanced", "aggressive"],
-                   help="扫描模式: stealth=100pps防封 / balanced=1000pps(默认) / aggressive=5000pps仅内网")
+    m.add_argument("--mode", choices=["safe", "balanced", "aggressive"],
+                   help="扫描模式: safe=100pps / balanced=1000pps(默认) / aggressive=5000pps仅内网")
     m.set_defaults(func=cmd_masscan)
 
     # import

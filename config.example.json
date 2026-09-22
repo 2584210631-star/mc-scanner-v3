@@ -20,7 +20,7 @@
   "message_delay": 0.8,
   "retry_count": 1,
   "rate": 30,
-  "scan_mode": "stealth",
+  "scan_mode": "safe",
   "shuffle": true,
   "batch_cooldown": 0,
   "progress_file": "scan_progress.json",

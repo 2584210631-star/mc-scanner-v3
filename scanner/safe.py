@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-防封禁扫描策略（v3.6.0 新增）
+安全扫描策略（v3.6.0 新增）
 
 解决痛点：全端口扫描时，顺序扫描 + 高并发 + 无限速导致出口 IP 被
 目标网络限流/封禁（触发 IDS / fail2ban / 运营商限流），连其他设备都连不上。
 
 提供：
-1. 扫描模式分级（stealth / balanced / aggressive）
+1. 扫描模式分级（safe / balanced / aggressive）
 2. 端口随机化（打乱扫描顺序，去掉"顺序递增"特征）
 3. 批次 + 冷却（每批扫完暂停，降低突发）
 4. 自适应速率（按失败率动态降速/恢复，检测疑似封禁）
@@ -42,13 +42,13 @@ class ScanProfile:
 
 
 SCAN_MODES = {
-    # 隐蔽模式：低并发、低速率、小批次 + 冷却、随机化、自适应
-    "stealth": ScanProfile(
-        mode="stealth", concurrency=150, rate=20,
+    # 安全模式：低并发、低速率、小批次 + 冷却、随机化、自适应
+    "safe": ScanProfile(
+        mode="safe", concurrency=150, rate=20,
         batch_size=400, batch_cooldown=1.5,
         shuffle=True, adaptive=True, max_rate=40,
     ),
-    # 平衡模式（默认）：保守默认，接近 stealth 但保留一定速度
+    # 平衡模式（默认）：保守默认，接近 safe 但保留一定速度
     "balanced": ScanProfile(
         mode="balanced", concurrency=400, rate=25,
         batch_size=2000, batch_cooldown=0.5,
@@ -96,7 +96,7 @@ def shuffle_targets(targets, seed: Optional[int] = None, max_items: int = 500_00
 
 class AdaptiveRateController:
     """
-    失败率自适应速率控制 + 疑似封禁检测。
+    失败率自适应速率控制 + 连接异常检测。
 
     原理：正常扫描中，关闭端口返回 ConnectionRefused（秒回）；当网络被
     限流/封禁时，表现为大量超时（包被丢弃）。因此用"超时占比"作为信号：

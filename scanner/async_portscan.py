@@ -9,7 +9,7 @@ import socket
 import time
 from dataclasses import dataclass, replace
 
-from scanner.stealth import (get_profile, shuffle_targets,
+from scanner.safe import (get_profile, shuffle_targets,
                              AdaptiveRateController, ScanProgressStore)
 
 
@@ -222,7 +222,7 @@ def scan_ports_async(targets, concurrency: int = None, timeout: float = 3.0,
         rate_limit: 每秒最大连接数（None 时按 mode 取默认，0=不限）
         progress_cb: 进度回调 callback(done, open_count)
         stop_event: threading.Event，设置后停止扫描
-        mode: 扫描模式 stealth / balanced / aggressive（None=balanced）
+        mode: 扫描模式 safe / balanced / aggressive（None=balanced）
         shuffle: 是否打乱任务顺序（None 时按 mode 默认）
         batch_cooldown: 批间冷却秒数（None 时按 mode 默认，0=关闭）
         adaptive: 是否启用失败率自适应降速（默认 True）
