@@ -698,6 +698,12 @@ class MCBot:
                         except Exception:
                             break
                 elif packet_id == pkts.get("cb_disconnect"):
+                    try:
+                        from .buffer import read_string_from_stream
+                        reason, _ = read_string_from_stream(data, 0)
+                        print(f"[Play调试] 服务器断开连接: {reason[:200]}")
+                    except Exception:
+                        print(f"[Play调试] 服务器断开连接(无法解析原因), len={len(data)}")
                     break
                 elif packet_id == pkts.get("cb_player_info"):
                     self.protocol_handler.parse_player_info(data)
