@@ -259,6 +259,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     auth_check=scan_cfg.get("auth_check", True),
                     rate_limit=scan_cfg.get("rate", 0),
                     stop_event=stop_evt,
+                    mode=scan_cfg.get("scan_mode", "balanced"),
                 )
                 results = async_engine.scan_with_portscan(iter(targets_list))
             else:
@@ -269,6 +270,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     timeout=scan_cfg.get("timeout", 4.0),
                     auth_check=scan_cfg.get("auth_check", True),
                     rate_limit=scan_cfg.get("rate", 0),
+                    mode=scan_cfg.get("scan_mode", "balanced"),
                 )
                 results = engine.scan_with_portscan(
                     iter(targets_list),

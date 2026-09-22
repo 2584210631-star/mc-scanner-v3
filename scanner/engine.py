@@ -22,7 +22,8 @@ class ScanEngine:
                  timeout: float = 4.0, auth_check: bool = True, rate_limit: int = 0,
                  bot_workers: int = 10, bot_timeout: float = 12.0, stop_event=None,
                  rescan_enabled: bool = False, duplicate_detection: bool = False,
-                 discord_webhook: str = "", fingerprint: bool = False):
+                 discord_webhook: str = "", fingerprint: bool = False,
+                 mode: str = None, shuffle: bool = None, batch_cooldown: float = None):
         self.db_path = db_path
         self.workers = workers
         self.timeout = timeout
@@ -32,10 +33,12 @@ class ScanEngine:
         self.bot_timeout = bot_timeout
         self.stop_event = stop_event
         self.fingerprint = fingerprint  # 主动协议指纹（额外TCP连接，默认关闭）
-        # v3.6.0 防封禁扫描参数（None=按模式默认）
-        self.mode = None
-        self.shuffle = None
-        self.batch_cooldown = None
+        # v3.6.0 安全扫描参数（None=按模式默认）
+        from scanner.safe import get_profile
+        self._profile = get_profile(mode) if mode else None
+        self.mode = mode
+        self.shuffle = shuffle if shuffle is not None else (self._profile.shuffle if self._profile else None)
+        self.batch_cooldown = batch_cooldown if batch_cooldown is not None else (self._profile.batch_cooldown if self._profile else None)
         self.progress_file = None
         # v3.2.1 新增特性
         self.rescan_enabled = rescan_enabled
