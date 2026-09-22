@@ -159,6 +159,15 @@ def _scan_worker(task_id, targets_list, scan_cfg):
         portscan_only = scan_cfg.get("portscan_only", False)
         results = []
 
+        # auto模式：目标数>256 或 端口数>50 且系统有masscan时自动启用
+        if use_masscan == "auto":
+            from scanner.masscan import has_masscan
+            target_count = len(targets_list) if isinstance(targets_list, list) else 1
+            port_count = len(scan_cfg.get("ports", [25565]))
+            use_masscan = has_masscan() and (target_count > 256 or port_count > 50)
+            if use_masscan:
+                _log(f"自动启用masscan加速（目标{target_count}个，端口{port_count}个）", task_id=task_id)
+
         # 连续扫描模式
         if scan_cfg.get("continuous"):
             import ipaddress
@@ -209,7 +218,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
             masscan_targets = ",".join(str(t) for t in targets_list) if isinstance(targets_list, list) else str(targets_list)
             masscan_ports = ",".join(str(p) for p in scan_cfg.get("ports", [25565]))
             output_file = run_masscan(masscan_targets, ports=masscan_ports,
-                                      rate=scan_cfg.get("masscan_rate", 10000))
+                                      rate=scan_cfg.get("masscan_rate", 1000))
             open_ports = parse_masscan_json(output_file)
             _log(f"masscan 发现 {len(open_ports)} 个开放端口，开始SLP探测")
             if not portscan_only:
