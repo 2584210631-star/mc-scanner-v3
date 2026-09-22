@@ -79,7 +79,7 @@ def register(app):
             "rate": data.get("rate", 0),
             "auth_check": data.get("auth_check", True),
             "db_path": _safe_db_path(data.get("db_path", "mcscanner.db")),
-            "use_masscan": data.get("use_masscan", False),
+            "use_masscan": data.get("use_masscan", "auto"),
             "portscan_only": data.get("portscan_only", False),
             "masscan_rate": data.get("masscan_rate", 5000),
             "ports": ports,

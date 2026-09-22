@@ -981,6 +981,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group">
           <label>扫描模式</label>
           <select id="scanMode" onchange="toggleMasscanOptions()">
+            <option value="auto">自动（大范围自动masscan加速）</option>
             <option value="python">Python 多线程（稳定）</option>
             <option value="masscan">masscan 高速扫描（快10倍）</option>
           </select>
@@ -2423,7 +2424,7 @@ function switchTab(name) {
 
 function toggleMasscanOptions() {
   const mode = document.getElementById('scanMode').value;
-  document.getElementById('masscanRateGroup').style.display = mode === 'masscan' ? 'block' : 'none';
+  document.getElementById('masscanRateGroup').style.display = (mode === 'masscan' || mode === 'auto') ? 'block' : 'none';
 }
 
 function loadConfig() {
@@ -2490,7 +2491,7 @@ async function startScan() {
       timeout: parseFloat(document.getElementById('probeTimeout').value),
       rate: parseInt(document.getElementById('rateLimit').value),
       auth_check: document.getElementById('authCheck').checked,
-      use_masscan: mode === 'masscan',
+      use_masscan: mode === 'masscan' ? true : (mode === 'auto' ? 'auto' : false),
       portscan_only: document.getElementById('portscanOnly').checked,
       async_mode: document.getElementById('asyncMode').checked,
       masscan_rate: parseInt(document.getElementById('masscanRate').value),
