@@ -35,18 +35,6 @@ def _sw():
     return send_from_directory(os.path.join(os.path.dirname(__file__), 'static'), 'sw.js', mimetype='application/javascript')
 
 
-@app.before_request
-def _check_token():
-    token = state.get_web_token()
-    if not token:
-        return None
-    if request.path == "/" or request.path.startswith("/static/"):
-        return None
-    if request.path.startswith("/api/"):
-        client_token = request.headers.get("X-API-Token", "") or request.args.get("token", "")
-        if client_token != token:
-            return jsonify({"error": "未授权访问，请配置正确的API Token"}), 401
-    return None
 
 
 # API限流：按IP+模块，滑动窗口60秒
@@ -164,11 +152,8 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
     except Exception as e:
         logger.warning(f"[!] 代理初始化失败: {e}")
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
-    if host in ("0.0.0.0", "::") and not state.get_web_token():
-        logger.error("[!] 安全拦截：绑定 0.0.0.0 必须设置 web_token，拒绝启动")
-        logger.error("[!] 请在 config.json 中设置 web_token，或绑定 127.0.0.1")
-        import sys
-        sys.exit(1)
+    if host in ("0.0.0.0", "::"):
+        logger.warning("[!] 警告：绑定 0.0.0.0 且未启用认证，同一网络下任何人都可访问面板")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 
