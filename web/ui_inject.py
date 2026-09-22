@@ -130,4 +130,17 @@ def serve_index(web_dir: str):
         if "</html>" in html:
             html = html.replace("</html>", _PERSONA_JS + "\n</html>", 1)
 
+    # 注入web_token（如果配置了），供前端fetch自动带X-API-Token
+    try:
+        import config as _cfg
+        _token = _cfg.get("web_token", "")
+        if _token:
+            _inject = f'<script>window.__WEB_TOKEN__ = "{_token}";</script>'
+            if "</head>" in html:
+                html = html.replace("</head>", _inject + "</head>", 1)
+            else:
+                html = _inject + html
+    except Exception:
+        pass
+
     return Response(html, mimetype="text/html; charset=utf-8")

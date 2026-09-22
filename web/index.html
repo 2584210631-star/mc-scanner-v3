@@ -1935,6 +1935,18 @@ if ('serviceWorker' in navigator) {
 <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+// 全局fetch包装器：自动带X-API-Token（如果配置了web_token）
+const _origFetch = window.fetch.bind(window);
+window.fetch = function(url, opts) {
+  opts = opts || {};
+  try {
+    const token = window.__WEB_TOKEN__ || (JSON.parse(localStorage.getItem('mcscanner_config') || '{}').web_token) || '';
+    if (token && typeof url === 'string' && url.startsWith('/api/')) {
+      opts.headers = Object.assign({}, opts.headers || {}, {'X-API-Token': token});
+    }
+  } catch(e) {}
+  return _origFetch(url, opts);
+};
 // HTML转义，防止XSS
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
