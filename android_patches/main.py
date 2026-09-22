@@ -1,0 +1,101 @@
+"""MC Scanner Android 入口 - 优化版
+显示启动进度，Flask就绪后自动跳转，失败显示错误
+"""
+import os
+import sys
+import threading
+import time
+import traceback
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, APP_DIR)
+
+DATA_DIR = os.path.join(os.environ.get("MCSCANNER_DATA", APP_DIR), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+os.chdir(DATA_DIR)
+os.environ["MCSCANNER_DB_PATH"] = os.path.join(DATA_DIR, "mcscanner.db")
+
+# 启动状态文件，WebView轮询读取
+STATUS_FILE = os.path.join(DATA_DIR, "startup_status.txt")
+
+def set_status(msg):
+    with open(STATUS_FILE, "w") as f:
+        f.write(msg)
+    print(f"[MC Scanner] {msg}")
+
+def start_flask():
+    """后台线程启动Flask"""
+    try:
+        set_status("正在导入模块...")
+        from web.app import app as real_app
+
+        # 500错误处理器，显示完整traceback
+        @real_app.errorhandler(500)
+        def show_traceback(e):
+            import traceback
+            tb = traceback.format_exc()
+            return f"<h2>500错误</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
+
+        @real_app.errorhandler(Exception)
+        def show_all_errors(e):
+            import traceback
+            tb = traceback.format_exc()
+            return f"<h2>错误</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
+
+        set_status("正在启动Web服务...")
+        real_app.run(host="127.0.0.1", port=8090, debug=False, use_reloader=False, threaded=True)
+    except Exception as e:
+        err = traceback.format_exc()
+        set_status(f"启动失败: {err}")
+        print(f"[MC Scanner] Flask启动失败: {err}")
+
+if __name__ == "__main__":
+    set_status("正在初始化...")
+
+    # 后台启动Flask
+    flask_thread = threading.Thread(target=start_flask, daemon=True)
+    flask_thread.start()
+
+    # 等Flask就绪（最多等90秒）
+    import urllib.request
+    flask_ready = False
+    for i in range(180):  # 180 * 0.5 = 90秒
+        try:
+            urllib.request.urlopen("http://127.0.0.1:8090/", timeout=1)
+            flask_ready = True
+            set_status("启动成功！")
+            break
+        except Exception:
+            time.sleep(0.5)
+
+    # 加载WebView
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+        if flask_ready:
+            # Flask就绪，直接加载
+            PythonActivity.loadUrl("http://127.0.0.1:8090")
+            set_status("WebView加载中...")
+        else:
+            # Flask没就绪，加载错误页面显示状态
+            with open(STATUS_FILE, "r") as f:
+                status = f.read()
+            error_html = f"""<html><body style='font-family:sans-serif;padding:20px;background:#1a1a2e;color:#fff;'>
+            <h2 style='color:#ff6b6b;'>启动超时</h2>
+            <p>Flask服务未能在90秒内启动。</p>
+            <h3>启动日志：</h3>
+            <pre style='white-space:pre-wrap;background:#000;padding:10px;border-radius:6px;font-size:11px;'>{status}</pre>
+            <p style='color:#888;margin-top:20px;'>请尝试：1. 杀掉APP重新打开 2. 检查手机存储空间 3. 联系开发者</p>
+            </body></html>"""
+            error_file = os.path.join(DATA_DIR, "startup_error.html")
+            with open(error_file, "w") as f:
+                f.write(error_html)
+            PythonActivity.loadUrl(f"file://{error_file}")
+    except Exception as e:
+        print(f"[MC Scanner] WebView加载失败: {e}")
+        traceback.print_exc()
+
+    # 保持主线程运行
+    while True:
+        time.sleep(1)
