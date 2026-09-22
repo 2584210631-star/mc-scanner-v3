@@ -398,9 +398,14 @@ class MCBot:
                     if _throttle_retries[proto] < 3:
                         time.sleep(4.0)
                         continue  # 不递增索引，重试当前协议
-                # 用户指定协议或SLP探测到协议后，失败不继续试其他协议
-                if _requested_proto is not None or (info and (info.get("_used_protocol") or info.get("proto"))):
+                # 用户指定协议后，失败不继续试其他版本（尊重用户选择）
+                if _requested_proto is not None:
                     break
+                # SLP探测到协议后，incompatible（版本不兼容）说明探测版本不对，继续试；其他错误break
+                if info and (info.get("_used_protocol") or info.get("proto")):
+                    is_incompatible = "incompatible" in str(last_error).lower()
+                    if not is_incompatible:
+                        break
                 _idx += 1
 
         raise ConnectionError(f"所有协议版本尝试失败: {last_error}")
