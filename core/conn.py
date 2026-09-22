@@ -275,7 +275,7 @@ class MCConnection:
                 if not events:
                     raise socket.timeout("send 等待写就绪超时")
                 data = frame
-                if hasattr(self, '_enc_cipher') and self._enc_cipher:
+                if getattr(self, '_crypto_backend', None) is not None:
                     data = self._encrypt(data)
                 self.sock.sendall(data)
             finally:
@@ -373,7 +373,7 @@ class MCConnection:
                 continue  # 短暂超时继续，但受 total_timeout 总限制
             if not chunk:
                 raise ConnectionError("连接在读取中关闭")
-            if hasattr(self, '_dec_cipher') and self._dec_cipher:
+            if getattr(self, '_crypto_backend', None) is not None:
                 chunk = self._decrypt(chunk)
             buf.extend(chunk)
         return bytes(buf)
