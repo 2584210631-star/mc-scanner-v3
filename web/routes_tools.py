@@ -20,10 +20,18 @@ def register(app):
         return state.safe_db_path(path)
     def parse_ports_spec(ports_spec):
         return state.parse_ports_spec(ports_spec)
-
+    def _check_capability(cap):
+        """能力分级检查：默认关闭高风险能力"""
+        import config as _cfg
+        caps = _cfg.get("capabilities", {})
+        if isinstance(caps, dict):
+            return bool(caps.get(cap, False))
+        return False
 
     @app.route('/api/bot/command', methods=['POST'])
     def bot_command():
+        if not _check_capability("login_interact"):
+            return jsonify({"error": "Bot命令执行能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         ip = data.get("ip")
         port = int(data.get("port") or 25565)
@@ -97,6 +105,8 @@ def register(app):
 
     @app.route('/api/rcon/execute', methods=['POST'])
     def rcon_execute_api():
+        if not _check_capability("rcon_commands"):
+            return jsonify({"error": "RCON能力未启用，请在config中设置 capabilities.rcon_commands=true"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port", 25575))
@@ -113,6 +123,8 @@ def register(app):
 
     @app.route('/api/plugins/capture', methods=['POST'])
     def plugins_capture():
+        if not _check_capability("login_interact"):
+            return jsonify({"error": "插件扫描能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)
@@ -139,6 +151,8 @@ def register(app):
 
     @app.route('/api/commands/run', methods=['POST'])
     def commands_run():
+        if not _check_capability("rcon_commands"):
+            return jsonify({"error": "命令执行能力未启用，请在config中设置 capabilities.rcon_commands=true"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)
