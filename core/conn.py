@@ -365,6 +365,9 @@ class MCConnection:
             b = self.sock.recv(1)
             if not b:
                 raise ConnectionError("连接已关闭")
+            # 启用加密后，长度字段也是加密的，需要先解密
+            if getattr(self, '_crypto_backend', None) is not None:
+                b = self._decrypt(b)
             byte = b[0]
             result |= (byte & 0x7F) << (7 * num_read)
             num_read += 1
