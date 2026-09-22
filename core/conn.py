@@ -135,20 +135,21 @@ class MCConnection:
         self._decryptor = None
 
     def enable_encryption(self, shared_secret: bytes):
-        """启用AES/CFB8加密（正版服），优先pycryptodome手动实现CFB8，备选pyjnius（APK）"""
+        """启用AES/CFB8加密（正版服），优先cryptography(OpenSSL)，备选pyjnius(APK)，最后pycryptodome手动CFB8"""
         self._crypto_backend = None
-        # 优先用pycryptodome手动实现CFB8（确保和Java AES/CFB8/NoPadding完全一致）
+        # 最高优先：cryptography库（OpenSSL绑定，和Java AES/CFB8/NoPadding完全一致）
         try:
-            from Crypto.Cipher import AES
-            self._aes_ecb = AES.new(shared_secret, AES.MODE_ECB)
-            # CFB8移位寄存器，初始值=IV=shared_secret（MC协议规定）
-            self._enc_shift = bytearray(shared_secret)
-            self._dec_shift = bytearray(shared_secret)
-            self._crypto_backend = "pycryptodome_cfb8"
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+            from cryptography.hazmat.backends import default_backend
+            _cipher = Cipher(algorithms.AES(shared_secret), modes.CFB8(shared_secret), backend=default_backend())
+            self._enc_cipher = _cipher.encryptor()
+            self._dec_cipher = _cipher.decryptor()
+            self._crypto_backend = "cryptography"
+            print(f"[加密] 使用cryptography(OpenSSL)后端")
             return
         except ImportError:
             pass
-        # 备选pyjnius（APK环境，调用Java Cipher）
+        # 备选pyjnius（APK环境，调用Java Cipher，和服务器完全一致）
         try:
             from jnius import autoclass
             SecretKeySpec = autoclass('javax.crypto.spec.SecretKeySpec')
@@ -159,34 +160,46 @@ class MCConnection:
             self._enc_cipher.init(Cipher.ENCRYPT_MODE, self._aes_key)
             self._dec_cipher.init(Cipher.DECRYPT_MODE, self._aes_key)
             self._crypto_backend = "pyjnius"
+            print(f"[加密] 使用pyjnius(Java)后端")
+            return
         except ImportError:
-            raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
+            pass
+        # 最后备选：pycryptodome手动实现CFB8（可能和Java有细微差别，仅兜底）
+        try:
+            from Crypto.Cipher import AES
+            self._aes_ecb = AES.new(shared_secret, AES.MODE_ECB)
+            self._enc_shift = bytearray(shared_secret)
+            self._dec_shift = bytearray(shared_secret)
+            self._crypto_backend = "pycryptodome_cfb8"
+            print(f"[加密] 使用pycryptodome手动CFB8后端（兜底，可能和Java不一致）")
+            return
+        except ImportError:
+            pass
+        raise RuntimeError("当前环境不支持正版服加密，请安装cryptography（pip install cryptography）或使用APK")
 
     def _encrypt(self, data: bytes) -> bytes:
-        """加密数据，手动实现CFB8（和Java一致）"""
+        """加密数据，自动适配后端"""
+        if self._crypto_backend == "cryptography":
+            return self._enc_cipher.update(data)
         if self._crypto_backend == "pycryptodome_cfb8":
             out = bytearray(len(data))
             for i in range(len(data)):
-                # 加密移位寄存器得到密钥流
                 keystream = self._aes_ecb.encrypt(bytes(self._enc_shift))
-                # 取第1字节异或（CFB8取最高位字节）
                 out[i] = data[i] ^ keystream[0]
-                # 移位寄存器左移1字节，密文字节放到最低位
                 self._enc_shift = self._enc_shift[1:] + bytes([out[i]])
             return bytes(out)
         else:  # pyjnius
             return bytes(self._enc_cipher.update(data))
 
     def _decrypt(self, data: bytes) -> bytes:
-        """解密数据，手动实现CFB8（和Java一致）"""
+        """解密数据，自动适配后端"""
+        if self._crypto_backend == "cryptography":
+            return self._dec_cipher.update(data)
         if self._crypto_backend == "pycryptodome_cfb8":
             out = bytearray(len(data))
             for i in range(len(data)):
-                # 加密移位寄存器得到密钥流（CFB解密也是加密移位寄存器）
                 keystream = self._aes_ecb.encrypt(bytes(self._dec_shift))
-                # 取第1字节异或得到明文
                 out[i] = data[i] ^ keystream[0]
-                # 移位寄存器左移1字节，密文字节放到最低位（注意：放的是密文，不是明文）
                 self._dec_shift = self._dec_shift[1:] + bytes([data[i]])
             return bytes(out)
         else:  # pyjnius
