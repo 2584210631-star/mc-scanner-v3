@@ -381,17 +381,23 @@ class MCBot:
     def _do_configuration(self):
         """Configuration 阶段：等服务器发 Finish Configuration 后回应，兼容 vanilla / Paper / Spigot / Velocity"""
         cfg = self.config_packets
+        print(f"[Config调试] 进入Configuration阶段")
         deadline = time.time() + max(self.timeout, 15.0)
         self._send_client_information()
         self._send_brand()
+        print(f"[Config调试] 已发送Client Information和Brand")
         sent_known = False
         sent_finish = False
+        _cfg_packet_count = 0
 
         while time.time() < deadline:
             try:
                 resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
+                _cfg_packet_count += 1
+                print(f"[Config调试] 收到包: id=0x{resp_id:02x}, len={len(resp_payload)}")
             except ConnectionError:
                 # 连接已断开：立即失败，避免在已关闭连接上空转忙循环
+                print(f"[Config调试] 连接已断开")
                 raise
             except Exception:
                 # 超时兜底：某些旧服务器/代理不主动发Finish，超时后才主动发
@@ -399,12 +405,14 @@ class MCBot:
                     try:
                         self.conn.send_packet(cfg["sb_finish"], b"")
                         sent_finish = True
+                        print(f"[Config调试] 超时主动发送Finish")
                     except Exception:
                         pass
                 continue
 
             if resp_id == cfg["cb_finish"]:
                 # 服务器发 Finish Configuration，客户端回复后进入 Play
+                print(f"[Config调试] 收到Finish Configuration，回复并进入Play")
                 if cfg.get("sb_finish") is not None and not sent_finish:
                     try:
                         self.conn.send_packet(cfg["sb_finish"], b"")
@@ -437,6 +445,7 @@ class MCBot:
                     pass
 
         # 超时后强行进入Play（兼容不发finish的代理服）
+        print(f"[Config调试] 超时未收到Finish，强行进入Play（共收到{_cfg_packet_count}个配置包）")
         self.conn.state = PROTO_STATE_PLAY
         if self.conn.sock is not None:
             self.conn.sock.settimeout(self.timeout)
@@ -573,13 +582,19 @@ class MCBot:
         """后台线程：处理 Play 阶段 incoming 包（Keep Alive / Teleport / Ping / Disconnect）。
         观察者依赖本循环维护：聊天抓取(chat_callback)、玩家进出(player_callback)、连接状态(connected)。"""
         pkts = self.play_packets
+        print(f"[Play调试] Play线程启动, keep_alive_cb=0x{pkts.get('cb_keep_alive', 0):02x}")
+        _packet_count = 0
         try:
             while not self.stop_event.is_set():
                 try:
                     packet_id, data = self.conn.recv_packet(timeout=1.0)
+                    _packet_count += 1
+                    if _packet_count <= 10 or packet_id == pkts.get("cb_keep_alive") or packet_id == pkts.get("cb_disconnect"):
+                        print(f"[Play调试] 收到包: id=0x{packet_id:02x}, len={len(data)}")
                 except socket.timeout:
                     continue
-                except Exception:
+                except Exception as _e:
+                    print(f"[Play调试] recv异常退出: {type(_e).__name__}: {_e}")
                     break
 
                 # 先让版本协议处理器接管，返回True表示已处理，子类可选择性覆盖
@@ -590,7 +605,9 @@ class MCBot:
                     if len(data) >= 8:
                         try:
                             self.conn.send_packet(pkts["sb_keep_alive"], data[:8])
-                        except Exception:
+                            print(f"[Play调试] 已回复keep_alive")
+                        except Exception as _e:
+                            print(f"[Play调试] 回复keep_alive失败: {_e}")
                             break
                 elif packet_id == pkts.get("cb_teleport"):
                     try:
@@ -670,6 +687,7 @@ class MCBot:
                         print(f"[DEBUG chat] 解析异常: {e}")
         finally:
             # 循环退出（掉线/被断开/停止）即视为连接结束，观察者据此判断
+            print(f"[Play调试] Play线程退出, 共收到{_packet_count}个包")
             self.connected = False
 
     def _extract_chat_with_sender(self, data: bytes, is_system: bool):
