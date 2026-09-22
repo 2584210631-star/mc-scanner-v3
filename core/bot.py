@@ -228,22 +228,35 @@ class MCBot:
                         # 生成shared secret
                         import os as _os
                         shared_secret = _os.urandom(16)
-                        # RSA加密（用Java Cipher，仅APK环境支持）
+                        # RSA加密（优先pycryptodome，备选pyjnius/APK）
+                        enc_secret = None
+                        enc_vtoken = None
+                        # 优先pycryptodome（Termux/桌面环境）
                         try:
-                            from jnius import autoclass
+                            from Crypto.Cipher import PKCS1_v1_5
+                            from Crypto.PublicKey import RSA
+                            pub_key = RSA.import_key(pubkey_bytes)
+                            cipher = PKCS1_v1_5.new(pub_key)
+                            enc_secret = cipher.encrypt(shared_secret)
+                            enc_vtoken = cipher.encrypt(vtoken)
                         except ImportError:
-                            raise RuntimeError("当前环境不支持正版服加密（缺少pyjnius），请在APK中使用正版登录功能")
-                        KeyFactory = autoclass('java.security.KeyFactory')
-                        X509EncodedKeySpec = autoclass('java.security.spec.X509EncodedKeySpec')
-                        Cipher = autoclass('javax.crypto.Cipher')
-                        PKCS8EncodedKeySpec = autoclass('java.security.spec.PKCS8EncodedKeySpec')
-                        keySpec = X509EncodedKeySpec(pubkey_bytes)
-                        kf = KeyFactory.getInstance("RSA")
-                        pubKey = kf.generatePublic(keySpec)
-                        cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
-                        cipher.init(Cipher.ENCRYPT_MODE, pubKey)
-                        enc_secret = bytes(cipher.doFinal(shared_secret))
-                        enc_vtoken = bytes(cipher.doFinal(vtoken))
+                            pass
+                        # 备选pyjnius（APK环境，调用Java Cipher）
+                        if enc_secret is None:
+                            try:
+                                from jnius import autoclass
+                                KeyFactory = autoclass('java.security.KeyFactory')
+                                X509EncodedKeySpec = autoclass('java.security.spec.X509EncodedKeySpec')
+                                Cipher = autoclass('javax.crypto.Cipher')
+                                keySpec = X509EncodedKeySpec(pubkey_bytes)
+                                kf = KeyFactory.getInstance("RSA")
+                                pubKey = kf.generatePublic(keySpec)
+                                cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
+                                cipher.init(Cipher.ENCRYPT_MODE, pubKey)
+                                enc_secret = bytes(cipher.doFinal(shared_secret))
+                                enc_vtoken = bytes(cipher.doFinal(vtoken))
+                            except ImportError:
+                                raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
                         # 计算server ID hash
                         import hashlib as _hl
                         sid_hash = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).hexdigest()
