@@ -20,6 +20,55 @@ def register(app):
     def parse_ports_spec(ports_spec):
         return state.parse_ports_spec(ports_spec)
 
+    # ===== 正版多账户管理 =====
+    def _msa_accounts():
+        """获取正版账户列表（兼容旧字段自动迁移）"""
+        accounts = config.get("msa_accounts", []) or []
+        old_token = config.get("msa_access_token", "") or ""
+        old_uuid = config.get("msa_uuid", "") or ""
+        old_name = config.get("msa_name", "") or ""
+        if old_token and old_uuid and not any(a.get("uuid") == old_uuid for a in accounts):
+            accounts.append({"name": old_name, "uuid": old_uuid, "access_token": old_token})
+            config["msa_accounts"] = accounts
+            try:
+                config.save()
+            except Exception:
+                pass
+        return accounts
+
+    def _msa_save_account(name, uuid, access_token):
+        """保存/更新一个正版账户，并设为活跃"""
+        accounts = _msa_accounts()
+        found = False
+        for a in accounts:
+            if a.get("uuid") == uuid:
+                a["name"] = name
+                a["access_token"] = access_token
+                found = True
+                break
+        if not found:
+            accounts.append({"name": name, "uuid": uuid, "access_token": access_token})
+        config["msa_accounts"] = accounts
+        config["msa_active_uuid"] = uuid
+        # 兼容旧字段
+        config["msa_access_token"] = access_token
+        config["msa_uuid"] = uuid
+        config["msa_name"] = name
+        try:
+            config.save()
+        except Exception:
+            pass
+
+    def _msa_active_account():
+        """获取当前活跃的正版账户"""
+        accounts = _msa_accounts()
+        active_uuid = config.get("msa_active_uuid", "") or ""
+        if active_uuid:
+            for a in accounts:
+                if a.get("uuid") == active_uuid:
+                    return a
+        return accounts[0] if accounts else None
+
 
     @app.route('/api/config/default')
     def default_config():
@@ -166,11 +215,7 @@ def register(app):
             msa_token = r["access_token"]
             print(f"[MSA] 轮询成功，获取MSA token: {msa_token[:30]}...")
             result = full_login_flow(msa_token)
-            cfg = config.get_all()
-            cfg["msa_access_token"] = result["access_token"]
-            cfg["msa_uuid"] = result["uuid"]
-            cfg["msa_name"] = result["name"]
-            config.save_config(cfg)
+            _msa_save_account(result["name"], result["uuid"], result["access_token"])
             _msa_state["step"] = "done"
             return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"]})
         except Exception as e:
@@ -223,11 +268,7 @@ def register(app):
                 msa_token = r["access_token"]
                 print(f"[MSA] FCL设备码轮询成功，获取MSA token: {msa_token[:30]}...")
                 result = full_login_flow(msa_token)
-                cfg = config.get_all()
-                cfg["msa_access_token"] = result["access_token"]
-                cfg["msa_uuid"] = result["uuid"]
-                cfg["msa_name"] = result["name"]
-                config.save_config(cfg)
+                _msa_save_account(result["name"], result["uuid"], result["access_token"])
                 _msa_state["step"] = "done"
                 return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"], "waiting": False})
             elif r.get("error") == "authorization_pending":
@@ -246,8 +287,70 @@ def register(app):
 
     @app.route('/api/msa/status', methods=['GET'])
     def msa_status():
-        name = config.get("msa_name", "")
-        return jsonify({"logged_in": bool(name), "name": name})
+        accounts = _msa_accounts()
+        active = _msa_active_account()
+        return jsonify({
+            "logged_in": bool(active),
+            "name": active.get("name", "") if active else "",
+            "active_uuid": active.get("uuid", "") if active else "",
+            "accounts": [{"name": a.get("name", ""), "uuid": a.get("uuid", "")} for a in accounts],
+        })
+
+    @app.route('/api/msa/accounts', methods=['GET'])
+    def msa_list_accounts():
+        """获取所有正版账户列表"""
+        accounts = _msa_accounts()
+        active_uuid = config.get("msa_active_uuid", "") or ""
+        return jsonify({
+            "accounts": [{"name": a.get("name", ""), "uuid": a.get("uuid", "")} for a in accounts],
+            "active_uuid": active_uuid,
+        })
+
+    @app.route('/api/msa/active', methods=['POST'])
+    def msa_set_active():
+        """设置当前活跃的正版账户"""
+        data = request.get_json(silent=True) or request.form
+        uuid = data.get("uuid", "")
+        accounts = _msa_accounts()
+        if not any(a.get("uuid") == uuid for a in accounts):
+            return jsonify({"success": False, "error": "账户不存在"})
+        config["msa_active_uuid"] = uuid
+        # 同步更新旧字段
+        for a in accounts:
+            if a.get("uuid") == uuid:
+                config["msa_access_token"] = a.get("access_token", "")
+                config["msa_uuid"] = a.get("uuid", "")
+                config["msa_name"] = a.get("name", "")
+                break
+        try:
+            config.save()
+        except Exception:
+            pass
+        return jsonify({"success": True})
+
+    @app.route('/api/msa/accounts/<uuid>', methods=['DELETE'])
+    def msa_delete_account(uuid):
+        """删除一个正版账户"""
+        accounts = _msa_accounts()
+        accounts = [a for a in accounts if a.get("uuid") != uuid]
+        config["msa_accounts"] = accounts
+        # 如果删除的是活跃账户，切换到第一个
+        if config.get("msa_active_uuid", "") == uuid:
+            if accounts:
+                config["msa_active_uuid"] = accounts[0].get("uuid", "")
+                config["msa_access_token"] = accounts[0].get("access_token", "")
+                config["msa_uuid"] = accounts[0].get("uuid", "")
+                config["msa_name"] = accounts[0].get("name", "")
+            else:
+                config["msa_active_uuid"] = ""
+                config["msa_access_token"] = ""
+                config["msa_uuid"] = ""
+                config["msa_name"] = ""
+        try:
+            config.save()
+        except Exception:
+            pass
+        return jsonify({"success": True})
 
     @app.route('/api/msa/auth_url', methods=['GET'])
     def msa_auth_url():
@@ -274,11 +377,7 @@ def register(app):
                 return jsonify({"success": False, "error": r.get("error_description", str(r))})
             msa_token = r["access_token"]
             result = full_login_flow(msa_token)
-            cfg = config.get_all()
-            cfg["msa_access_token"] = result["access_token"]
-            cfg["msa_uuid"] = result["uuid"]
-            cfg["msa_name"] = result["name"]
-            config.save_config(cfg)
+            _msa_save_account(result["name"], result["uuid"], result["access_token"])
             return jsonify({"success": True, "name": result["name"]})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)})
@@ -293,11 +392,7 @@ def register(app):
         try:
             print(f"[MSA] 收到MSA token: {msa_token[:30]}...")
             result = full_login_flow(msa_token)
-            cfg = config.get_all()
-            cfg["msa_access_token"] = result["access_token"]
-            cfg["msa_uuid"] = result["uuid"]
-            cfg["msa_name"] = result["name"]
-            config.save_config(cfg)
+            _msa_save_account(result["name"], result["uuid"], result["access_token"])
             return jsonify({"success": True, "name": result["name"]})
         except Exception as e:
             import traceback
@@ -326,11 +421,7 @@ def register(app):
             # 如果直接用失败，走MSA→Xbox→XSTS→MC流程
             if not result:
                 result = full_login_flow(token)
-            cfg = config.get_all()
-            cfg["msa_access_token"] = result["access_token"]
-            cfg["msa_uuid"] = result["uuid"]
-            cfg["msa_name"] = result["name"]
-            config.save_config(cfg)
+            _msa_save_account(result["name"], result["uuid"], result["access_token"])
             return jsonify({"success": True, "name": result["name"], "uuid": result["uuid"]})
         except Exception as e:
             import traceback

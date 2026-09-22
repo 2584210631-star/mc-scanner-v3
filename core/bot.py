@@ -146,12 +146,32 @@ class MCBot:
         # 创建时自动加载正版token（这样观察者列表能直接显示正版用户名）
         try:
             import config as _cfg
-            _token = _cfg.get("msa_access_token", "") or None
-            _uuid = _cfg.get("msa_uuid", "") or None
+            # 优先从多账户列表加载当前活跃账户
+            _accounts = _cfg.get("msa_accounts", []) or []
+            _active_uuid = _cfg.get("msa_active_uuid", "") or ""
+            _token = None
+            _uuid = None
+            _name = None
+            if _accounts:
+                if _active_uuid:
+                    for _a in _accounts:
+                        if _a.get("uuid") == _active_uuid:
+                            _token = _a.get("access_token")
+                            _uuid = _a.get("uuid")
+                            _name = _a.get("name")
+                            break
+                if not _token:
+                    _token = _accounts[0].get("access_token")
+                    _uuid = _accounts[0].get("uuid")
+                    _name = _accounts[0].get("name")
+            # 兼容旧字段
+            if not _token:
+                _token = _cfg.get("msa_access_token", "") or None
+                _uuid = _cfg.get("msa_uuid", "") or None
+                _name = _cfg.get("msa_name", "")
             if _token and _uuid:
                 self.msa_token = _token
                 self.msa_uuid = _uuid
-                _name = _cfg.get("msa_name", "")
                 if _name:
                     self.username = _name
                     print(f"[MCBot] 自动使用正版账号: {_name}")
@@ -164,9 +184,24 @@ class MCBot:
         try:
             import config as _cfg
             if not self.msa_token:
-                self.msa_token = _cfg.get("msa_access_token", "") or None
-                self.msa_uuid = _cfg.get("msa_uuid", "") or None
-            if self.msa_token and self.msa_uuid:
+                _accounts = _cfg.get("msa_accounts", []) or []
+                _active_uuid = _cfg.get("msa_active_uuid", "") or ""
+                if _accounts:
+                    if _active_uuid:
+                        for _a in _accounts:
+                            if _a.get("uuid") == _active_uuid:
+                                self.msa_token = _a.get("access_token")
+                                self.msa_uuid = _a.get("uuid")
+                                self.username = _a.get("name", self.username)
+                                break
+                    if not self.msa_token:
+                        self.msa_token = _accounts[0].get("access_token")
+                        self.msa_uuid = _accounts[0].get("uuid")
+                        self.username = _accounts[0].get("name", self.username)
+                if not self.msa_token:
+                    self.msa_token = _cfg.get("msa_access_token", "") or None
+                    self.msa_uuid = _cfg.get("msa_uuid", "") or None
+            if self.msa_token and self.msa_uuid and not self.username:
                 self.username = _cfg.get("msa_name", self.username)
         except Exception:
             pass
