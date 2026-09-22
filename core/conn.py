@@ -136,6 +136,7 @@ class MCConnection:
 
     def enable_encryption(self, shared_secret: bytes):
         """启用AES/CFB8加密（正版服），优先pycryptodome，备选pyjnius（APK）"""
+        self._crypto_backend = None
         # 优先用pycryptodome（Termux/桌面环境）
         try:
             from Crypto.Cipher import AES
@@ -143,6 +144,7 @@ class MCConnection:
             self._enc_cipher = AES.new(shared_secret, AES.MODE_CFB, iv=shared_secret, segment_size=8)
             self._dec_cipher = AES.new(shared_secret, AES.MODE_CFB, iv=shared_secret, segment_size=8)
             self._aes_key = shared_secret
+            self._crypto_backend = "pycryptodome"
             return
         except ImportError:
             pass
@@ -156,8 +158,23 @@ class MCConnection:
             self._dec_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
             self._enc_cipher.init(Cipher.ENCRYPT_MODE, self._aes_key)
             self._dec_cipher.init(Cipher.DECRYPT_MODE, self._aes_key)
+            self._crypto_backend = "pyjnius"
         except ImportError:
             raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
+
+    def _encrypt(self, data: bytes) -> bytes:
+        """加密数据，自动适配后端"""
+        if self._crypto_backend == "pycryptodome":
+            return self._enc_cipher.encrypt(data)
+        else:  # pyjnius
+            return bytes(self._enc_cipher.update(data))
+
+    def _decrypt(self, data: bytes) -> bytes:
+        """解密数据，自动适配后端"""
+        if self._crypto_backend == "pycryptodome":
+            return self._dec_cipher.decrypt(data)
+        else:  # pyjnius
+            return bytes(self._dec_cipher.update(data))
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -243,7 +260,7 @@ class MCConnection:
                     raise socket.timeout("send 等待写就绪超时")
                 data = frame
                 if hasattr(self, '_enc_cipher') and self._enc_cipher:
-                    data = bytes(self._enc_cipher.update(data))
+                    data = self._encrypt(data)
                 self.sock.sendall(data)
             finally:
                 sel.unregister(self.sock)
@@ -341,6 +358,6 @@ class MCConnection:
             if not chunk:
                 raise ConnectionError("连接在读取中关闭")
             if hasattr(self, '_dec_cipher') and self._dec_cipher:
-                chunk = bytes(self._dec_cipher.update(chunk))
+                chunk = self._decrypt(chunk)
             buf.extend(chunk)
         return bytes(buf)
