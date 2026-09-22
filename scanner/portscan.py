@@ -110,6 +110,15 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
 
         def _submit_one(ip, port):
             nonlocal last_submit
+            # 疑似封禁时自动暂停（每提交一个检查一次）
+            if controller is not None and controller.ban_suspected:
+                on_ban = globals().get("ON_BAN_SUSPECT", "pause")
+                if on_ban == "abort":
+                    if stop_event:
+                        stop_event.set()
+                    return
+                # pause: 睡 30 秒再继续，给封禁恢复时间
+                time.sleep(30)
             cur_rate = controller.rate if controller is not None else rate
             if cur_rate > 0:
                 # 令牌桶限速：每次提交间隔至少 1/rate 秒

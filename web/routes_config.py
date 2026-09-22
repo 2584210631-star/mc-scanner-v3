@@ -50,6 +50,10 @@ def register(app):
             accounts.append({"name": name, "uuid": uuid, "access_token": access_token})
         config.set("msa_accounts", accounts)
         config.set("msa_active_uuid", uuid)
+        # 新字段（清晰命名）
+        config.set("mc_access_token", access_token)
+        config.set("mc_uuid", uuid)
+        config.set("mc_name", name)
         # 兼容旧字段
         config.set("msa_access_token", access_token)
         config.set("msa_uuid", uuid)
