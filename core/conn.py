@@ -135,16 +135,16 @@ class MCConnection:
         self._decryptor = None
 
     def enable_encryption(self, shared_secret: bytes):
-        """启用AES/CFB8加密（正版服），优先pycryptodome，备选pyjnius（APK）"""
+        """启用AES/CFB8加密（正版服），优先pycryptodome手动实现CFB8，备选pyjnius（APK）"""
         self._crypto_backend = None
-        # 优先用pycryptodome（Termux/桌面环境）
+        # 优先用pycryptodome手动实现CFB8（确保和Java AES/CFB8/NoPadding完全一致）
         try:
             from Crypto.Cipher import AES
-            # CFB8模式，IV=key（MC协议规定），segment_size=8
-            self._enc_cipher = AES.new(shared_secret, AES.MODE_CFB, iv=shared_secret, segment_size=8)
-            self._dec_cipher = AES.new(shared_secret, AES.MODE_CFB, iv=shared_secret, segment_size=8)
-            self._aes_key = shared_secret
-            self._crypto_backend = "pycryptodome"
+            self._aes_ecb = AES.new(shared_secret, AES.MODE_ECB)
+            # CFB8移位寄存器，初始值=IV=shared_secret（MC协议规定）
+            self._enc_shift = bytearray(shared_secret)
+            self._dec_shift = bytearray(shared_secret)
+            self._crypto_backend = "pycryptodome_cfb8"
             return
         except ImportError:
             pass
@@ -163,16 +163,32 @@ class MCConnection:
             raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
 
     def _encrypt(self, data: bytes) -> bytes:
-        """加密数据，自动适配后端"""
-        if self._crypto_backend == "pycryptodome":
-            return self._enc_cipher.encrypt(data)
+        """加密数据，手动实现CFB8（和Java一致）"""
+        if self._crypto_backend == "pycryptodome_cfb8":
+            out = bytearray(len(data))
+            for i in range(len(data)):
+                # 加密移位寄存器得到密钥流
+                keystream = self._aes_ecb.encrypt(bytes(self._enc_shift))
+                # 取第1字节异或（CFB8取最高位字节）
+                out[i] = data[i] ^ keystream[0]
+                # 移位寄存器左移1字节，密文字节放到最低位
+                self._enc_shift = self._enc_shift[1:] + bytes([out[i]])
+            return bytes(out)
         else:  # pyjnius
             return bytes(self._enc_cipher.update(data))
 
     def _decrypt(self, data: bytes) -> bytes:
-        """解密数据，自动适配后端"""
-        if self._crypto_backend == "pycryptodome":
-            return self._dec_cipher.decrypt(data)
+        """解密数据，手动实现CFB8（和Java一致）"""
+        if self._crypto_backend == "pycryptodome_cfb8":
+            out = bytearray(len(data))
+            for i in range(len(data)):
+                # 加密移位寄存器得到密钥流（CFB解密也是加密移位寄存器）
+                keystream = self._aes_ecb.encrypt(bytes(self._dec_shift))
+                # 取第1字节异或得到明文
+                out[i] = data[i] ^ keystream[0]
+                # 移位寄存器左移1字节，密文字节放到最低位（注意：放的是密文，不是明文）
+                self._dec_shift = self._dec_shift[1:] + bytes([data[i]])
+            return bytes(out)
         else:  # pyjnius
             return bytes(self._dec_cipher.update(data))
 
