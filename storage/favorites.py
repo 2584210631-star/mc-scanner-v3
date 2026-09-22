@@ -10,7 +10,7 @@ import threading
 from datetime import datetime
 from typing import Optional
 
-from core.probe import slp_probe
+from core.probe import slp_probe, auth_probe
 
 _LOCK = threading.Lock()
 _DEFAULT_PATH = "favorites.json"
@@ -128,6 +128,14 @@ def rescan_one(ip: str, port: int, timeout: float = 5.0, path: str = None) -> Op
     info = slp_probe(ip, port, timeout=timeout)
     if not info or info.get("state") != "up":
         info = {"state": "offline", "error": info.get("error", "") if info else "unreachable"}
+    else:
+        # SLP成功后做认证模式检测（cracked/online/unknown）
+        try:
+            auth = auth_probe(ip, port, info.get("proto", 0), timeout=timeout)
+            if auth:
+                info.update(auth)
+        except Exception:
+            pass
     favorites = load_favorites(path)
     idx = _find(favorites, ip, port)
     if idx >= 0:
@@ -145,10 +153,20 @@ def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
     if not favorites:
         return []
     results = {}
+    def _probe_with_auth(ip, port):
+        info = slp_probe(ip, port, timeout=timeout)
+        if info and info.get("state") == "up":
+            try:
+                auth = auth_probe(ip, port, info.get("proto", 0), timeout=timeout)
+                if auth:
+                    info.update(auth)
+            except Exception:
+                pass
+        return info
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {}
         for fav in favorites:
-            fut = ex.submit(slp_probe, fav["ip"], fav["port"], timeout)
+            fut = ex.submit(_probe_with_auth, fav["ip"], fav["port"])
             futures[fut] = (fav["ip"], fav["port"])
         done = 0
         for fut in concurrent.futures.as_completed(futures):
