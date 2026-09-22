@@ -128,7 +128,8 @@ def register(app):
         _log(f"AI生成并发送: {len(messages)}段 -> {ip}:{port}")
         r = join_and_warn(ip, port, username, messages, timeout=15.0,
                           message_delay=float(data.get("message_delay", 1.0)),
-                          authme_password=authme_password)
+                          authme_password=authme_password,
+                          use_premium=bool(data.get("use_premium", True)))
         return jsonify({
             "success": r.success, "messages_sent": r.messages_sent,
             "total_segments": len(messages), "text": gen["text"],

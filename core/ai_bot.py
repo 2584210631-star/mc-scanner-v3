@@ -32,7 +32,7 @@ def _release_api_slot():
 
 class AIBotSession:
     def __init__(self, host, port, username, authme_password=None, timeout=20.0,
-                 duration=0, protocol_version=None, ai_config=None):
+                 duration=0, protocol_version=None, ai_config=None, use_premium=True):
         self.session_id = ""
         self.host = host
         self.port = port
@@ -41,6 +41,7 @@ class AIBotSession:
         self.timeout = timeout
         self.duration = duration
         self.protocol_version = protocol_version
+        self.use_premium = use_premium
         self.bot = None
         self.thread = None
         self.stop_event = threading.Event()
@@ -247,7 +248,8 @@ class AIBotSession:
                         pass
                     self.bot = None
                 self.bot = MCBot(host=self.host, port=self.port, username=self.username,
-                                 timeout=self.timeout, protocol_version=self.protocol_version)
+                                 timeout=self.timeout, protocol_version=self.protocol_version,
+                                 use_premium=self.use_premium)
                 self.bot.chat_callback = self._on_chat
                 self.bot.connect()
                 with self.lock:
