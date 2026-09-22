@@ -3786,7 +3786,7 @@ async function loadFavorites() {
       <td data-label="地址">${ip}:${f.port}</td>
       <td data-label="版本">${escapeHtml(info.version || '-')}</td>
       <td data-label="核心"><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
-      <td data-label="人数" style="color:${stateColor};">${playersHtml}</td>
+      <td data-label="人数" style="color:${stateColor};" title="${escapeHtml((rt && rt.player_names ? rt.player_names.join(', ') : (info.player_list || []).join(', ')) || '无玩家')}">${playersHtml}</td>
       <td data-label="认证"><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
       <td data-label="标签">${tags || '-'}</td>
       <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
