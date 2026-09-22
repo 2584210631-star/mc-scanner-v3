@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-命令执行工具：登录服务器并发送命令（如 /op）。
+命令执行工具：登录服务器并发送命令（仅限授权服务器使用）。
 用法:
   python tools/send_command.py 1.2.3.4 25565 BotName "list"
-  python tools/send_command.py 1.2.3.4 25565 BotName --proto 767 "gamemode creative"
+  python tools/send_command.py 1.2.3.4 25565 BotName --proto 767 "help"
 """
 import argparse
 import sys
