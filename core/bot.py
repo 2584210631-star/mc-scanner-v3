@@ -218,7 +218,6 @@ class MCBot:
                         if not self.msa_token:
                             raise ConnectionError("服务器要求正版验证，但未登录正版账号")
                         # 解析encryption request
-                        from .buffer import read_varint_from_stream, read_string_from_stream
                         s = BytesStream(resp_payload)
                         server_id = read_string_from_stream(s)
                         pubkey_len = read_varint_from_stream(s)
