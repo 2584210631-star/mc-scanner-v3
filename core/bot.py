@@ -116,12 +116,13 @@ class MCBot:
     }
 
     def __init__(self, host: str, port: int = 25565, protocol_version: int | None = None,
-                 username: str = "SecurityBot", timeout: float = 20.0):
+                 username: str = "SecurityBot", timeout: float = 20.0, use_premium: bool = True):
         self.host = host
         self.port = port
         self.username = username
         self.timeout = timeout
         self.protocol_version = protocol_version
+        self.use_premium = use_premium  # 是否允许使用正版账户登录
         self.conn: Optional[MCConnection] = None
         self.play_packets = None
         self.config_packets = None
@@ -144,67 +145,69 @@ class MCBot:
         self.msa_token = None
         self.msa_uuid = None
         # 创建时自动加载正版token（这样观察者列表能直接显示正版用户名）
-        try:
-            import config as _cfg
-            # 优先从多账户列表加载当前活跃账户
-            _accounts = _cfg.get("msa_accounts", []) or []
-            _active_uuid = _cfg.get("msa_active_uuid", "") or ""
-            _token = None
-            _uuid = None
-            _name = None
-            if _accounts:
-                if _active_uuid:
-                    for _a in _accounts:
-                        if _a.get("uuid") == _active_uuid:
-                            _token = _a.get("access_token")
-                            _uuid = _a.get("uuid")
-                            _name = _a.get("name")
-                            break
-                if not _token:
-                    _token = _accounts[0].get("access_token")
-                    _uuid = _accounts[0].get("uuid")
-                    _name = _accounts[0].get("name")
-            # 兼容旧字段
-            if not _token:
-                _token = _cfg.get("msa_access_token", "") or None
-                _uuid = _cfg.get("msa_uuid", "") or None
-                _name = _cfg.get("msa_name", "")
-            if _token and _uuid:
-                self.msa_token = _token
-                self.msa_uuid = _uuid
-                if _name:
-                    self.username = _name
-                    print(f"[MCBot] 自动使用正版账号: {_name}")
-        except Exception as e:
-            print(f"[MCBot] 加载正版token失败: {e}")
-
-    def connect(self) -> bool:
-        """完整连接流程：握手 → Login → Configuration → Play"""
-        # 自动加载正版token
-        try:
-            import config as _cfg
-            if not self.msa_token:
+        if self.use_premium:
+            try:
+                import config as _cfg
+                # 优先从多账户列表加载当前活跃账户
                 _accounts = _cfg.get("msa_accounts", []) or []
                 _active_uuid = _cfg.get("msa_active_uuid", "") or ""
+                _token = None
+                _uuid = None
+                _name = None
                 if _accounts:
                     if _active_uuid:
                         for _a in _accounts:
                             if _a.get("uuid") == _active_uuid:
-                                self.msa_token = _a.get("access_token")
-                                self.msa_uuid = _a.get("uuid")
-                                self.username = _a.get("name", self.username)
+                                _token = _a.get("access_token")
+                                _uuid = _a.get("uuid")
+                                _name = _a.get("name")
                                 break
-                    if not self.msa_token:
-                        self.msa_token = _accounts[0].get("access_token")
-                        self.msa_uuid = _accounts[0].get("uuid")
-                        self.username = _accounts[0].get("name", self.username)
+                    if not _token:
+                        _token = _accounts[0].get("access_token")
+                        _uuid = _accounts[0].get("uuid")
+                        _name = _accounts[0].get("name")
+                # 兼容旧字段
+                if not _token:
+                    _token = _cfg.get("msa_access_token", "") or None
+                    _uuid = _cfg.get("msa_uuid", "") or None
+                    _name = _cfg.get("msa_name", "")
+                if _token and _uuid:
+                    self.msa_token = _token
+                    self.msa_uuid = _uuid
+                    if _name:
+                        self.username = _name
+                        print(f"[MCBot] 自动使用正版账号: {_name}")
+            except Exception as e:
+                print(f"[MCBot] 加载正版token失败: {e}")
+
+    def connect(self) -> bool:
+        """完整连接流程：握手 → Login → Configuration → Play"""
+        # 自动加载正版token（仅当use_premium为True时）
+        if self.use_premium:
+            try:
+                import config as _cfg
                 if not self.msa_token:
-                    self.msa_token = _cfg.get("msa_access_token", "") or None
-                    self.msa_uuid = _cfg.get("msa_uuid", "") or None
-            if self.msa_token and self.msa_uuid and not self.username:
-                self.username = _cfg.get("msa_name", self.username)
-        except Exception:
-            pass
+                    _accounts = _cfg.get("msa_accounts", []) or []
+                    _active_uuid = _cfg.get("msa_active_uuid", "") or ""
+                    if _accounts:
+                        if _active_uuid:
+                            for _a in _accounts:
+                                if _a.get("uuid") == _active_uuid:
+                                    self.msa_token = _a.get("access_token")
+                                    self.msa_uuid = _a.get("uuid")
+                                    self.username = _a.get("name", self.username)
+                                    break
+                        if not self.msa_token:
+                            self.msa_token = _accounts[0].get("access_token")
+                            self.msa_uuid = _accounts[0].get("uuid")
+                            self.username = _accounts[0].get("name", self.username)
+                    if not self.msa_token:
+                        self.msa_token = _cfg.get("msa_access_token", "") or None
+                        self.msa_uuid = _cfg.get("msa_uuid", "") or None
+                if self.msa_token and self.msa_uuid and not self.username:
+                    self.username = _cfg.get("msa_name", self.username)
+            except Exception:
+                pass
         # 获取服务器信息（protocol_version已知时跳过探测，直接握手，避免重复连接）
         if self.protocol_version is None:
             info = probe_with_fallback(self.host, self.port, timeout=5.0)
