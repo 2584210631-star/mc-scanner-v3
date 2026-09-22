@@ -154,12 +154,8 @@ class ObserverSession:
             try:
                 self.bot = MCBot(host=self.host, port=self.port,
                                  username=self.username, timeout=self.timeout,
-                                 protocol_version=self.protocol_version)
-                # 不使用正版时，清空自动加载的正版token，恢复用户指定的用户名
-                if not self.use_premium:
-                    self.bot.msa_token = None
-                    self.bot.msa_uuid = None
-                    self.bot.username = self.username
+                                 protocol_version=self.protocol_version,
+                                 use_premium=self.use_premium)
                 self.bot.chat_callback = self._on_chat
                 self.bot.player_callback = self._on_player
                 self.bot.connect()
