@@ -172,6 +172,9 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                 _log("未检测到masscan，使用Python端口扫描（安装masscan可大幅提速）", task_id=task_id)
             else:
                 _log(f"目标规模较小（目标{target_count}/端口{port_count}），使用Python扫描", task_id=task_id)
+        elif isinstance(use_masscan, str):
+            # 规范化字符串值：always/true→True，never/false/其他→False
+            use_masscan = use_masscan.lower() in ("always", "true", "1", "yes")
 
         # 连续扫描模式
         if scan_cfg.get("continuous"):
