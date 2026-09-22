@@ -250,11 +250,13 @@ def test_observer_flow():
         for key in ("status", "players_online", "players", "events", "last_seq", "chat", "version_name"):
             assert key in full, f"full() 缺少 {key}"
         print("[OK] full() 输出结构完整")
-        return True
     finally:
         server.stop()
 
 
 if __name__ == "__main__":
-    ok = test_observer_flow()
-    print("\n=== 观察者 e2e 测试通过 ===" if ok else "\n=== 测试失败 ===")
+    try:
+        test_observer_flow()
+        print("\n=== 观察者 e2e 测试通过 ===")
+    except Exception as e:
+        print(f"\n=== 测试失败: {e} ===")
