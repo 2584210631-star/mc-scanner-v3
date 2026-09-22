@@ -29,9 +29,9 @@ def register(app):
         old_name = config.get("msa_name", "") or ""
         if old_token and old_uuid and not any(a.get("uuid") == old_uuid for a in accounts):
             accounts.append({"name": old_name, "uuid": old_uuid, "access_token": old_token})
-            config["msa_accounts"] = accounts
+            config.set("msa_accounts", accounts)
             try:
-                config.save()
+                config.save_config()
             except Exception:
                 pass
         return accounts
@@ -48,14 +48,14 @@ def register(app):
                 break
         if not found:
             accounts.append({"name": name, "uuid": uuid, "access_token": access_token})
-        config["msa_accounts"] = accounts
-        config["msa_active_uuid"] = uuid
+        config.set("msa_accounts", accounts)
+        config.set("msa_active_uuid", uuid)
         # 兼容旧字段
-        config["msa_access_token"] = access_token
-        config["msa_uuid"] = uuid
-        config["msa_name"] = name
+        config.set("msa_access_token", access_token)
+        config.set("msa_uuid", uuid)
+        config.set("msa_name", name)
         try:
-            config.save()
+            config.save_config()
         except Exception:
             pass
 
@@ -314,16 +314,16 @@ def register(app):
         accounts = _msa_accounts()
         if not any(a.get("uuid") == uuid for a in accounts):
             return jsonify({"success": False, "error": "账户不存在"})
-        config["msa_active_uuid"] = uuid
+        config.set("msa_active_uuid", uuid)
         # 同步更新旧字段
         for a in accounts:
             if a.get("uuid") == uuid:
-                config["msa_access_token"] = a.get("access_token", "")
-                config["msa_uuid"] = a.get("uuid", "")
-                config["msa_name"] = a.get("name", "")
+                config.set("msa_access_token", a.get("access_token", ""))
+                config.set("msa_uuid", a.get("uuid", ""))
+                config.set("msa_name", a.get("name", ""))
                 break
         try:
-            config.save()
+            config.save_config()
         except Exception:
             pass
         return jsonify({"success": True})
@@ -333,21 +333,21 @@ def register(app):
         """删除一个正版账户"""
         accounts = _msa_accounts()
         accounts = [a for a in accounts if a.get("uuid") != uuid]
-        config["msa_accounts"] = accounts
+        config.set("msa_accounts", accounts)
         # 如果删除的是活跃账户，切换到第一个
         if config.get("msa_active_uuid", "") == uuid:
             if accounts:
-                config["msa_active_uuid"] = accounts[0].get("uuid", "")
-                config["msa_access_token"] = accounts[0].get("access_token", "")
-                config["msa_uuid"] = accounts[0].get("uuid", "")
-                config["msa_name"] = accounts[0].get("name", "")
+                config.set("msa_active_uuid", accounts[0].get("uuid", ""))
+                config.set("msa_access_token", accounts[0].get("access_token", ""))
+                config.set("msa_uuid", accounts[0].get("uuid", ""))
+                config.set("msa_name", accounts[0].get("name", ""))
             else:
-                config["msa_active_uuid"] = ""
-                config["msa_access_token"] = ""
-                config["msa_uuid"] = ""
-                config["msa_name"] = ""
+                config.set("msa_active_uuid", "")
+                config.set("msa_access_token", "")
+                config.set("msa_uuid", "")
+                config.set("msa_name", "")
         try:
-            config.save()
+            config.save_config()
         except Exception:
             pass
         return jsonify({"success": True})
