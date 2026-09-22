@@ -133,7 +133,8 @@ def rescan_one(ip: str, port: int, timeout: float = 5.0, path: str = None) -> Op
         try:
             auth = auth_probe(ip, port, info.get("proto", 0), timeout=timeout)
             if auth:
-                info.update(auth)
+                info["auth"] = auth.get("state", "unknown")
+                info["auth_detail"] = auth.get("detail", "")
         except Exception:
             pass
     favorites = load_favorites(path)
@@ -159,7 +160,8 @@ def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
             try:
                 auth = auth_probe(ip, port, info.get("proto", 0), timeout=timeout)
                 if auth:
-                    info.update(auth)
+                    info["auth"] = auth.get("state", "unknown")
+                    info["auth_detail"] = auth.get("detail", "")
             except Exception:
                 pass
         return info
