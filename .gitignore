@@ -63,6 +63,7 @@ libs/bin/
 
 # 聊天记录 / 观察者导出（勿提交）
 chat_log_*.html
+chat_log_*.txt
 duel_chat_*.html
 provoke_chat_*.html
 observer_logs/
