@@ -86,6 +86,7 @@ def register(app):
             "exclude_file": data.get("exclude_file", "exclude.conf"),
             "continuous": continuous,
             "async_mode": data.get("async_mode", True),
+            "scan_mode": data.get("scan_mode", "balanced"),
         }
         task_id = services_scan.start_scan_task(parsed, scan_config, scan_type="manual")
         queued = services_scan._get_task_state(task_id)["status"] == "queued"

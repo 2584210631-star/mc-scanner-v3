@@ -858,6 +858,87 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
 }
 .panel { animation: fadeInUp .3s ease-out; }
 .tab-content { animation: fadeInUp .25s ease-out; }
+
+/* ===== 分段控制器 ===== */
+.segmented-control {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+}
+.seg-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid transparent;
+  user-select: none;
+}
+.seg-item:hover { background: var(--canvas-2); }
+.seg-item.active {
+  background: var(--canvas);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 2px 8px rgba(0,217,146,0.15);
+}
+.seg-icon { font-size: 18px; line-height: 1; }
+.seg-text { font-size: 12px; font-weight: 600; color: var(--ink); }
+.seg-desc { font-size: 10px; color: var(--mute); }
+.seg-item.active .seg-text { color: var(--primary); }
+
+/* ===== 表单美化 ===== */
+.form-group input, .form-group select, textarea {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-group input:focus, .form-group select:focus, textarea:focus {
+  box-shadow: 0 0 0 3px rgba(0,217,146,0.1);
+}
+
+/* ===== 按钮美化 ===== */
+.btn {
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary {
+  box-shadow: 0 2px 8px rgba(0,217,146,0.25);
+}
+.btn-primary:hover {
+  box-shadow: 0 4px 16px rgba(0,217,146,0.35);
+}
+
+/* ===== 卡片美化 ===== */
+.panel {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.panel:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.stat-card {
+  transition: transform 0.2s, border-color 0.2s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--faint);
+}
+
+/* ===== 移动端分段控制器 ===== */
+@media (max-width: 640px) {
+  .segmented-control { flex-direction: row; flex-wrap: nowrap; }
+  .seg-item { padding: 8px 4px; }
+  .seg-icon { font-size: 16px; }
+  .seg-text { font-size: 11px; }
+  .seg-desc { font-size: 9px; }
+  .form-row { gap: 8px; }
+  .form-group { min-width: 120px; }
+}
 </style>
 </head>
 <body>
@@ -979,7 +1060,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>扫描模式</label>
+          <label>扫描引擎</label>
           <select id="scanMode" onchange="toggleMasscanOptions()">
             <option value="auto">自动（大范围自动masscan加速）</option>
             <option value="python">Python 多线程（稳定）</option>
@@ -997,6 +1078,26 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group">
           <label>探测线程数</label>
           <input type="number" id="probeWorkers" value="16">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>速度模式</label>
+        <div class="segmented-control" id="speedMode">
+          <div class="seg-item active" data-value="safe" onclick="setSpeedMode('safe')">
+            <span class="seg-icon">🛡️</span>
+            <span class="seg-text">安全</span>
+            <span class="seg-desc">低速·防限流</span>
+          </div>
+          <div class="seg-item" data-value="balanced" onclick="setSpeedMode('balanced')">
+            <span class="seg-icon">⚖️</span>
+            <span class="seg-text">平衡</span>
+            <span class="seg-desc">默认·适中</span>
+          </div>
+          <div class="seg-item" data-value="aggressive" onclick="setSpeedMode('aggressive')">
+            <span class="seg-icon">⚡</span>
+            <span class="seg-text">高速</span>
+            <span class="seg-desc">仅内网</span>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -2439,6 +2540,12 @@ function toggleMasscanOptions() {
   document.getElementById('masscanRateGroup').style.display = (mode === 'masscan' || mode === 'auto') ? 'block' : 'none';
 }
 
+function setSpeedMode(value) {
+  document.querySelectorAll('#speedMode .seg-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.value === value);
+  });
+}
+
 function loadConfig() {
   const cfg = JSON.parse(localStorage.getItem('mcscanner_config') || '{}');
   if (cfg.scanThreads) document.getElementById('scanThreads').value = cfg.scanThreads;
@@ -2451,6 +2558,7 @@ function loadConfig() {
   if (cfg.masscanRate) document.getElementById('masscanRate').value = cfg.masscanRate;
   if (cfg.portscanOnly !== undefined) document.getElementById('portscanOnly').checked = cfg.portscanOnly;
   if (cfg.scanPorts) document.getElementById('scanPorts').value = cfg.scanPorts;
+  if (cfg.speedMode) setSpeedMode(cfg.speedMode);
   toggleMasscanOptions();
 }
 
@@ -2466,6 +2574,7 @@ function saveConfig() {
     masscanRate: document.getElementById('masscanRate').value,
     portscanOnly: document.getElementById('portscanOnly').checked,
     scanPorts: document.getElementById('scanPorts').value,
+    speedMode: document.querySelector('#speedMode .seg-item.active')?.dataset.value || 'balanced',
   };
   localStorage.setItem('mcscanner_config', JSON.stringify(cfg));
   toast('配置已保存', 'success');
@@ -2491,6 +2600,7 @@ async function startScan() {
   const targets = document.getElementById('scanTargets').value.trim();
   if (!targets) { alert('请输入目标'); return; }
   const mode = document.getElementById('scanMode').value;
+  const speedMode = document.querySelector('#speedMode .seg-item.active')?.dataset.value || 'balanced';
   const ports = document.getElementById('scanPorts').value.trim() || '25565';
   const res = await fetch('/api/scan/start', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -2508,6 +2618,7 @@ async function startScan() {
       async_mode: document.getElementById('asyncMode').checked,
       masscan_rate: parseInt(document.getElementById('masscanRate').value),
       ports: ports,
+      scan_mode: speedMode,
     })
   });
   const data = await res.json();
