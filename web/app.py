@@ -84,6 +84,28 @@ def _rate_limit():
 
 
 @app.before_request
+def _check_auth():
+    """API鉴权：静态资源放行，API需要X-API-Token"""
+    try:
+        path = request.path
+        # 静态资源和页面放行
+        if path in ("/", "/index.html") or path.startswith("/static/") or \
+           path in ("/manifest.json", "/sw.js") or path.startswith("/ui-"):
+            return None
+        if not path.startswith("/api/"):
+            return None
+        token = config.get("web_token", "")
+        if not token:
+            return None  # 未配置token则不鉴权（本地127.0.0.1使用）
+        client_token = request.headers.get("X-API-Token", "")
+        if client_token != token:
+            return jsonify({"error": "未授权访问，请配置正确的API Token"}), 401
+    except Exception:
+        pass
+    return None
+
+
+@app.before_request
 def _serious_mode_check():
     """正经模式：危险操作需要confirm=true确认"""
     try:
@@ -153,7 +175,16 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
         logger.warning(f"[!] 代理初始化失败: {e}")
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
     if host in ("0.0.0.0", "::"):
-        logger.warning("[!] 警告：绑定 0.0.0.0 且未启用认证，同一网络下任何人都可访问面板")
+        token = config.get("web_token", "")
+        if not token:
+            import secrets
+            token = secrets.token_hex(16)
+            config.set("web_token", token)
+            config.save_config()
+            logger.warning(f"[!] 0.0.0.0 绑定已自动生成 API Token: {token}")
+            logger.warning("[!] 请在设置页填入此 Token，或使用 127.0.0.1 本地访问（无需鉴权）")
+        else:
+            logger.warning(f"[!] 0.0.0.0 绑定已启用 API Token 鉴权")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 
