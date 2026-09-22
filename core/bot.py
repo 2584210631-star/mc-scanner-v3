@@ -143,6 +143,20 @@ class MCBot:
         # 正版认证
         self.msa_token = None
         self.msa_uuid = None
+        # 创建时自动加载正版token（这样观察者列表能直接显示正版用户名）
+        try:
+            import config as _cfg
+            _token = _cfg.get("msa_access_token", "") or None
+            _uuid = _cfg.get("msa_uuid", "") or None
+            if _token and _uuid:
+                self.msa_token = _token
+                self.msa_uuid = _uuid
+                _name = _cfg.get("msa_name", "")
+                if _name:
+                    self.username = _name
+                    print(f"[MCBot] 自动使用正版账号: {_name}")
+        except Exception as e:
+            print(f"[MCBot] 加载正版token失败: {e}")
 
     def connect(self) -> bool:
         """完整连接流程：握手 → Login → Configuration → Play"""
