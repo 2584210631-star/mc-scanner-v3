@@ -277,11 +277,12 @@ class MCBot:
                         from .microsoft_auth import join_server
                         if not join_server(self.msa_token, self.msa_uuid, sid_hash):
                             raise ConnectionError("正版joinServer验证失败")
-                        # 发送encryption response
+                        # 发送encryption response（注意：长度必须用VarInt，不能用1字节，RSA加密后256字节会溢出）
+                        from .buffer import write_varint
                         resp = b""
-                        resp += bytes([len(enc_secret)])
+                        resp += write_varint(len(enc_secret))
                         resp += enc_secret
-                        resp += bytes([len(enc_vtoken)])
+                        resp += write_varint(len(enc_vtoken))
                         resp += enc_vtoken
                         self.conn.send_packet(0x01, resp)
                         # 启用AES加密
