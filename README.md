@@ -58,7 +58,9 @@ MC Scanner 是一个用 Python 编写的 Minecraft 服务器扫描与探测工�
 | 观察者模式 | 实时监控服务器聊天，关键词告警，聊天记录落盘 |
 | 正版账号登录 | 支持 Microsoft 账号 OAuth 设备码流程，多账户管理 |
 
-### 🧠 AI 托管
+### 🧠 AI 托管（实验性）
+
+> ⚠️ 以下功能为实验性，可能存在稳定性问题，默认不加载，需在配置中显式启用。
 
 | 功能 | 说明 |
 |------|------|
@@ -193,6 +195,8 @@ mc-scanner-v3/
 ├── tools/
 │   ├── gen_packets.py      # 协议表自动生成
 │   └── send_command.py     # 命令执行工具
+├── distributed/            # ⚠️ 实验性：分布式分片扫描
+├── android_patches/        # ⚠️ 实验性：Android/Termux 适配补丁
 ├── tests/                  # 单元测试
 ├── config.example.json     # 配置模板
 ├── requirements.txt        # Python 依赖
