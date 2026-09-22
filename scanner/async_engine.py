@@ -31,7 +31,7 @@ class AsyncScanEngine:
                  progress_file: str = None):
         self.db_path = db_path
         # v3.6.0: 并发/速率 None 时按扫描模式取默认
-        from scanner.stealth import get_profile
+        from scanner.safe import get_profile
         self._profile = get_profile(mode)
         self.concurrency = concurrency if concurrency is not None else self._profile.concurrency
         self.slp_concurrency = slp_concurrency  # SLP 探测并发
@@ -230,7 +230,7 @@ class AsyncScanEngine:
         print(f"[*] 异步流水线扫描（并发={self.concurrency}, SLP并发={self.slp_concurrency}）")
         print(f"[*] uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}")
-        # 阶段1: 异步端口扫描（并发 None 时按模式默认，避免硬编码覆盖 stealth 并发）
+        # 阶段1: 异步端口扫描（并发 None 时按模式默认，避免硬编码覆盖 safe 并发）
         print("[*] 阶段1: 异步端口扫描...")
         port_results = scan_ports_async(
             targets,

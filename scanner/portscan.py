@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Optional
 
-from scanner.stealth import (get_profile, shuffle_targets,
+from scanner.safe import (get_profile, shuffle_targets,
                              AdaptiveRateController, ScanProgressStore)
 
 
@@ -62,7 +62,7 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
     多线程扫描端口（分批提交，大网段不OOM）。
     rate: 每秒最大连接数，0=不限速
     progress_callback: 回调函数(done, total, open_count)，每500个或完成时调用
-    mode: 扫描模式 stealth / balanced / aggressive（None=balanced）
+    mode: 扫描模式 safe / balanced / aggressive（None=balanced）
     shuffle: 是否打乱任务顺序（None 时按 mode 默认）
     batch_cooldown: 批间冷却秒数（None 时按 mode 默认，0=关闭）
     adaptive: 是否启用失败率自适应降速（默认 True）
