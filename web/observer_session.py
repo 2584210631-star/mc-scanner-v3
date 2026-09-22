@@ -19,7 +19,7 @@ class ObserverSession:
 
     def __init__(self, host, port, username, authme_password=None, timeout=20.0,
                  duration=0, protocol_version=None, keywords=None,
-                 max_reconnect=5):
+                 max_reconnect=5, use_premium=True):
         self.session_id = ""
         self.duration = duration  # 观察时长（秒），0=一直观察
         self.host = host
@@ -30,6 +30,7 @@ class ObserverSession:
         self.protocol_version = protocol_version
         self.keywords = keywords or []  # 关键词告警
         self.max_reconnect = max_reconnect
+        self.use_premium = use_premium  # 是否使用正版账户登录
         self.bot = None
         self.thread = None
         self.stop_event = threading.Event()
@@ -154,6 +155,11 @@ class ObserverSession:
                 self.bot = MCBot(host=self.host, port=self.port,
                                  username=self.username, timeout=self.timeout,
                                  protocol_version=self.protocol_version)
+                # 不使用正版时，清空自动加载的正版token，恢复用户指定的用户名
+                if not self.use_premium:
+                    self.bot.msa_token = None
+                    self.bot.msa_uuid = None
+                    self.bot.username = self.username
                 self.bot.chat_callback = self._on_chat
                 self.bot.player_callback = self._on_player
                 self.bot.connect()
