@@ -135,18 +135,29 @@ class MCConnection:
         self._decryptor = None
 
     def enable_encryption(self, shared_secret: bytes):
-        """启用AES/CFB8加密（正版服），用Java Cipher（仅APK环境支持）"""
+        """启用AES/CFB8加密（正版服），优先pycryptodome，备选pyjnius（APK）"""
+        # 优先用pycryptodome（Termux/桌面环境）
+        try:
+            from Crypto.Cipher import AES
+            # CFB8模式，IV=key（MC协议规定），segment_size=8
+            self._enc_cipher = AES.new(shared_secret, AES.MODE_CFB, iv=shared_secret, segment_size=8)
+            self._dec_cipher = AES.new(shared_secret, AES.MODE_CFB, iv=shared_secret, segment_size=8)
+            self._aes_key = shared_secret
+            return
+        except ImportError:
+            pass
+        # 备选pyjnius（APK环境，调用Java Cipher）
         try:
             from jnius import autoclass
+            SecretKeySpec = autoclass('javax.crypto.spec.SecretKeySpec')
+            Cipher = autoclass('javax.crypto.Cipher')
+            self._aes_key = SecretKeySpec(shared_secret, "AES")
+            self._enc_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
+            self._dec_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
+            self._enc_cipher.init(Cipher.ENCRYPT_MODE, self._aes_key)
+            self._dec_cipher.init(Cipher.DECRYPT_MODE, self._aes_key)
         except ImportError:
-            raise RuntimeError("当前环境不支持正版服加密（缺少pyjnius），请在APK中使用正版登录功能")
-        SecretKeySpec = autoclass('javax.crypto.spec.SecretKeySpec')
-        Cipher = autoclass('javax.crypto.Cipher')
-        self._aes_key = SecretKeySpec(shared_secret, "AES")
-        self._enc_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
-        self._dec_cipher = Cipher.getInstance("AES/CFB8/NoPadding")
-        self._enc_cipher.init(Cipher.ENCRYPT_MODE, self._aes_key)
-        self._dec_cipher.init(Cipher.DECRYPT_MODE, self._aes_key)
+            raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
 
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
