@@ -141,7 +141,7 @@ def register(app):
         results = []
 
         def run_bot(ip, port, proto, idx):
-            name = f"{name_prefix}_{idx:02d}"
+            name = name_prefix  # 直接用输入的名字，不加_01后缀
             try:
                 # 连接节流保护：1.12.2等旧版服务器默认 connection-throttle=4000ms
                 # 同一IP 4秒内只能连一次，按编号错开连接时间
