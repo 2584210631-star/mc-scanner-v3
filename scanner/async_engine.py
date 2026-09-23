@@ -34,7 +34,11 @@ class AsyncScanEngine:
         from scanner.safe import get_profile
         self._profile = get_profile(mode)
         self.concurrency = concurrency if concurrency is not None else self._profile.concurrency
-        self.slp_concurrency = slp_concurrency  # SLP 探测并发
+        # SLP并发也按模式调整：safe模式降低，避免大量SLP请求触发封禁
+        if slp_concurrency == 200 and self._profile.mode == "safe":
+            self.slp_concurrency = 20
+        else:
+            self.slp_concurrency = slp_concurrency
         self.timeout = timeout
         self.auth_check = auth_check
         self.rate_limit = rate_limit if rate_limit is not None else self._profile.rate
