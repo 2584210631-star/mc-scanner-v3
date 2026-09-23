@@ -514,6 +514,21 @@ class MCBot:
                         if self.conn.sock is not None:
                             self.conn.sock.settimeout(self.timeout)
                         return
+                    # 重试期也回keep-alive/ping，避免被服务器踢
+                    elif resp_id == cfg.get("cb_keep_alive") and cfg.get("sb_keep_alive") is not None:
+                        self.conn.send_packet(cfg["sb_keep_alive"], resp_payload[:8])
+                    elif resp_id == cfg.get("cb_ping") and cfg.get("sb_pong") is not None:
+                        self.conn.send_packet(cfg["sb_pong"], resp_payload[:4])
+                    elif cfg.get("cb_plugin_message") is not None and resp_id == cfg["cb_plugin_message"]:
+                        self._handle_config_plugin_message(resp_payload)
+                    elif resp_id == cfg.get("cb_disconnect"):
+                        try:
+                            from .buffer import read_string
+                            reason, _ = read_string(resp_payload, 0)
+                            print(f"[Config调试] 重试期服务器断开: {reason}")
+                        except Exception:
+                            pass
+                        raise ConnectionError("配置阶段重试期被断开")
                 except Exception:
                     continue
         print(f"[Config警告] 配置阶段超时未收到Finish，强行进入Play（收到{_cfg_packet_count}个包，最后包id={_last_packet_id}）")
