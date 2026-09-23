@@ -602,7 +602,9 @@ class MCBot:
         if self.state != "play":
             raise RuntimeError("尚未进入 play 阶段")
         pkts = self.play_packets
-        chat_id = pkts["sb_chat"]
+        chat_id = pkts.get("sb_chat")
+        if chat_id is None:
+            raise RuntimeError(f"协议 {self.protocol_version} 无 sb_chat 包ID，无法发消息（该版本协议表不完整）")
         payload = self.protocol_handler.send_chat_payload(message)
         self.conn.send_packet(chat_id, payload)
 
@@ -688,11 +690,14 @@ class MCBot:
                 if self.protocol_handler.handle_play_packet(packet_id, data):
                     continue
 
-                if packet_id == pkts["cb_keep_alive"]:
+                ka_id = pkts.get("cb_keep_alive")
+                if ka_id is not None and packet_id == ka_id:
                     if len(data) >= 8:
                         try:
-                            self.conn.send_packet(pkts["sb_keep_alive"], data[:8])
-                            _dprint(f"[Play调试] 已回复keep_alive")
+                            sb_ka = pkts.get("sb_keep_alive")
+                            if sb_ka is not None:
+                                self.conn.send_packet(sb_ka, data[:8])
+                                _dprint(f"[Play调试] 已回复keep_alive")
                         except Exception as _e:
                             _dprint(f"[Play调试] 回复keep_alive失败: {_e}")
                             break
