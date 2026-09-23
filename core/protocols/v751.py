@@ -31,12 +31,15 @@ class Handler(ProtocolHandler):
             return ""
 
     def extract_chat_sender(self, data: bytes) -> str:
-        """从 sender UUID 查 player_list"""
+        """从 sender UUID 查 player_list，全零UUID为系统消息"""
         try:
             stream = BytesStream(data)
             read_string_from_stream(stream)
             stream.read(1)
             uuid_bytes = stream.read(16)
+            # 全零UUID = 系统消息
+            if uuid_bytes == b'\x00' * 16:
+                return "系统"
             name = self._sender_from_uuid(uuid_bytes)
             return name or "未知玩家"
         except Exception:

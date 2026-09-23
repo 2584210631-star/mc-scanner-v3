@@ -34,6 +34,13 @@ TRANSLATE_MAP = {
     "commands.say": "",
     "commands.me": "",
     "commands.help.header": "--- 帮助 ---",
+    # 命令错误（1.16+ 用 command. 前缀）
+    "command.unknown.command": "未知命令",
+    "command.unknown.server": "未知服务器",
+    "command.context.here": "在这里",
+    "command.context.global": "全局",
+    "command.failed": "命令执行失败",
+    "command.help.text": "输入 /help 查看帮助",
     # 死亡消息
     "death.attack.generic": "死了",
     "death.attack.player": "被杀死了",
