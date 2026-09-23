@@ -56,6 +56,7 @@ def register(app):
             protocol_version=data.get("protocol_version"),
             ai_config=ai_cfg,
             use_premium=bool(data.get("use_premium", True)),
+            premium_uuid=data.get("premium_uuid") or None,
         )
         session.session_id = session_id
         session.start()

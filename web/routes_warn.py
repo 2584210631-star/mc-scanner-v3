@@ -33,6 +33,8 @@ def register(app):
         username = data.get("username", "SecurityBot")
         messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
         authme_password = data.get("authme_password")
+        use_premium = bool(data.get("use_premium", True))
+        premium_uuid = data.get("premium_uuid") or None
         if not ip:
             return jsonify({"error": "请指定 IP"}), 400
         # 从扫描结果中获取已知协议号，避免自动探测失败时遍历错误协议
@@ -46,7 +48,8 @@ def register(app):
                     break
         result = join_and_warn(ip, port, username, messages, timeout=15.0,
                                 message_delay=0.8, protocol_version=proto,
-                                authme_password=authme_password)
+                                authme_password=authme_password,
+                                use_premium=use_premium, premium_uuid=premium_uuid)
         return jsonify({
             "success": result.success,
             "auth_mode": result.auth_mode,
@@ -67,6 +70,8 @@ def register(app):
         workers = int(data.get("workers", 5))
         authme_password = data.get("authme_password")
         message_delay = float(data.get("message_delay", 0.8))
+        use_premium = bool(data.get("use_premium", True))
+        premium_uuid = data.get("premium_uuid") or None
 
         # 解析目标列表，支持 [{"ip":...,"port":...,"proto":...}] 或 ["ip:port", ...]
         targets = []
@@ -84,7 +89,9 @@ def register(app):
         results = []
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = {ex.submit(join_and_warn, ip, port, username, messages,
-                                  15.0, message_delay, proto or None, authme_password): (ip, port)
+                                  timeout=15.0, message_delay=message_delay,
+                                  protocol_version=proto or None, authme_password=authme_password,
+                                  use_premium=use_premium, premium_uuid=premium_uuid): (ip, port)
                        for ip, port, proto in targets}
             for fut in as_completed(futures):
                 try:
@@ -111,6 +118,8 @@ def register(app):
         message_delay = float(data.get("message_delay", 0.5))
         authme_password = data.get("authme_password")
         workers = int(data.get("workers", 20))
+        use_premium = bool(data.get("use_premium", True))
+        premium_uuid = data.get("premium_uuid") or None
 
         # 解析目标列表
         targets = []
@@ -141,7 +150,8 @@ def register(app):
                 r = join_and_warn(ip, port, name, messages, timeout=15.0,
                                   message_delay=message_delay,
                                   protocol_version=proto or None,
-                                  authme_password=authme_password)
+                                  authme_password=authme_password,
+                                  use_premium=use_premium, premium_uuid=premium_uuid)
                 return {"ip": ip, "port": port, "name": name, "success": r.success,
                         "messages_sent": r.messages_sent, "error": r.error}
             except Exception as e:
@@ -180,6 +190,8 @@ def register(app):
         authme_password = data.get("authme_password")
         workers = int(data.get("workers", 5))
         message_delay = float(data.get("message_delay", 0.8))
+        use_premium = bool(data.get("use_premium", True))
+        premium_uuid = data.get("premium_uuid") or None
 
         targets = []
         for t in targets_raw:
@@ -196,7 +208,9 @@ def register(app):
         results = []
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futures = {ex.submit(join_and_warn, ip, port, username, messages,
-                                  15.0, message_delay, None, authme_password): (ip, port)
+                                  timeout=15.0, message_delay=message_delay,
+                                  protocol_version=None, authme_password=authme_password,
+                                  use_premium=use_premium, premium_uuid=premium_uuid): (ip, port)
                        for ip, port in targets}
             for fut in as_completed(futures):
                 try:

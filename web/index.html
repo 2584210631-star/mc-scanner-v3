@@ -1399,7 +1399,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group"><label>端口</label><input type="number" id="aiPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="aiUsername" value="StoryBot"></div>
         <div class="form-group"><label>AuthMe密码</label><input type="text" id="aiAuthme" placeholder="可选"></div>
-        <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="aiPremium" checked> 正版验证</label></div>
+        <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="aiPremium" checked onchange="toggleAiPremium()"> 正版验证</label></div>
+        <div class="form-group"><select id="aiPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
       </div>
       <div class="form-group"><label>API Key（留空用全局配置）</label><input type="password" id="aiApiKey" placeholder="sk-..."></div>
       <div style="display:flex;gap:8px;margin-top:8px;">
@@ -1476,7 +1477,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div class="form-row">
       <input type="password" id="aiBotAuthme" placeholder="AuthMe密码(可选)" style="flex:1">
       <input type="number" id="aiBotDuration" placeholder="时长秒(0=无限)" value="0" style="width:120px">
-      <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="aiBotPremium" checked> 正版验证</label>
+      <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="aiBotPremium" checked onchange="toggleAiBotPremium()"> 正版验证</label>
+      <select id="aiBotPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select>
     </div>
     <div class="form-row">
       <select id="aiBotPersonaSelect" onchange="applyPresetPersona()" style="width:150px">
@@ -1817,6 +1819,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>机器人用户名</label><input type="text" id="warnUsername" value="SecurityBot"></div>
       <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="warnAuthme" placeholder="留空不启用"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group"><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="warnPremium" onchange="toggleWarnPremium()"> 正版验证</label></div>
+      <div class="form-group"><select id="warnPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);" onchange="selectWarnPremiumAccount(this.value)"><option value="">加载中...</option></select></div>
+    </div>
     <div class="form-group"><label>警告消息（每行一条）</label><textarea id="warnMessages" rows="5"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeWarnModal()">取消</button>
@@ -1838,6 +1844,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>并发数</label><input type="number" id="batchWarnWorkers" value="5" min="1" max="20"></div>
     </div>
     <div class="form-group"><label>AuthMe 密码（可选，服务器有登录插件时自动注册/登录）</label><input type="text" id="batchWarnAuthme" placeholder="留空则不使用AuthMe"></div>
+    <div class="form-row">
+      <div class="form-group"><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="batchWarnPremium" onchange="toggleBatchWarnPremium()"> 正版验证</label></div>
+      <div class="form-group"><select id="batchWarnPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
+    </div>
     <div class="form-group"><label>警告消息（每行一条，会同时发给所有选中服务器）</label>
       <textarea id="batchWarnMessages" rows="5">您好，我是安全扫描机器人
 检测到您的服务器处于离线模式
@@ -1902,6 +1912,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>总并发上限</label><input type="number" id="multiWarnWorkers" value="20" min="1" max="50"></div>
     </div>
     <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="multiWarnAuthme" placeholder="留空不启用"></div>
+    <div class="form-row">
+      <div class="form-group"><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="multiWarnPremium"> 正版验证（多机器人同账号会互挤，建议关闭）</label></div>
+      <div class="form-group"><select id="multiWarnPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
+    </div>
     <div class="form-group"><label>警告消息（每行一条，每个机器人都会发）</label><textarea id="multiWarnMessages" rows="5">WARNING: OFFLINE MODE DETECTED!
 Anyone can join with ANY username!
 Please enable online-mode=true!
@@ -2902,7 +2916,9 @@ async function confirmMultiWarn() {
       body: JSON.stringify({
         targets: selected, bot_count: botCount, name_prefix: namePrefix,
         messages, message_delay: messageDelay,
-        authme_password: authme || null, workers: workers
+        authme_password: authme || null, workers: workers,
+        use_premium: document.getElementById('multiWarnPremium').checked,
+        premium_uuid: document.getElementById('multiWarnPremiumAccount').value || undefined
       })
     });
     const data = await resp.json();
@@ -2938,12 +2954,16 @@ async function confirmMultiWarn() {
 
 async function confirmWarn() {
   const messages = document.getElementById('warnMessages').value.split('\n').filter(m => m.trim());
+  const usePremium = document.getElementById('warnPremium').checked;
+  const premiumUuid = document.getElementById('warnPremiumAccount').value || '';
   const res = await fetch('/api/warn/single', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       ip: warnIp, port: warnPort,
       username: document.getElementById('warnUsername').value,
       authme_password: document.getElementById('warnAuthme').value || null,
+      use_premium: usePremium,
+      premium_uuid: premiumUuid || undefined,
       messages
     })
   });
@@ -3049,6 +3069,7 @@ function _aiParams() {
     username: document.getElementById('aiUsername').value,
     authme_password: document.getElementById('aiAuthme').value || null,
     use_premium: document.getElementById('aiPremium').checked,
+    premium_uuid: document.getElementById('aiPremiumAccount').value || undefined,
   };
 }
 async function aiGenerateOnly() {
@@ -3247,7 +3268,9 @@ async function confirmBatchWarn() {
         username: document.getElementById('batchWarnUsername').value,
         messages: messages,
         workers: parseInt(document.getElementById('batchWarnWorkers').value),
-        authme_password: document.getElementById('batchWarnAuthme').value || null
+        authme_password: document.getElementById('batchWarnAuthme').value || null,
+        use_premium: document.getElementById('batchWarnPremium').checked,
+        premium_uuid: document.getElementById('batchWarnPremiumAccount').value || undefined
       })
     });
     const data = await res.json();
@@ -3635,6 +3658,49 @@ async function selectPremiumAccount(uuid) {
   } catch(e) {
     console.error('切换正版账户失败:', e);
   }
+}
+
+// ===== 警告功能正版账号 =====
+function toggleWarnPremium() {
+  const checked = document.getElementById('warnPremium').checked;
+  const selectEl = document.getElementById('warnPremiumAccount');
+  if (checked) {
+    selectEl.style.display = 'block';
+    loadPremiumAccounts(selectEl);
+  } else {
+    selectEl.style.display = 'none';
+  }
+}
+function selectWarnPremiumAccount(uuid) {
+  if (!uuid) return;
+  fetch('/api/msa/active', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({uuid: uuid})
+  }).then(r=>r.json()).then(d=>{
+    if (d.success) {
+      const opt = document.querySelector('#warnPremiumAccount option:checked');
+      if (opt) document.getElementById('warnUsername').value = opt.textContent;
+    }
+  }).catch(e=>console.error('切换正版账户失败:', e));
+}
+function toggleBatchWarnPremium() {
+  const checked = document.getElementById('batchWarnPremium').checked;
+  const selectEl = document.getElementById('batchWarnPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+// ===== AI功能正版账号 =====
+function toggleAiPremium() {
+  const checked = document.getElementById('aiPremium').checked;
+  const selectEl = document.getElementById('aiPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+function toggleAiBotPremium() {
+  const checked = document.getElementById('aiBotPremium').checked;
+  const selectEl = document.getElementById('aiBotPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
 }
 
 async function submitManualToken() {
@@ -4293,6 +4359,7 @@ function startAiBot() {
       authme_password: document.getElementById('aiBotAuthme').value || null,
       duration: parseInt(document.getElementById('aiBotDuration').value) || 0,
       use_premium: document.getElementById('aiBotPremium').checked,
+      premium_uuid: document.getElementById('aiBotPremiumAccount').value || undefined,
       ai_config: {
         persona: document.getElementById('aiBotPersona').value,
         reply_enabled: document.getElementById('aiBotReply').checked,

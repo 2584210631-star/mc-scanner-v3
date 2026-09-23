@@ -840,7 +840,8 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
                   messages: list | None = None, timeout: float = 20.0,
                   message_delay: float = 0.6, protocol_version: int | None = None,
                   authme_password: str | None = None,
-                  connect_delay: float = 1.5, use_premium: bool = True) -> BotResult:
+                  connect_delay: float = 1.5, use_premium: bool = True,
+                  premium_uuid: str | None = None) -> BotResult:
     """
     完整流程：连接 → 登录 → 发警告 → 退出
     保留 V1 的全部功能。
@@ -849,7 +850,7 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
         messages = DEFAULT_WARNING_MESSAGES
     result = BotResult(ip=host, port=port)
     bot = MCBot(host, port, protocol_version=protocol_version, username=username, timeout=timeout,
-                 use_premium=use_premium)
+                 use_premium=use_premium, premium_uuid=premium_uuid)
 
     try:
         bot.connect()
