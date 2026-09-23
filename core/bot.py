@@ -472,9 +472,11 @@ class MCBot:
                 print(f"[MCBot] 配置阶段服务器断开: {reason[:150]}")
                 raise ConnectionError(f"配置阶段被断开: {reason[:100]}")
             elif resp_id == cfg.get("cb_keep_alive"):
-                self.conn.send_packet(cfg["sb_keep_alive"], resp_payload[:8])
+                if cfg.get("sb_keep_alive") is not None:
+                    self.conn.send_packet(cfg["sb_keep_alive"], resp_payload[:8])
             elif resp_id == cfg.get("cb_ping"):
-                self.conn.send_packet(cfg["sb_pong"], resp_payload[:4])
+                if cfg.get("sb_pong") is not None:
+                    self.conn.send_packet(cfg["sb_pong"], resp_payload[:4])
             elif cfg.get("cb_plugin_message") is not None and resp_id == cfg["cb_plugin_message"]:
                 self._handle_config_plugin_message(resp_payload)
             elif cfg.get("cb_known_packs") is not None and resp_id == cfg["cb_known_packs"]:
@@ -503,6 +505,7 @@ class MCBot:
             except Exception:
                 pass
             _retry_deadline = time.time() + 2.0
+            _retry_disconnect = None
             while time.time() < _retry_deadline:
                 try:
                     resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
@@ -522,15 +525,14 @@ class MCBot:
                     elif cfg.get("cb_plugin_message") is not None and resp_id == cfg["cb_plugin_message"]:
                         self._handle_config_plugin_message(resp_payload)
                     elif resp_id == cfg.get("cb_disconnect"):
-                        try:
-                            from .buffer import read_string
-                            reason, _ = read_string(resp_payload, 0)
-                            print(f"[Config调试] 重试期服务器断开: {reason}")
-                        except Exception:
-                            pass
-                        raise ConnectionError("配置阶段重试期被断开")
+                        _retry_disconnect = self._parse_disconnect_reason(resp_payload)
+                        break
                 except Exception:
                     continue
+            if _retry_disconnect is not None:
+                self.disconnect_reason = _retry_disconnect
+                print(f"[MCBot] 配置阶段重试期被断开: {_retry_disconnect[:150]}")
+                raise ConnectionError(f"配置阶段重试期被断开: {_retry_disconnect[:100]}")
         print(f"[Config警告] 配置阶段超时未收到Finish，强行进入Play（收到{_cfg_packet_count}个包，最后包id={_last_packet_id}）")
         self.conn.state = PROTO_STATE_PLAY
         if self.conn.sock is not None:
