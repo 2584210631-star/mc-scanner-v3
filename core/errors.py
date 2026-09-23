@@ -65,3 +65,15 @@ ERROR_MESSAGES = {
 def get_error_message(code: BotErrorCode) -> str:
     """获取错误码对应的用户可读消息"""
     return ERROR_MESSAGES.get(code, ERROR_MESSAGES[BotErrorCode.UNKNOWN])
+
+
+class BotError(ConnectionError):
+    """Bot异常，携带错误码，Web/CLI可根据code做不同处理。
+    继承ConnectionError保持向后兼容（现有except ConnectionError仍能捕获）。"""
+    def __init__(self, code: BotErrorCode, message: str = ""):
+        self.code = code
+        self.message = message or get_error_message(code)
+        super().__init__(self.message)
+
+    def to_dict(self) -> dict:
+        return {"error_code": self.code.value, "message": self.message}
