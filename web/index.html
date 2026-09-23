@@ -1918,7 +1918,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     </div>
     <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="multiWarnAuthme" placeholder="留空不启用"></div>
     <div class="form-row">
-      <div class="form-group"><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="multiWarnPremium"> 正版验证（多机器人同账号会互挤，建议关闭）</label></div>
+      <div class="form-group"><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="multiWarnPremium" onchange="toggleMultiWarnPremium()"> 正版验证（多机器人同账号会互挤，建议关闭）</label></div>
       <div class="form-group"><select id="multiWarnPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
     </div>
     <div class="form-group"><label>警告消息（每行一条，每个机器人都会发）</label><textarea id="multiWarnMessages" rows="5">WARNING: OFFLINE MODE DETECTED!
@@ -3729,6 +3729,12 @@ function toggleStoryPremium() {
 function toggleBatchAiPremium() {
   const checked = document.getElementById('batchAiPremium').checked;
   const selectEl = document.getElementById('batchAiPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+function toggleMultiWarnPremium() {
+  const checked = document.getElementById('multiWarnPremium').checked;
+  const selectEl = document.getElementById('multiWarnPremiumAccount');
   if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
   else { selectEl.style.display = 'none'; }
 }
