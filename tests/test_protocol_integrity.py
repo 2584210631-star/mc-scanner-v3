@@ -17,6 +17,19 @@ class TestProtocolMapping:
     def test_770_is_1215(self):
         assert PROTOCOL_TO_VERSION[770] == "1.21.5"
 
+    def test_768_is_1212_1213(self):
+        assert PROTOCOL_TO_VERSION[768] == "1.21.2/1.21.3"
+
+    def test_772_is_1217_1218(self):
+        assert PROTOCOL_TO_VERSION[772] == "1.21.7/1.21.8"
+
+    def test_773_is_1219_12110(self):
+        assert PROTOCOL_TO_VERSION[773] == "1.21.9/1.21.10"
+
+    def test_latest_protocol(self):
+        from core.protocol import LATEST_PROTOCOL
+        assert LATEST_PROTOCOL == 776
+
     def test_767_is_121(self):
         assert "1.21" in PROTOCOL_TO_VERSION[767]
 
