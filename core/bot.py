@@ -645,16 +645,47 @@ class MCBot:
         else:
             self.send_chat("/" + command[:255])
 
-    def authme_login(self, password: str, register: bool = False, auto_register: bool = True):
-        """AuthMe 登录：已注册用 /login，未注册自动 /register"""
-        if register:
-            self.send_command(f"register {password} {password}")
-        else:
-            self.send_command(f"login {password}")
-            if auto_register:
-                time.sleep(1.5)
+    def authme_login(self, password: str, mode: str = "auto", timeout: float = 4.0):
+        """AuthMe 登录，按聊天反馈决定是否注册。
+
+        mode:
+          - "auto": 先 /login，若服务器提示未注册再 /register（默认，避免已注册服刷屏）
+          - "login_only": 只 /login，不注册
+          - "register_then_login": 先 /register 再 /login
+        """
+        _messages = []
+        _old_cb = self.chat_callback
+
+        def _collect(text, sender):
+            _messages.append(text.lower())
+
+        self.chat_callback = _collect
+        try:
+            if mode == "register_then_login":
                 self.send_command(f"register {password} {password}")
-        time.sleep(2.0)
+                time.sleep(1.5)
+                self.send_command(f"login {password}")
+            else:
+                # 先尝试登录
+                self.send_command(f"login {password}")
+                # 等服务器反馈
+                _deadline = time.time() + timeout
+                while time.time() < _deadline:
+                    time.sleep(0.3)
+                    _joined = " ".join(_messages)
+                    # 检测未注册提示
+                    if any(k in _joined for k in ["未注册", "请先注册", "register", "doesn't exist", "not registered"]):
+                        if mode == "auto":
+                            self.send_command(f"register {password} {password}")
+                            time.sleep(1.5)
+                            self.send_command(f"login {password}")
+                        break
+                    # 检测登录成功
+                    if any(k in _joined for k in ["登录成功", "logged in", "welcome", "successfully"]):
+                        break
+        finally:
+            self.chat_callback = _old_cb
+        time.sleep(1.0)
 
     def keep_alive(self, duration: float = 3.0):
         """保持连接指定秒数"""
@@ -918,7 +949,7 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
         # AuthMe 自动注册/登录
         if authme_password:
             try:
-                bot.authme_login(authme_password, register=False)
+                bot.authme_login(authme_password, mode="auto")
                 result.authme_used = True
             except Exception:
                 pass

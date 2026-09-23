@@ -337,7 +337,7 @@ def cmd_bot(args, cfg):
         print(f"[+] 登录成功 (proto {bot.protocol_version})")
         if args.authme:
             print(f"[+] AuthMe: {'/register' if args.register else '/login'}")
-            bot.authme_login(args.authme, register=args.register)
+            bot.authme_login(args.authme, mode="register_then_login" if args.register else "auto")
         if args.message:
             messages = args.message if isinstance(args.message, list) else [args.message]
             for msg in messages:

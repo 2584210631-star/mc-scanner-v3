@@ -183,7 +183,7 @@ def send_command(command: str, ip: str, port: int = 25565, username=None,
     try:
         bot.connect()
         if authme_password:
-            bot.authme_login(authme_password, register=False)
+            bot.authme_login(authme_password, mode="auto")
         bot.send_command(command)
         bot.keep_alive(hold)
         auth_mode = getattr(bot, 'auth_mode', 'unknown')
