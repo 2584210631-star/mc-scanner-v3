@@ -335,9 +335,12 @@ def register(app):
         if not any(a.get("uuid") == uuid for a in accounts):
             return jsonify({"success": False, "error": "账户不存在"})
         config.set("msa_active_uuid", uuid)
-        # 同步更新旧字段
+        # 同步更新所有字段
         for a in accounts:
             if a.get("uuid") == uuid:
+                config.set("mc_access_token", a.get("access_token", ""))
+                config.set("mc_uuid", a.get("uuid", ""))
+                config.set("mc_name", a.get("name", ""))
                 config.set("msa_access_token", a.get("access_token", ""))
                 config.set("msa_uuid", a.get("uuid", ""))
                 config.set("msa_name", a.get("name", ""))
@@ -358,11 +361,17 @@ def register(app):
         if config.get("msa_active_uuid", "") == uuid:
             if accounts:
                 config.set("msa_active_uuid", accounts[0].get("uuid", ""))
+                config.set("mc_access_token", accounts[0].get("access_token", ""))
+                config.set("mc_uuid", accounts[0].get("uuid", ""))
+                config.set("mc_name", accounts[0].get("name", ""))
                 config.set("msa_access_token", accounts[0].get("access_token", ""))
                 config.set("msa_uuid", accounts[0].get("uuid", ""))
                 config.set("msa_name", accounts[0].get("name", ""))
             else:
                 config.set("msa_active_uuid", "")
+                config.set("mc_access_token", "")
+                config.set("mc_uuid", "")
+                config.set("mc_name", "")
                 config.set("msa_access_token", "")
                 config.set("msa_uuid", "")
                 config.set("msa_name", "")

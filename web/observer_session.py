@@ -152,6 +152,13 @@ class ObserverSession:
 
         while not self.stop_event.is_set():
             try:
+                # 重连前关闭旧bot，避免socket泄漏
+                if self.bot:
+                    try:
+                        self.bot.close()
+                    except Exception:
+                        pass
+                    self.bot = None
                 self.bot = MCBot(host=self.host, port=self.port,
                                  username=self.username, timeout=self.timeout,
                                  protocol_version=self.protocol_version,
