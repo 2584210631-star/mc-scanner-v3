@@ -156,6 +156,20 @@ def _load_auto_tables():
             }
         _auto_tables = auto_play
         print(f"[packets] 已加载自动生成协议表: {len(auto_play)} 个版本")
+        # 健康检查：常用协议关键字段缺失时打警告
+        _REQUIRED_FIELDS = ("sb_chat", "cb_keep_alive", "sb_keep_alive", "cb_disconnect", "cb_teleport")
+        from .protocol import COMMON_PROTOCOLS
+        _warned = 0
+        for _p in COMMON_PROTOCOLS:
+            _t = auto_play.get(_p)
+            if not _t:
+                continue
+            _missing = [f for f in _REQUIRED_FIELDS if _t.get(f) is None]
+            if _missing:
+                print(f"[packets] 警告: 协议 {_p} 缺少关键字段 {_missing}，聊天/保活可能失败")
+                _warned += 1
+        if _warned:
+            print(f"[packets] 共 {_warned} 个常用协议存在字段缺失，建议重新生成协议表")
     except ImportError:
         # packets_auto.py 不存在（可选扩展），使用手写表
         pass

@@ -88,7 +88,7 @@ def generate_auto_tables(data_dir: str, output_path: str):
     proto_to_version = {}
     for version in versions:
         proto = get_proto_version(data_dir, version)
-        if proto == 0 or proto in proto_to_packets:
+        if proto == 0 or proto < 340 or proto in proto_to_packets:
             continue
         protocol_path = os.path.join(data_dir, "data", "pc", version, "protocol.json")
         if not os.path.exists(protocol_path):
