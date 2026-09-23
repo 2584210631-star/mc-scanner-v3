@@ -98,6 +98,13 @@ class MCBot:
         self.msa_token = None
         self.msa_uuid = None
         self._refresh_token = None
+        # 当前位置（用于定期发送位置更新，防止服务器超时断开）
+        self._pos_x = 0.0
+        self._pos_y = 0.0
+        self._pos_z = 0.0
+        self._pos_yaw = 0.0
+        self._pos_pitch = 0.0
+        self._last_pos_update = 0.0
         # 创建时自动加载正版token（这样观察者列表能直接显示正版用户名）
         if self.use_premium:
             try:
@@ -622,6 +629,25 @@ class MCBot:
                     if _packet_count <= 10 or packet_id == pkts.get("cb_keep_alive") or packet_id == pkts.get("cb_disconnect"):
                         _dprint(f"[Play调试] 收到包: id=0x{packet_id:02x}, len={len(data)}")
                 except socket.timeout:
+                    # 定期发送位置更新，防止服务器超时断开（每5秒一次）
+                    now = time.time()
+                    if now - self._last_pos_update >= 5.0:
+                        self._last_pos_update = now
+                        try:
+                            pos_pkt = pkts.get("sb_player_position_look") or pkts.get("sb_player_position") or pkts.get("sb_player_movement")
+                            if pos_pkt is not None:
+                                if pkts.get("sb_player_position_look") is not None:
+                                    # Player Position And Look: x+y+z+yaw+pitch+onGround
+                                    payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + struct.pack(">ff", self._pos_yaw, self._pos_pitch) + b'\x01'
+                                elif pkts.get("sb_player_position") is not None:
+                                    # Player Position: x+y+z+onGround
+                                    payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + b'\x01'
+                                else:
+                                    # Player Movement: onGround only
+                                    payload = b'\x01'
+                                self.conn.send_packet(pos_pkt, payload)
+                        except Exception:
+                            pass
                     continue
                 except Exception as _e:
                     _dprint(f"[Play调试] recv异常退出: {type(_e).__name__}: {_e}")
@@ -649,6 +675,9 @@ class MCBot:
                         yaw = struct.unpack(">f", stream.read(4))[0]
                         pitch = struct.unpack(">f", stream.read(4))[0]
                         stream.read(1)  # flags: 位掩码（相对坐标）
+                        # 保存当前位置（用于定期位置更新）
+                        self._pos_x, self._pos_y, self._pos_z = x, y, z
+                        self._pos_yaw, self._pos_pitch = yaw, pitch
                         # 1.17+ 有 teleport_id，旧版本没有
                         teleport_id = None
                         try:
