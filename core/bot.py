@@ -462,7 +462,15 @@ class MCBot:
                 self.conn.sock.settimeout(self.timeout)
                 return
             elif resp_id == cfg.get("cb_disconnect"):
-                raise ConnectionError("配置阶段被断开")
+                # 打印断开原因，方便排查模组服/白名单等问题
+                try:
+                    from .buffer import read_string
+                    reason, _ = read_string(resp_payload, 0)
+                    _dprint(f"[Config调试] 服务器断开原因: {reason}")
+                    print(f"[Config调试] 服务器断开原因: {reason}")
+                except Exception:
+                    _dprint(f"[Config调试] 服务器断开(无法解析原因), payload={resp_payload[:100].hex()}")
+                raise ConnectionError(f"配置阶段被断开")
             elif resp_id == cfg.get("cb_keep_alive"):
                 self.conn.send_packet(cfg["sb_keep_alive"], resp_payload[:8])
             elif resp_id == cfg.get("cb_ping"):
@@ -515,6 +523,24 @@ class MCBot:
             try:
                 self.conn.send_packet(cfg["sb_plugin_message"],
                                       write_string("fabric:negotiate") + b"")
+            except Exception:
+                pass
+        elif channel in ("neoforge:register", "forge:register"):
+            # NeoForge/Forge 网络协商：payload格式为 varint(数量) + 字符串列表
+            # 服务器发送的是 varint(0) 空列表，客户端回复同样格式
+            try:
+                self.conn.send_packet(cfg["sb_plugin_message"],
+                                      write_string(channel) + write_varint(0))
+                _dprint(f"[Config调试] 已回复NeoForge register(varint 0)")
+            except Exception:
+                pass
+        elif channel in ("neoforge:mod_list", "forge:mod_list", "fml:handshake"):
+            # NeoForge/Forge 配置阶段要求客户端发送mod列表，回复空列表表示纯原版客户端
+            try:
+                # 格式: truncated(bool) + mod_count(varint) + [id(string) + version(string)]...
+                empty_mods = struct.pack("?", False) + write_varint(0)
+                self.conn.send_packet(cfg["sb_plugin_message"],
+                                      write_string(channel) + empty_mods)
             except Exception:
                 pass
         # fml:handshake 等其余频道保持静默（与 vanilla 客户端行为一致）
