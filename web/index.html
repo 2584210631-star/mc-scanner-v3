@@ -3381,7 +3381,7 @@ async function confirmBatchAi() {
         persona = personas[Math.floor(Math.random()*personas.length)].prompt;
       }
     }
-    const username = `${namePrefix}_${(i+1).toString().padStart(2,'0')}`;
+    const username = namePrefix;  // 直接用输入的名字，不加_01后缀
     try {
       const res = await fetch('/api/ai_bot/start', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -4222,7 +4222,7 @@ async function confirmBatchObserver() {
   let html = '';
   for (let i = 0; i < selected.length; i++) {
     const s = selected[i];
-    const name = prefix + '_' + (i + 1).toString().padStart(2, '0');
+    const name = prefix;  // 直接用输入的名字，不加_01后缀
     try {
       const resp = await fetch('/api/observer/start', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
