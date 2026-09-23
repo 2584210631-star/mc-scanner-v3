@@ -198,24 +198,28 @@ def get_play_packets(proto: int) -> dict | None:
                 fallback = max(lower)
                 auto_entry = auto.get(fallback)
     # 合并：手写表非None值优先，自动表补全None
+    result = None
     if handwritten and auto_entry:
         result = dict(auto_entry)
         for k, v in handwritten.items():
             if v is not None:
                 result[k] = v
-        result["chat_format"] = get_chat_format(proto)
-        result["has_configuration"] = proto >= 764
-        result["login_start_uuid"] = proto >= 760
-        return result
-    if handwritten:
+    elif handwritten:
         result = handwritten
-        result["chat_format"] = get_chat_format(proto)
-        result["has_configuration"] = proto >= 764
-        result["login_start_uuid"] = proto >= 760
-        return result
-    if auto_entry:
-        return auto_entry
-    return None
+    elif auto_entry:
+        result = dict(auto_entry)
+    if result is None:
+        return None
+    result["chat_format"] = get_chat_format(proto)
+    result["has_configuration"] = proto >= 764
+    result["login_start_uuid"] = proto >= 760
+    # 完整性检查：缺少必需字段时返回None，避免bot静默用残缺表
+    _REQUIRED = ("sb_chat", "cb_keep_alive", "sb_keep_alive", "cb_disconnect")
+    _missing = [f for f in _REQUIRED if result.get(f) is None]
+    if _missing:
+        print(f"[packets] 协议 {proto} 缺少必需字段 {_missing}，该版本不可用")
+        return None
+    return result
 
 
 def get_config_packets(proto: int) -> dict | None:

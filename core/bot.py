@@ -492,8 +492,31 @@ class MCBot:
                 except Exception:
                     pass
 
-        # 超时后强行进入Play（兼容不发finish的代理服）
-        _dprint(f"[Config调试] 超时未收到Finish，强行进入Play（共收到{_cfg_packet_count}个配置包）")
+        # 超时后：再发一次Finish，等2秒，仍无响应才强行进Play（兼容不发finish的代理服）
+        _last_packet_id = None
+        if _cfg_packet_count > 0:
+            _dprint(f"[Config调试] 超时未收到Finish，重发一次Finish后再等2秒")
+            try:
+                if cfg.get("sb_finish") is not None:
+                    self.conn.send_packet(cfg["sb_finish"], b"")
+                    sent_finish = True
+            except Exception:
+                pass
+            _retry_deadline = time.time() + 2.0
+            while time.time() < _retry_deadline:
+                try:
+                    resp_id, resp_payload = self.conn.recv_packet(timeout=0.5)
+                    _last_packet_id = resp_id
+                    _cfg_packet_count += 1
+                    if resp_id == cfg.get("cb_finish"):
+                        _dprint(f"[Config调试] 重发Finish后收到cb_finish，进入Play")
+                        self.conn.state = PROTO_STATE_PLAY
+                        if self.conn.sock is not None:
+                            self.conn.sock.settimeout(self.timeout)
+                        return
+                except Exception:
+                    continue
+        print(f"[Config警告] 配置阶段超时未收到Finish，强行进入Play（收到{_cfg_packet_count}个包，最后包id={_last_packet_id}）")
         self.conn.state = PROTO_STATE_PLAY
         if self.conn.sock is not None:
             self.conn.sock.settimeout(self.timeout)
