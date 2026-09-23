@@ -14,6 +14,7 @@ from typing import Optional
 
 from . import nbt as _nbt
 from . import chat as _chat
+from .errors import BotError, BotErrorCode
 
 # 正版调试开关：默认关闭，设环境变量 MC_DEBUG=1 开启
 _DEBUG = os.environ.get("MC_DEBUG", "") == "1"
@@ -197,7 +198,7 @@ class MCBot:
         candidates = [p for p in candidates if get_play_packets(p) is not None]
 
         if not candidates:
-            raise RuntimeError("没有支持的协议版本")
+            raise BotError(BotErrorCode.NO_PROTOCOL, "没有支持的协议版本（协议表不完整，建议重新生成）")
 
         last_error = ""
         _requested_proto = self.protocol_version  # 保存用户初始指定的协议号，循环中会被覆盖
@@ -232,13 +233,14 @@ class MCBot:
                         low = msg.lower()
                         if "whitelist" in low:
                             self.auth_mode = "whitelist"
+                            raise BotError(BotErrorCode.WHITELIST, f"登录被拒绝(白名单): {msg[:100]}")
                         else:
                             self.auth_mode = "rejected"
                         raise ConnectionError(f"登录被拒绝: {msg[:100]}")
                     if resp_id == self.login_packets["cb_encryption"]:
                         self.auth_mode = "online"
                         if not self.msa_token:
-                            raise ConnectionError("服务器要求正版验证，但未登录正版账号")
+                            raise BotError(BotErrorCode.ONLINE_MODE_REQUIRED, "服务器要求正版验证，但未登录正版账号")
                         # 解析encryption request
                         s = BytesStream(resp_payload)
                         server_id = read_string_from_stream(s)
@@ -281,7 +283,7 @@ class MCBot:
                                 enc_vtoken = bytes(cipher.doFinal(vtoken))
                                 _dprint(f"[正版调试] RSA加密成功(pyjnius): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
                             except ImportError:
-                                raise RuntimeError("当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
+                                raise BotError(BotErrorCode.MISSING_CRYPTO, "当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
                         # 计算server ID hash（Java风格有符号十六进制，和Minecraft服务器一致）
                         import hashlib as _hl
                         _hash_bytes = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).digest()
@@ -317,7 +319,7 @@ class MCBot:
                                 _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
                                 print(f"[正版] 刷新后joinServer: {'成功' if _join_ok else '失败'}")
                         if not _join_ok:
-                            raise ConnectionError("正版joinServer验证失败")
+                            raise BotError(BotErrorCode.TOKEN_EXPIRED, "正版joinServer验证失败（token可能过期，请重新msa-login）")
                         # 发送encryption response（注意：长度必须用VarInt，不能用1字节，RSA加密后256字节会溢出）
                         from .buffer import write_varint
                         resp = b""
