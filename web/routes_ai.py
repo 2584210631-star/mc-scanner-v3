@@ -129,7 +129,8 @@ def register(app):
         r = join_and_warn(ip, port, username, messages, timeout=15.0,
                           message_delay=float(data.get("message_delay", 1.0)),
                           authme_password=authme_password,
-                          use_premium=bool(data.get("use_premium", True)))
+                          use_premium=bool(data.get("use_premium", True)),
+                          premium_uuid=data.get("premium_uuid") or None)
         return jsonify({
             "success": r.success, "messages_sent": r.messages_sent,
             "total_segments": len(messages), "text": gen["text"],
