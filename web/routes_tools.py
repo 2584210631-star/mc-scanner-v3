@@ -45,7 +45,7 @@ def register(app):
             bot = MCBot(host=ip, port=port, username=username)
             bot.connect()
             if authme_password:
-                bot.authme_login(authme_password, register=False)
+                bot.authme_login(authme_password, mode="auto")
                 time.sleep(1.0)
             before = len(bot.chat_messages)
             bot.send_command(command)

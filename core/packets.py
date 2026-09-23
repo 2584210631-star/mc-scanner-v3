@@ -216,6 +216,9 @@ def get_play_packets(proto: int) -> dict | None:
     # 完整性检查：缺少必需字段时返回None，避免bot静默用残缺表
     _REQUIRED = ("sb_chat", "cb_keep_alive", "sb_keep_alive", "cb_disconnect")
     _missing = [f for f in _REQUIRED if result.get(f) is None]
+    # ≥764（1.20.2+）有Configuration阶段，teleport确认也是必需的
+    if proto >= 764:
+        _missing += [f for f in ("cb_teleport", "sb_confirm_teleport") if result.get(f) is None]
     if _missing:
         print(f"[packets] 协议 {proto} 缺少必需字段 {_missing}，该版本不可用")
         return None

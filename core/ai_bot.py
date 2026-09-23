@@ -263,10 +263,10 @@ class AIBotSession:
                 reconnect_delay = 5.0
                 if self.authme_password:
                     try:
-                        self.bot.authme_login(self.authme_password, register=False)
+                        self.bot.authme_login(self.authme_password, mode="auto")
                     except Exception:
                         try:
-                            self.bot.authme_login(self.authme_password, register=True)
+                            self.bot.authme_login(self.authme_password, mode="register_then_login")
                         except Exception:
                             pass
                 while not self.stop_event.is_set():

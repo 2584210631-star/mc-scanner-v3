@@ -180,7 +180,7 @@ class ObserverSession:
                 self._append_log("system", {"text": f"已连接 {self.host}:{self.port}"})
                 if self.authme_password:
                     try:
-                        self.bot.authme_login(self.authme_password, register=False)
+                        self.bot.authme_login(self.authme_password, mode="auto")
                     except Exception:
                         pass
                 # 保持连接

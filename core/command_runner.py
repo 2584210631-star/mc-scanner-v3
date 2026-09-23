@@ -183,7 +183,7 @@ def run_commands_on_server(host: str, port: int, username: str,
         # AuthMe 登录
         if authme_password:
             try:
-                bot.authme_login(authme_password, register=False)
+                bot.authme_login(authme_password, mode="auto")
             except Exception:
                 pass
         runner = CommandRunner(bot, delay=delay)
