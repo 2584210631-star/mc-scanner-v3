@@ -170,9 +170,17 @@ def get_play_packets(proto: int) -> dict | None:
         if table["min_proto"] <= proto <= table["max_proto"]:
             handwritten = dict(table)
             break
-    # 再找自动表
+    # 再找自动表（精确匹配，找不到时用最近的低版本回退）
     auto = _load_auto_tables()
-    auto_entry = auto.get(proto) if auto else None
+    auto_entry = None
+    if auto:
+        auto_entry = auto.get(proto)
+        if auto_entry is None:
+            # 回退：找小于等于proto的最大版本
+            lower = [v for v in auto.keys() if v <= proto]
+            if lower:
+                fallback = max(lower)
+                auto_entry = auto.get(fallback)
     # 合并：手写表非None值优先，自动表补全None
     if handwritten and auto_entry:
         result = dict(auto_entry)
