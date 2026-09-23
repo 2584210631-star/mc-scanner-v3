@@ -78,12 +78,6 @@ _PLAY_TABLES = [
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0D, "cb_player_info": 0x3A,
      "cb_player_remove": 0x39, "cb_chat_message": 0x35, "cb_system_chat": 0x64,
      "cb_profileless_chat": 0x1B},
-    # 759-760: 1.19/1.19.1/1.19.2 — 手写表历史包ID错误，全部交由自动表(minecraft-data)提供
-    {"min_proto": 759, "max_proto": 760, "sb_chat": None, "sb_chat_command": None,
-     "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
-     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": None, "cb_disconnect": None,
-     "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
-     "cb_chat_message": None, "cb_system_chat": None, "cb_profileless_chat": None},
     # 753-754: 1.16.4-1.16.5 (准确包ID，来自minecraft-data)
     {"min_proto": 753, "max_proto": 754, "sb_chat": 0x03, "sb_chat_command": None,
      "cb_keep_alive": 0x1F, "sb_keep_alive": 0x10, "cb_ping": None, "sb_pong": None,
@@ -91,18 +85,10 @@ _PLAY_TABLES = [
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0B, "cb_player_info": 0x32,
      "cb_chat_message": 0x0E, "cb_system_chat": None,
      "sb_player_position_look": 0x12, "sb_player_position": 0x11, "sb_player_movement": 0x14},
-    # 340 (1.12.2): Chat Message = 0x02（注意：0x03 是 Client Status，搞混会导致服务器 ArrayIndexOutOfBounds）
-    {"min_proto": 340, "max_proto": 340, "sb_chat": 0x02, "sb_chat_command": None,
-     "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
-     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": None, "cb_disconnect": None,
-     "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
-     "cb_chat_message": None, "cb_system_chat": None},
-    # 341-753: 旧版本（包ID各版本不同，由自动表补全）
-    {"min_proto": 341, "max_proto": 753, "sb_chat": 0x03, "sb_chat_command": None,
-     "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
-     "cb_login": None, "cb_teleport": None, "sb_confirm_teleport": None, "cb_disconnect": None,
-     "cb_plugin_message": None, "sb_plugin_message": None, "cb_player_info": None,
-     "cb_chat_message": None, "cb_system_chat": None},
+    # 340 (1.12.2): HOTFIX — Chat Message = 0x02（0x03 是 Client Status，搞混会导致服务器 ArrayIndexOutOfBounds）
+    {"min_proto": 340, "max_proto": 340, "sb_chat": 0x02},
+    # 341-753: 旧版本兜底 sb_chat=0x03（自动表未覆盖的中间版本回退到340会得到错误的0x02）
+    {"min_proto": 341, "max_proto": 753, "sb_chat": 0x03},
 ]
 
 _auto_tables = None
