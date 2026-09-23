@@ -105,6 +105,7 @@ class MCBot:
         self._pos_yaw = 0.0
         self._pos_pitch = 0.0
         self._last_pos_update = 0.0
+        self._has_position = False  # 收到teleport后才发送位置更新，避免位置全0导致服务器异常
         # 创建时自动加载正版token（这样观察者列表能直接显示正版用户名）
         if self.use_premium:
             try:
@@ -630,24 +631,26 @@ class MCBot:
                         _dprint(f"[Play调试] 收到包: id=0x{packet_id:02x}, len={len(data)}")
                 except socket.timeout:
                     # 定期发送位置更新，防止服务器超时断开（每5秒一次）
-                    now = time.time()
-                    if now - self._last_pos_update >= 5.0:
-                        self._last_pos_update = now
-                        try:
-                            pos_pkt = pkts.get("sb_player_position_look") or pkts.get("sb_player_position") or pkts.get("sb_player_movement")
-                            if pos_pkt is not None:
-                                if pkts.get("sb_player_position_look") is not None:
-                                    # Player Position And Look: x+y+z+yaw+pitch+onGround
+                    # 只有收到过teleport包（知道真实位置）后才发送，避免位置全0导致服务器解码异常
+                    if self._has_position:
+                        now = time.time()
+                        if now - self._last_pos_update >= 5.0:
+                            self._last_pos_update = now
+                            try:
+                                # 优先用最简单的Player Movement包（只有onGround，1字节），最不容易出错
+                                move_pkt = pkts.get("sb_player_movement")
+                                if move_pkt is not None:
+                                    self.conn.send_packet(move_pkt, b'\x01')  # onGround=True
+                                elif pkts.get("sb_player_position_look") is not None:
+                                    # 回退：Player Position And Look
                                     payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + struct.pack(">ff", self._pos_yaw, self._pos_pitch) + b'\x01'
+                                    self.conn.send_packet(pkts["sb_player_position_look"], payload)
                                 elif pkts.get("sb_player_position") is not None:
-                                    # Player Position: x+y+z+onGround
+                                    # 回退：Player Position
                                     payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + b'\x01'
-                                else:
-                                    # Player Movement: onGround only
-                                    payload = b'\x01'
-                                self.conn.send_packet(pos_pkt, payload)
-                        except Exception:
-                            pass
+                                    self.conn.send_packet(pkts["sb_player_position"], payload)
+                            except Exception:
+                                pass
                     continue
                 except Exception as _e:
                     _dprint(f"[Play调试] recv异常退出: {type(_e).__name__}: {_e}")
@@ -678,6 +681,7 @@ class MCBot:
                         # 保存当前位置（用于定期位置更新）
                         self._pos_x, self._pos_y, self._pos_z = x, y, z
                         self._pos_yaw, self._pos_pitch = yaw, pitch
+                        self._has_position = True
                         # 1.17+ 有 teleport_id，旧版本没有
                         teleport_id = None
                         try:

@@ -146,6 +146,8 @@ def _load_auto_tables():
                 "cb_teleport": cb.get("position", cb.get("player_position", cb.get("synchronize_player_position"))),
                 "sb_confirm_teleport": sb.get("teleport_confirm", sb.get("confirm_teleport", sb.get("confirm_synchronization"))),
                 "sb_player_position_look": sb.get("position_look", sb.get("player_position_and_look")),
+                "sb_player_position": sb.get("position", sb.get("player_position")),
+                "sb_player_movement": sb.get("movement", sb.get("player_movement", sb.get("flying", sb.get("player")))),
                 "sb_player_flying": sb.get("flying", sb.get("player")),
                 "sb_client_info": sb.get("settings", sb.get("client_information")),
                 "chat_format": get_chat_format(proto),
