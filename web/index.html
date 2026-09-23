@@ -4174,8 +4174,15 @@ function quickObserver(ip, port) {
   if (!document.getElementById('obsAuthme').value) {
     document.getElementById('obsAuthme').value = '""';
   }
+  // 自动勾选正版验证并加载账号列表（如果有已登录账号）
+  const premiumCheckbox = document.getElementById('obsPremium');
+  const premiumSelect = document.getElementById('obsPremiumAccount');
+  if (premiumCheckbox && !premiumCheckbox.checked) {
+    premiumCheckbox.checked = true;
+    togglePremiumAccount();
+  }
   document.querySelector('.tab[data-tab="observer"]').click();
-  setTimeout(() => startObserver(), 300);
+  setTimeout(() => startObserver(), 500);
 }
 
 function quickAiBot(ip, port) {
@@ -4184,6 +4191,12 @@ function quickAiBot(ip, port) {
   document.getElementById('aiBotPort').value = port;
   if (!document.getElementById('aiBotAuthme').value) {
     document.getElementById('aiBotAuthme').value = '""';
+  }
+  // 自动勾选正版验证并加载账号列表
+  const premiumCheckbox = document.getElementById('aiBotPremium');
+  if (premiumCheckbox && !premiumCheckbox.checked) {
+    premiumCheckbox.checked = true;
+    toggleAiBotPremium();
   }
   document.querySelector('.tab[data-tab="aibot"]').click();
 }
