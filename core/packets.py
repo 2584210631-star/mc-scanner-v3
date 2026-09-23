@@ -89,7 +89,8 @@ _PLAY_TABLES = [
      "cb_keep_alive": 0x1F, "sb_keep_alive": 0x10, "cb_ping": None, "sb_pong": None,
      "cb_login": 0x24, "cb_teleport": 0x34, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x19,
      "cb_plugin_message": 0x17, "sb_plugin_message": 0x0B, "cb_player_info": 0x32,
-     "cb_chat_message": 0x0E, "cb_system_chat": None},
+     "cb_chat_message": 0x0E, "cb_system_chat": None,
+     "sb_player_position_look": 0x12, "sb_player_position": 0x11, "sb_player_movement": 0x14},
     # 340 (1.12.2): Chat Message = 0x02（注意：0x03 是 Client Status，搞混会导致服务器 ArrayIndexOutOfBounds）
     {"min_proto": 340, "max_proto": 340, "sb_chat": 0x02, "sb_chat_command": None,
      "cb_keep_alive": None, "sb_keep_alive": None, "cb_ping": None, "sb_pong": None,
