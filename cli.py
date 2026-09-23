@@ -140,6 +140,11 @@ def cmd_scan(args, cfg):
     if args.timeout:
         config.set('scan_timeout', args.timeout)
     mode = args.mode or cfg.get('scan_mode') or 'balanced'
+    # aggressive模式门槛：必须显式--yes确认
+    if mode == 'aggressive' and not getattr(args, 'yes', False):
+        print("[!] aggressive模式：5000并发、无限速、无随机化，仅适用于内网/信任网络")
+        print("[!] 公网使用极易触发IDS封禁和运营商限流。如确认请加 --yes 参数")
+        return 2
     if not getattr(args, 'sync_mode', False):
         from scanner.async_engine import AsyncScanEngine
         from scanner.async_portscan import has_uvloop
@@ -174,7 +179,7 @@ def cmd_scan(args, cfg):
         if args.web:
             from web.app import run
             run(args.db or cfg['db_path'], port=args.web)
-        return results
+        return 0 if results else 1
     results = run_full_scan(
         args.targets,
         workers=args.workers,
@@ -199,7 +204,7 @@ def cmd_scan(args, cfg):
     if args.web:
         from web.app import run
         run(args.db or cfg['db_path'], port=args.web)
-    return results
+    return 0 if results else 1
 def cmd_warn(args, cfg):
     from service.warn_service import warn_targets
     if args.workers:
@@ -238,6 +243,8 @@ def cmd_warn(args, cfg):
     print(f"{'='*50}")
     if args.output:
         save_results(results, args.output, cfg['output_format'])
+    return 0 if success > 0 else 1
+
 def cmd_warn_db(args, cfg):
     """从数据库读取已扫描结果，直接发警告，不重新扫描"""
     from service.warn_service import warn_from_db
@@ -778,6 +785,7 @@ def main():
     s.add_argument("--resume", action="store_true", help="断点续扫(中断后从上次继续)")
     s.add_argument("--sync", dest="sync_mode", action="store_true",
                    help="使用同步线程引擎（默认异步流水线，更快）")
+    s.add_argument("--yes", action="store_true", help="确认aggressive模式（高并发无保护，仅内网使用）")
     s.set_defaults(func=cmd_scan)
 
     # warn
