@@ -1416,7 +1416,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div class="panel">
       <h2>观察者终端</h2>
       <div class="form-row">
-        <div class="form-group"><label>服务器地址</label><input type="text" id="obsIp" placeholder="1.2.3.4 或 play.example.com"></div>
+        <div class="form-group"><label>服务器地址</label><input type="text" id="obsIp" placeholder="服务器IP或域名，如 1.2.3.4"></div>
         <div class="form-group"><label>端口</label><input type="number" id="obsPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="obsUser" value="WatchDog"></div>
         <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" value="""" placeholder="留空不启用"></div>
@@ -1590,7 +1590,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>端口</label><input type="number" id="storyPort" value="25565" style="width:100px"></div>
       <div class="form-group"><label>用户名</label><input type="text" id="storyUser" value="StoryBot" style="width:120px"></div>
       <div class="form-group"><label>AuthMe</label><input type="password" id="storyAuthme" placeholder="可选" style="width:100px"></div>
-      <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="storyPremium" checked> 正版</label></div>
+      <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="storyPremium" checked onchange="toggleStoryPremium()"> 正版</label></div>
+      <div class="form-group"><select id="storyPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <button class="btn btn-primary" onclick="storyGenerate()">仅生成预览</button>
@@ -1887,6 +1888,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="batchAiAutoTalk"> 定时发言</label>
       <input type="number" id="batchAiTalkInterval" value="120" style="width:80px" title="发言间隔秒">
     </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="batchAiPremium" onchange="toggleBatchAiPremium()"> 正版验证</label>
+      <select id="batchAiPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select>
+    </div>
     <p class="hint" style="color:#00d992;font-size:12px;">API Key/模型在「设置」页配置，批量启动会消耗API额度</p>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeBatchAiModal()">取消</button>
@@ -1939,6 +1944,10 @@ Protect your server NOW!</textarea></div>
     <div class="form-row">
       <div class="form-group"><label>用户名前缀</label><input type="text" id="batchObsPrefix" value="WatchDog"></div>
       <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="batchObsAuthme" placeholder="留空不启用"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="batchObsPremium" onchange="toggleBatchObsPremium()"> 正版验证</label></div>
+      <div class="form-group"><select id="batchObsPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeBatchObserverModal()">取消</button>
@@ -3153,6 +3162,7 @@ async function storyGenerateAndSend() {
         username: document.getElementById('storyUser').value || 'StoryBot',
         authme_password: document.getElementById('storyAuthme').value || null,
         use_premium: document.getElementById('storyPremium').checked,
+        premium_uuid: document.getElementById('storyPremiumAccount').value || undefined,
       })
     });
     const data = await res.json();
@@ -3378,6 +3388,8 @@ async function confirmBatchAi() {
         body: JSON.stringify({
           host: srv.ip, port: srv.port,
           username, authme_password: authme, duration,
+          use_premium: document.getElementById('batchAiPremium').checked,
+          premium_uuid: document.getElementById('batchAiPremiumAccount').value || undefined,
           ai_config: {
             persona, reply_enabled: reply, reply_cooldown: cooldown,
             trigger_keywords: [], auto_talk_enabled: autoTalk, auto_talk_interval: talkInterval
@@ -3699,6 +3711,24 @@ function toggleAiPremium() {
 function toggleAiBotPremium() {
   const checked = document.getElementById('aiBotPremium').checked;
   const selectEl = document.getElementById('aiBotPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+function toggleBatchObsPremium() {
+  const checked = document.getElementById('batchObsPremium').checked;
+  const selectEl = document.getElementById('batchObsPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+function toggleStoryPremium() {
+  const checked = document.getElementById('storyPremium').checked;
+  const selectEl = document.getElementById('storyPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+function toggleBatchAiPremium() {
+  const checked = document.getElementById('batchAiPremium').checked;
+  const selectEl = document.getElementById('batchAiPremiumAccount');
   if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
   else { selectEl.style.display = 'none'; }
 }
@@ -4165,6 +4195,8 @@ async function confirmBatchObserver() {
   const selected = window._obsSource === 'fav' ? getSelectedFavServers() : getSelectedServers();
   const prefix = document.getElementById('batchObsPrefix').value.trim() || 'WatchDog';
   const authme = document.getElementById('batchObsAuthme').value.trim();
+  const usePremium = document.getElementById('batchObsPremium').checked;
+  const premiumUuid = document.getElementById('batchObsPremiumAccount').value || '';
   const resultDiv = document.getElementById('batchObserverResult');
   resultDiv.innerHTML = '<div style="color:var(--text-secondary);">正在挂入...</div>';
   let ok = 0, fail = 0;
@@ -4175,7 +4207,7 @@ async function confirmBatchObserver() {
     try {
       const resp = await fetch('/api/observer/start', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({host: s.ip, port: s.port, username: name, authme_password: authme || undefined})
+        body: JSON.stringify({host: s.ip, port: s.port, username: name, authme_password: authme || undefined, use_premium: usePremium, premium_uuid: premiumUuid || undefined})
       });
       const d = await resp.json();
       if (d.error) {
