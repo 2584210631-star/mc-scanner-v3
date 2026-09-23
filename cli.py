@@ -87,6 +87,11 @@ def cmd_portscan(args, cfg):
     if args.timeout:
         config.set('scan_timeout', args.timeout)
     mode = args.mode or cfg.get('scan_mode') or 'balanced'
+    # aggressive模式门槛：必须显式--yes确认
+    if mode == 'aggressive' and not getattr(args, 'yes', False):
+        print("[!] aggressive模式：5000并发、无限速、无随机化，仅适用于内网/信任网络")
+        print("[!] 公网使用极易触发IDS封禁和运营商限流。如确认请加 --yes 参数")
+        return 2
     if not getattr(args, 'sync_mode', False):
         from scanner.async_portscan import scan_ports_async, get_open_ports_async, has_uvloop
         from scanner.targets import parse_targets
@@ -763,6 +768,7 @@ def main():
     p.add_argument("--resume", action="store_true", help="断点续扫(中断后从上次继续)")
     p.add_argument("--sync", dest="sync_mode", action="store_true",
                    help="使用同步线程引擎（默认异步，更快）")
+    p.add_argument("--yes", action="store_true", help="确认aggressive模式（高并发无保护，仅内网使用）")
     p.set_defaults(func=cmd_portscan)
 
     # scan
