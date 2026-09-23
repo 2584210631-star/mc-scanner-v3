@@ -87,6 +87,7 @@ class MCBot:
         self.stop_event = threading.Event()
         self.play_thread = None
         self.connected = False  # 是否仍处于 play 阶段（观察者依赖此判断掉线）
+        self.disconnect_reason = ""  # 服务器断开原因（NBT/string解析后）
         self.player_list = {}  # uuid -> name
         self.player_callback = None  # callable(name: str, action: str) -> None  action: join/leave
         # 模组服握手期间观察到的插件频道（Forge/Fabric 等）
@@ -465,14 +466,11 @@ class MCBot:
                 return
             elif resp_id == cfg.get("cb_disconnect"):
                 # 打印断开原因，方便排查模组服/白名单等问题
-                try:
-                    from .buffer import read_string
-                    reason, _ = read_string(resp_payload, 0)
-                    _dprint(f"[Config调试] 服务器断开原因: {reason}")
-                    print(f"[Config调试] 服务器断开原因: {reason}")
-                except Exception:
-                    _dprint(f"[Config调试] 服务器断开(无法解析原因), payload={resp_payload[:100].hex()}")
-                raise ConnectionError(f"配置阶段被断开")
+                reason = self._parse_disconnect_reason(resp_payload)
+                self.disconnect_reason = reason
+                _dprint(f"[Config调试] 服务器断开原因: {reason}")
+                print(f"[MCBot] 配置阶段服务器断开: {reason[:150]}")
+                raise ConnectionError(f"配置阶段被断开: {reason[:100]}")
             elif resp_id == cfg.get("cb_keep_alive"):
                 self.conn.send_packet(cfg["sb_keep_alive"], resp_payload[:8])
             elif resp_id == cfg.get("cb_ping"):
@@ -600,9 +598,13 @@ class MCBot:
 
     def _send_play_client_settings(self):
         """旧版本（<1.20.2）在Play阶段发送Client Settings。
-        1.12.2等服务器需要收到设置包后才允许聊天。"""
+        1.12.2等服务器需要收到设置包后才允许聊天。
+        1.20.2+ (has_configuration) 已在Configuration阶段发过Client Information，Play阶段不再发。"""
         pkts = self.play_packets
         if not pkts or pkts.get("sb_client_info") is None:
+            return
+        # 1.20.2+ 已在Configuration阶段发送Client Information，Play阶段跳过
+        if pkts.get("has_configuration", False):
             return
         try:
             payload = (write_string("zh_CN")
@@ -807,12 +809,10 @@ class MCBot:
                         except Exception:
                             break
                 elif packet_id == pkts.get("cb_disconnect"):
-                    try:
-                        from .buffer import read_string_from_stream
-                        reason, _ = read_string_from_stream(data, 0)
-                        _dprint(f"[Play调试] 服务器断开连接: {reason[:200]}")
-                    except Exception:
-                        _dprint(f"[Play调试] 服务器断开连接(无法解析原因), len={len(data)}")
+                    reason = self._parse_disconnect_reason(data)
+                    self.disconnect_reason = reason
+                    _dprint(f"[Play调试] 服务器断开连接: {reason[:200]}")
+                    print(f"[MCBot] 服务器断开: {reason[:150]}")
                     break
                 elif packet_id == pkts.get("cb_player_info"):
                     self.protocol_handler.parse_player_info(data)
@@ -903,6 +903,24 @@ class MCBot:
             return text, sender
         except Exception:
             return "", "未知玩家"
+
+    def _parse_disconnect_reason(self, data: bytes) -> str:
+        """解析服务器断开原因。
+        1.19.1+ (协议>=760): reason是NBT标签格式，用nbt_component_to_text解析
+        旧版本: reason是string格式
+        """
+        try:
+            if self.protocol_version >= 760:
+                from .nbt import nbt_component_to_text
+                from .buffer import BytesStream
+                s = BytesStream(data)
+                return nbt_component_to_text(s)
+            else:
+                from .buffer import read_string_from_stream
+                reason, _ = read_string_from_stream(data, 0)
+                return reason
+        except Exception as e:
+            return f"(无法解析原因, len={len(data)}, err={e})"
 
     def _extract_chat_text(self, data: bytes, is_system: bool) -> str:
         """从聊天包 payload 中提取纯文本（委托给版本协议处理器）"""
