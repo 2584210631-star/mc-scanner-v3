@@ -4050,10 +4050,11 @@ function startObserver() {
   const username = document.getElementById('obsUser').value.trim() || 'WatchDog';
   const authme = document.getElementById('obsAuthme').value.trim();
   const usePremium = document.getElementById('obsPremium').checked;
+  const premiumUuid = document.getElementById('obsPremiumAccount').value || '';
   if (!ip) { alert('请输入服务器地址'); return; }
   fetch('/api/observer/start', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({host:ip, port, username, authme_password: authme || undefined, use_premium: usePremium})
+    body: JSON.stringify({host:ip, port, username, authme_password: authme || undefined, use_premium: usePremium, premium_uuid: premiumUuid || undefined})
   }).then(r=>r.json()).then(d=>{
     if (d.error) { alert('启动失败: '+d.error); return; }
     currentObsSid = d.session_id;

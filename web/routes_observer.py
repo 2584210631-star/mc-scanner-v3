@@ -47,13 +47,15 @@ def register(app):
         timeout = float(data.get("timeout", 20.0))
         duration = max(0, float(data.get("duration", 0) or 0))
         use_premium = bool(data.get("use_premium", True))
+        premium_uuid = data.get("premium_uuid") or None
         if not host:
             return jsonify({"error": "host 不能为空"}), 400
         if not username:
             return jsonify({"error": "用户名不能为空"}), 400
         # 观察者不传protocol_version，让MCBot自动SLP探测后直接连（和昨天版本一致）
         session = ObserverSession(host, port, username, authme_password=authme,
-                                  timeout=timeout, duration=duration, use_premium=use_premium)
+                                  timeout=timeout, duration=duration, use_premium=use_premium,
+                                  premium_uuid=premium_uuid)
         session.session_id = f"{int(time.time() * 1000)}-{os.getpid()}-{len(observer_sessions) + 1}"
         session.thread = threading.Thread(target=session.run, daemon=True)
         with observer_lock:

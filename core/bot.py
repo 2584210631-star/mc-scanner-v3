@@ -69,13 +69,15 @@ class MCBot:
     _TRANSLATE_MAP = _nbt.TRANSLATE_MAP
 
     def __init__(self, host: str, port: int = 25565, protocol_version: int | None = None,
-                 username: str = "SecurityBot", timeout: float = 20.0, use_premium: bool = True):
+                 username: str = "SecurityBot", timeout: float = 20.0, use_premium: bool = True,
+                 premium_uuid: str | None = None):
         self.host = host
         self.port = port
         self.username = username
         self.timeout = timeout
         self.protocol_version = protocol_version
         self.use_premium = use_premium  # 是否允许使用正版账户登录
+        self.premium_uuid = premium_uuid  # 指定正版账户UUID，None则用config活跃账户
         self.conn: Optional[MCConnection] = None
         self.play_packets = None
         self.config_packets = None
@@ -110,9 +112,9 @@ class MCBot:
         if self.use_premium:
             try:
                 import config as _cfg
-                # 优先从多账户列表加载当前活跃账户
+                # 优先从多账户列表加载：指定的premium_uuid > config活跃账户 > 第一个账户
                 _accounts = _cfg.get("msa_accounts", []) or []
-                _active_uuid = _cfg.get("msa_active_uuid", "") or ""
+                _active_uuid = self.premium_uuid or _cfg.get("msa_active_uuid", "") or ""
                 _token = None
                 _uuid = None
                 _name = None
@@ -152,7 +154,7 @@ class MCBot:
                 import config as _cfg
                 if not self.msa_token:
                     _accounts = _cfg.get("msa_accounts", []) or []
-                    _active_uuid = _cfg.get("msa_active_uuid", "") or ""
+                    _active_uuid = self.premium_uuid or _cfg.get("msa_active_uuid", "") or ""
                     if _accounts:
                         if _active_uuid:
                             for _a in _accounts:
