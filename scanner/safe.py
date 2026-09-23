@@ -42,11 +42,11 @@ class ScanProfile:
 
 
 SCAN_MODES = {
-    # 安全模式：低并发、低速率、小批次 + 冷却、随机化、自适应
+    # 安全模式：极低并发、低速率、小批次 + 长冷却、随机化、自适应
     "safe": ScanProfile(
-        mode="safe", concurrency=150, rate=20,
-        batch_size=400, batch_cooldown=1.5,
-        shuffle=True, adaptive=True, max_rate=40,
+        mode="safe", concurrency=30, rate=5,
+        batch_size=100, batch_cooldown=3.0,
+        shuffle=True, adaptive=True, max_rate=10,
     ),
     # 平衡模式（默认）：保守默认，接近 safe 但保留一定速度
     "balanced": ScanProfile(
