@@ -27,6 +27,8 @@ def register(app):
     def warn_single():
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止警告操作"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         ip = data.get("ip")
         port = int(data.get("port") or 25565)
@@ -63,6 +65,8 @@ def register(app):
     def warn_batch():
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止警告操作"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         targets_raw = data.get("targets", [])
         username = data.get("username", "SecurityBot")
@@ -110,6 +114,8 @@ def register(app):
         """多机器人同时警告多个选中服务器"""
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止警告操作"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         targets_raw = data.get("targets", [])
         bot_count = int(data.get("bot_count", 5))
@@ -183,6 +189,8 @@ def register(app):
         """数据库一键警告：对选中服务器发送警告消息，支持AuthMe"""
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止警告操作"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         targets_raw = data.get("targets", [])
         username = data.get("username", "SecurityBot")

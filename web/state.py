@@ -94,6 +94,18 @@ def get_web_token():
     return config.get("web_token", "") or ""
 
 
+def capability_enabled(cap: str) -> bool:
+    """能力分级检查：高风险能力默认关闭，需在config.capabilities显式开启。
+    cap: 'scan' / 'login_interact' / 'rcon_commands'"""
+    caps = config.get("capabilities", {})
+    if not isinstance(caps, dict):
+        return False
+    # scan 默认开启（基础能力），其余默认关闭
+    if cap == "scan":
+        return bool(caps.get("scan", True))
+    return bool(caps.get(cap, False))
+
+
 def safe_db_path(path: str) -> str:
     if not path:
         return "mcscanner.db"

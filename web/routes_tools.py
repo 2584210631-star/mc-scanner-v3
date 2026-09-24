@@ -21,12 +21,8 @@ def register(app):
     def parse_ports_spec(ports_spec):
         return state.parse_ports_spec(ports_spec)
     def _check_capability(cap):
-        """能力分级检查：默认关闭高风险能力"""
-        import config as _cfg
-        caps = _cfg.get("capabilities", {})
-        if isinstance(caps, dict):
-            return bool(caps.get(cap, False))
-        return False
+        """能力分级检查：默认关闭高风险能力（统一走state，单一真相源）"""
+        return state.capability_enabled(cap)
 
     @app.route('/api/bot/command', methods=['POST'])
     def bot_command():
