@@ -1421,7 +1421,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group"><label>服务器地址</label><input type="text" id="obsIp" placeholder="服务器IP或域名，如 1.2.3.4"></div>
         <div class="form-group"><label>端口</label><input type="number" id="obsPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="obsUser" value="WatchDog"></div>
-        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" value="""" placeholder="留空不启用"></div>
+        <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="obsAuthme" value="" placeholder="留空不启用"></div>
         <div class="form-group" style="display:flex;flex-direction:column;gap:6px;">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
             <input type="checkbox" id="obsPremium" onchange="togglePremiumAccount()"> 正版验证
@@ -4339,23 +4339,17 @@ function startObserver() {
 }
 
 function quickObserver(ip, port) {
-  // 自动填到观察者表单并启动
+  // 自动填到观察者表单并启动（AuthMe留空=不启用）
   document.getElementById('obsIp').value = ip;
   document.getElementById('obsPort').value = port;
-  if (!document.getElementById('obsAuthme').value) {
-    document.getElementById('obsAuthme').value = '""';
-  }
   document.querySelector('.tab[data-tab="observer"]').click();
   setTimeout(() => startObserver(), 300);
 }
 
 function quickAiBot(ip, port) {
-  // 跳转到AI托管页并预填
+  // 跳转到AI托管页并预填（AuthMe留空=不启用）
   document.getElementById('aiBotHost').value = ip;
   document.getElementById('aiBotPort').value = port;
-  if (!document.getElementById('aiBotAuthme').value) {
-    document.getElementById('aiBotAuthme').value = '""';
-  }
   document.querySelector('.tab[data-tab="aibot"]').click();
 }
 
