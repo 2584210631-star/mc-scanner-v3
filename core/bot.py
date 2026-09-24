@@ -721,6 +721,60 @@ class MCBot:
             self.conn.close()
             self.conn = None
 
+    def _send_periodic_position(self):
+        """定期发送位置更新，防止服务器超时断开（每5秒一次）。
+        只有收到过teleport（知道真实位置）后才发送，避免位置全0导致解码异常。"""
+        if not self._has_position:
+            return
+        now = time.time()
+        if now - self._last_pos_update < 5.0:
+            return
+        self._last_pos_update = now
+        pkts = self.play_packets
+        try:
+            # 优先用最简单的Player Movement包（只有onGround，1字节），最不容易出错
+            move_pkt = pkts.get("sb_player_movement")
+            if move_pkt is not None:
+                self.conn.send_packet(move_pkt, b'\x01')  # onGround=True
+            elif pkts.get("sb_player_position_look") is not None:
+                payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + struct.pack(">ff", self._pos_yaw, self._pos_pitch) + b'\x01'
+                self.conn.send_packet(pkts["sb_player_position_look"], payload)
+            elif pkts.get("sb_player_position") is not None:
+                payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + b'\x01'
+                self.conn.send_packet(pkts["sb_player_position"], payload)
+        except Exception:
+            pass
+
+    def _handle_teleport(self, data: bytes):
+        """处理 Player Position And Look（cb_teleport）：解析坐标、更新本地位置、回复确认。"""
+        pkts = self.play_packets
+        try:
+            stream = BytesStream(data)
+            x = struct.unpack(">d", stream.read(8))[0]
+            y = struct.unpack(">d", stream.read(8))[0]
+            z = struct.unpack(">d", stream.read(8))[0]
+            yaw = struct.unpack(">f", stream.read(4))[0]
+            pitch = struct.unpack(">f", stream.read(4))[0]
+            stream.read(1)  # flags: 位掩码（相对坐标）
+            # 保存当前位置（用于定期位置更新）
+            self._pos_x, self._pos_y, self._pos_z = x, y, z
+            self._pos_yaw, self._pos_pitch = yaw, pitch
+            self._has_position = True
+            # 1.17+ 有 teleport_id，旧版本没有
+            teleport_id = None
+            try:
+                teleport_id = read_varint_from_stream(stream)
+            except Exception:
+                pass
+            if pkts.get("sb_confirm_teleport") is not None and teleport_id is not None:
+                self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
+            elif pkts.get("sb_player_position_look") is not None:
+                # 旧版本（1.12.2等）：回复 Player Position And Look 确认传送
+                payload = struct.pack(">ddd", x, y, z) + struct.pack(">ff", yaw, pitch) + b'\x01'
+                self.conn.send_packet(pkts["sb_player_position_look"], payload)
+        except Exception:
+            pass
+
     def _handle_play_packets(self):
         """后台线程：处理 Play 阶段 incoming 包（Keep Alive / Teleport / Ping / Disconnect）。
         观察者依赖本循环维护：聊天抓取(chat_callback)、玩家进出(player_callback)、连接状态(connected)。"""
@@ -735,27 +789,8 @@ class MCBot:
                     if _packet_count <= 10 or packet_id == pkts.get("cb_keep_alive") or packet_id == pkts.get("cb_disconnect"):
                         _dprint(f"[Play调试] 收到包: id=0x{packet_id:02x}, len={len(data)}")
                 except socket.timeout:
-                    # 定期发送位置更新，防止服务器超时断开（每5秒一次）
-                    # 只有收到过teleport包（知道真实位置）后才发送，避免位置全0导致服务器解码异常
-                    if self._has_position:
-                        now = time.time()
-                        if now - self._last_pos_update >= 5.0:
-                            self._last_pos_update = now
-                            try:
-                                # 优先用最简单的Player Movement包（只有onGround，1字节），最不容易出错
-                                move_pkt = pkts.get("sb_player_movement")
-                                if move_pkt is not None:
-                                    self.conn.send_packet(move_pkt, b'\x01')  # onGround=True
-                                elif pkts.get("sb_player_position_look") is not None:
-                                    # 回退：Player Position And Look
-                                    payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + struct.pack(">ff", self._pos_yaw, self._pos_pitch) + b'\x01'
-                                    self.conn.send_packet(pkts["sb_player_position_look"], payload)
-                                elif pkts.get("sb_player_position") is not None:
-                                    # 回退：Player Position
-                                    payload = struct.pack(">ddd", self._pos_x, self._pos_y, self._pos_z) + b'\x01'
-                                    self.conn.send_packet(pkts["sb_player_position"], payload)
-                            except Exception:
-                                pass
+                    # 定期发送位置更新，防止服务器超时断开
+                    self._send_periodic_position()
                     continue
                 except Exception as _e:
                     _dprint(f"[Play调试] recv异常退出: {type(_e).__name__}: {_e}")
@@ -777,33 +812,7 @@ class MCBot:
                             _dprint(f"[Play调试] 回复keep_alive失败: {_e}")
                             break
                 elif packet_id == pkts.get("cb_teleport"):
-                    try:
-                        # Player Position And Look: x(8)+y(8)+z(8)+yaw(4)+pitch(4)+flags(1) [+teleportId(varint), 1.17+]
-                        stream = BytesStream(data)
-                        x = struct.unpack(">d", stream.read(8))[0]
-                        y = struct.unpack(">d", stream.read(8))[0]
-                        z = struct.unpack(">d", stream.read(8))[0]
-                        yaw = struct.unpack(">f", stream.read(4))[0]
-                        pitch = struct.unpack(">f", stream.read(4))[0]
-                        stream.read(1)  # flags: 位掩码（相对坐标）
-                        # 保存当前位置（用于定期位置更新）
-                        self._pos_x, self._pos_y, self._pos_z = x, y, z
-                        self._pos_yaw, self._pos_pitch = yaw, pitch
-                        self._has_position = True
-                        # 1.17+ 有 teleport_id，旧版本没有
-                        teleport_id = None
-                        try:
-                            teleport_id = read_varint_from_stream(stream)
-                        except Exception:
-                            pass
-                        if pkts.get("sb_confirm_teleport") is not None and teleport_id is not None:
-                            self.conn.send_packet(pkts["sb_confirm_teleport"], write_varint(teleport_id))
-                        elif pkts.get("sb_player_position_look") is not None:
-                            # 旧版本（1.12.2等）：回复 Player Position And Look 确认传送
-                            payload = struct.pack(">ddd", x, y, z) + struct.pack(">ff", yaw, pitch) + b'\x01'
-                            self.conn.send_packet(pkts["sb_player_position_look"], payload)
-                    except Exception:
-                        pass
+                    self._handle_teleport(data)
                 elif packet_id == pkts.get("cb_ping"):
                     if len(data) >= 4:
                         try:
