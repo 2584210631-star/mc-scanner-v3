@@ -150,6 +150,18 @@ def register(app):
     def config_read_only_status():
         return jsonify({"read_only": state.is_read_only()})
 
+    @app.route('/api/security/status', methods=['GET'])
+    def security_status():
+        """返回完整安全/能力状态，供前端常显并禁用未授权按钮"""
+        return jsonify({
+            "read_only": state.is_read_only(),
+            "capabilities": {
+                "scan": state.capability_enabled("scan"),
+                "login_interact": state.capability_enabled("login_interact"),
+                "rcon_commands": state.capability_enabled("rcon_commands"),
+            },
+        })
+
     @app.route('/api/config/mode', methods=['POST'])
     def config_set_mode():
         """切换应用模式：fun=搞怪模式（全功能），serious=正经模式（隐藏娱乐功能）"""

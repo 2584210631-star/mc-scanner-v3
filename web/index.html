@@ -77,6 +77,22 @@ body {
 .status-pill::before { content:''; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
 .status-pill.error { color: var(--red); }
 .status-pill.error::before { background: var(--red); }
+.cap-badges { display: inline-flex; align-items: center; gap: 6px; }
+.cap-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 600; font-family: var(--mono);
+  padding: 4px 9px; border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline); background: var(--canvas);
+  color: var(--text-dim, #888); cursor: default; white-space: nowrap;
+}
+.cap-badge.on { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.cap-badge.off { color: var(--red); opacity: .85; }
+.cap-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+@media (max-width: 768px) { .cap-badge .lbl { display: none; } .cap-badge { padding: 4px 7px; } }
+.cap-disabled, [data-need]:disabled {
+  opacity: .45; cursor: not-allowed; filter: grayscale(.5);
+  pointer-events: auto;
+}
 .topbar-icon-btn {
   width: 32px; height: 32px; border-radius: 50%;
   background: var(--canvas); border: 1px solid var(--hairline);
@@ -1021,6 +1037,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
+    <div class="cap-badges" id="capBadges"></div>
     <div class="status-pill" id="headerStatus">就绪</div>
     <button class="topbar-icon-btn" onclick="switchTab('settings')" title="设置">⚙️</button>
   </div>
@@ -1138,7 +1155,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
-        <button class="btn btn-primary" id="btnStartScan" onclick="startScan()">开始扫描</button>
+        <button class="btn btn-primary" id="btnStartScan" data-need="scan" onclick="startScan()">开始扫描</button>
         <button class="btn btn-warning" onclick="startRandomScan()">暴力随机扫描</button>
         <button class="btn btn-danger" id="btnStopScan" onclick="stopScan()" disabled>停止</button>
         <button class="btn btn-secondary" onclick="saveConfig()">保存配置</button>
@@ -1428,7 +1445,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
             <option value="">加载中...</option>
           </select>
         </div>
-        <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" onclick="startObserver()">挂入观察者</button></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-primary" data-need="login" onclick="startObserver()">挂入观察者</button></div>
       </div>
     </div>
     <div class="panel">
@@ -1496,7 +1513,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <input type="text" id="aiBotKeywords" placeholder="触发关键词(逗号分隔，空=回复所有)" style="flex:1">
     </div>
     <p class="hint" style="color:#00d992">API Key/地址/模型在「设置」页配置，这里直接用</p>
-    <button onclick="startAiBot()" class="btn-primary">启动AI托管</button>
+    <button onclick="startAiBot()" data-need="login" class="btn-primary">启动AI托管</button>
   </div>
   <div class="panel">
     <h4>🎛️ 人格编辑器</h4>
@@ -2050,6 +2067,7 @@ Protect your server NOW!</textarea></div>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
+    if (typeof loadSecurityStatus === 'function') loadSecurityStatus();
   });
 }
 </script>
@@ -2071,6 +2089,49 @@ window.fetch = function(url, opts) {
   } catch(e) {}
   return _origFetch(url, opts);
 };
+
+// ===== 安全/能力状态：常显徽章 + 未授权禁用按钮 =====
+let SEC_STATE = { read_only:false, capabilities:{ scan:true, login_interact:false, rcon_commands:false } };
+
+async function loadSecurityStatus() {
+  try {
+    const r = await fetch('/api/security/status');
+    if (r.ok) SEC_STATE = await r.json();
+  } catch(e) {}
+  renderCapBadges();
+  applyCapabilityGuards();
+}
+
+function renderCapBadges() {
+  const el = document.getElementById('capBadges');
+  if (!el) return;
+  const c = SEC_STATE.capabilities || {};
+  let html = '';
+  if (SEC_STATE.read_only) {
+    html += '<span class="cap-badge off"><span class="dot"></span><span class="lbl">只读模式</span><span>🔒</span></span>';
+  }
+  html += capItem('扫描', !!c.scan);
+  html += capItem('进服交互', !!c.login_interact);
+  html += capItem('RCON/命令', !!c.rcon_commands);
+  el.innerHTML = html;
+}
+function capItem(name, on) {
+  return '<span class="cap-badge ' + (on ? 'on' : 'off') + '" title="' + name + ' ' + (on ? '已启用' : '未启用') + '">' +
+         '<span class="dot"></span><span class="lbl">' + name + '</span><span>' + (on ? '✓' : '✕') + '</span></span>';
+}
+
+// 需要 login_interact / rcon_commands 的按钮（用 data-need 标记）
+function applyCapabilityGuards() {
+  const c = SEC_STATE.capabilities || {};
+  const locked = SEC_STATE.read_only;
+  document.querySelectorAll('[data-need]').forEach(btn => {
+    const need = btn.getAttribute('data-need');
+    const allowed = !locked && (need === 'scan' ? c.scan : need === 'login' ? c.login_interact : c.rcon_commands);
+    btn.disabled = !allowed;
+    btn.classList.toggle('cap-disabled', !allowed);
+    btn.title = allowed ? '' : '当前能力未启用（见顶部徽章 / 设置 capabilities）';
+  });
+}
 // HTML转义，防止XSS
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -2784,14 +2845,15 @@ async function loadResults(page) {
       <td data-label="操作"><div class="actions">
         <button class="btn btn-success" onclick="toggleFavorite('${ip}',${r.port}, this)" title="收藏">☆</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${r.port})">警告</button>
-        <button class="btn btn-info" onclick="quickObserver('${ip}',${r.port})">观察</button>
+        <button class="btn btn-info" data-need="login" onclick="quickObserver('${ip}',${r.port})">观察</button>
         <button class="btn btn-violet" onclick="showPopularity('${ip}',${r.port})" title="人数趋势">📈</button>
-        <button class="btn btn-warning" onclick="openCmdModal('${ip}',${r.port})">命令</button>
+        <button class="btn btn-warning" data-need="rcon" onclick="openCmdModal('${ip}',${r.port})">命令</button>
       </div></td>
     </tr>`;
   }).join('');
   renderPagination('pagination', page, data.total, 50, loadResults);
   drawVersionChart(results);
+  if (typeof applyCapabilityGuards === 'function') applyCapabilityGuards();
 }
 
 function renderPagination(id, page, total, perPage, callback) {
@@ -3210,12 +3272,13 @@ async function loadDbResults(page) {
       <td data-label="认证"><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
       <td data-label="更新">${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
       <td data-label="操作"><div class="actions">
-        <button class="btn btn-primary" onclick="openWarnModal('${r.ip}',${r.port})" title="警告">⚠</button>
-        <button class="btn btn-info" onclick="quickObserver('${r.ip}',${r.port})" title="观察">👁</button>
+        <button class="btn btn-primary" data-need="login" onclick="openWarnModal('${r.ip}',${r.port})" title="警告">⚠</button>
+        <button class="btn btn-info" data-need="login" onclick="quickObserver('${r.ip}',${r.port})" title="观察">👁</button>
       </div></td>
     </tr>`;
   }).join('');
   renderPagination('dbPagination', page, data.total, 50, loadDbResults);
+  if (typeof applyCapabilityGuards === 'function') applyCapabilityGuards();
 }
 
 function exportDb(fmt) {
@@ -3976,7 +4039,16 @@ async function loadFavorites() {
     return;
   }
   empty.style.display = 'none';
-  tbody.innerHTML = data.favorites.map(f => {
+  // 渲染上限保护：收藏过多时只渲染前N条，避免一次性DOM过多卡死浏览器（可用标签/搜索缩小范围）
+  const FAV_RENDER_MAX = 300;
+  let favNoteHtml = '';
+  let favToRender = data.favorites;
+  if (data.favorites.length > FAV_RENDER_MAX) {
+    favToRender = data.favorites.slice(0, FAV_RENDER_MAX);
+    favNoteHtml = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:10px;">收藏共 ' +
+      data.favorites.length + ' 条，仅显示前 ' + FAV_RENDER_MAX + ' 条，请用标签/搜索缩小范围</td></tr>';
+  }
+  tbody.innerHTML = favToRender.map(f => {
     const info = f.last_info || {};
     const state = info.state || 'unknown';
     const stateColor = state === 'up' ? 'var(--green)' : (state === 'offline' ? 'var(--red)' : 'var(--mute)');
@@ -4007,16 +4079,17 @@ async function loadFavorites() {
       <td data-label="操作"><div class="actions">
         <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
-        <button class="btn btn-info" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
-        <button class="btn btn-violet" onclick="quickAiBot('${ip}',${f.port})" title="AI托管">🤖</button>
+        <button class="btn btn-info" data-need="login" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
+        <button class="btn btn-violet" data-need="login" onclick="quickAiBot('${ip}',${f.port})" title="AI托管">🤖</button>
         <button class="btn btn-warning" onclick="editFavTags('${ip}',${f.port})" title="标签">🏷</button>
         <button class="btn btn-warning" onclick="editFavNote('${ip}',${f.port})" title="备注">✎</button>
         <button class="btn btn-danger" onclick="removeFavorite('${ip}',${f.port})" title="删除">✕</button>
       </div></td>
     </tr>`;
-  }).join('');
+  }).join('') + favNoteHtml;
   // 加载后立即刷新一次实时状态
   refreshFavoritesRealtime();
+  if (typeof applyCapabilityGuards === 'function') applyCapabilityGuards();
 }
 function toggleSelectAllFav(cb) {
   document.querySelectorAll('.fav-server-check').forEach(c => c.checked = cb.checked);
