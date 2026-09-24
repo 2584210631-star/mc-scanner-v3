@@ -1516,6 +1516,16 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <button onclick="startAiBot()" data-need="login" class="btn-primary">启动AI托管</button>
   </div>
   <div class="panel">
+    <h4>🧠 记忆与隐私</h4>
+    <p class="hint">AI会把聊天内容写入本地长期玩家档案（ai_memory.json）。可随时清除；清除不影响正在进行的会话。</p>
+    <div class="form-row">
+      <input type="text" id="aiMemPlayer" placeholder="玩家名（留空=清除全部记忆）" style="flex:1">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-danger" onclick="clearAiMemory()">清除记忆</button>
+    </div>
+  </div>
+  <div class="panel">
     <h4>🎛️ 人格编辑器</h4>
     <p class="hint">拖动滑块调节性格，实时生成提示词，点"应用到上面"即可使用</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0;">
@@ -4458,6 +4468,26 @@ document.addEventListener('click', e=>{
 // ============ AI托管Bot ============
 let currentAiBotId = null;
 let aiBotPollTimer = null;
+
+async function clearAiMemory() {
+  const player = document.getElementById('aiMemPlayer').value.trim();
+  const tip = player ? ('玩家 ' + player + ' 的记忆') : '全部AI记忆';
+  if (!confirm('确定清除' + tip + '？此操作不可恢复')) return;
+  try {
+    const r = await fetch('/api/ai_memory/clear', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(player ? {player} : {})
+    });
+    const data = await r.json();
+    if (data.success) {
+      if (player) toast('已清除 ' + player + ' 的记忆', 'success');
+      else toast('已清除全部记忆（' + (data.cleared_count || 0) + ' 个玩家档案）', 'success');
+      document.getElementById('aiMemPlayer').value = '';
+    } else {
+      toast('清除失败：' + (data.error || '?'), 'error');
+    }
+  } catch (e) { toast('清除失败：' + e, 'error'); }
+}
 
 function startAiBot() {
   const host = document.getElementById('aiBotHost').value.trim();
