@@ -150,6 +150,31 @@ def register(app):
     def config_read_only_status():
         return jsonify({"read_only": state.is_read_only()})
 
+    @app.route('/api/config/capability', methods=['POST'])
+    def config_capability():
+        """切换能力开关（进服交互/RCON命令等高风险能力）。
+        开启前必须先由前端展示风险确认；本接口仅做白名单校验与持久化。"""
+        data = request.json or {}
+        cap = str(data.get("cap", ""))
+        enabled = bool(data.get("enabled", False))
+        allowed_caps = {"scan", "login_interact", "rcon_commands"}
+        if cap not in allowed_caps:
+            return jsonify({"success": False, "error": f"未知能力: {cap}"}), 400
+        caps = config.get("capabilities", {}) or {}
+        if not isinstance(caps, dict):
+            caps = {}
+        caps[cap] = enabled
+        if not config.save_config({"capabilities": caps}):
+            return jsonify({"success": False, "error": "保存配置失败"}), 500
+        return jsonify({
+            "success": True,
+            "capabilities": {
+                "scan": state.capability_enabled("scan"),
+                "login_interact": state.capability_enabled("login_interact"),
+                "rcon_commands": state.capability_enabled("rcon_commands"),
+            },
+        })
+
     @app.route('/api/security/status', methods=['GET'])
     def security_status():
         """返回完整安全/能力状态，供前端常显并禁用未授权按钮"""

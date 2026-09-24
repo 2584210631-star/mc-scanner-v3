@@ -1724,6 +1724,29 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     </div>
   </div>
   <div class="panel">
+    <h2>危险操作能力开关</h2>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">高风险能力默认关闭（灰色按钮就是被它锁的）。开启需先确认风险，仅用于你自己拥有或获得书面授权的服务器。</p>
+    <div class="form-row">
+      <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:14px;">进服交互 <span style="font-size:11px;color:var(--text-secondary);">登录 / 警告 / 观察 / AI托管</span></div>
+          <div style="font-size:12px;color:var(--text-secondary);">开启后机器人可登录服务器、发送消息、挂观察者、启动AI托管</div>
+        </div>
+        <button class="btn btn-primary" id="btnToggleLoginInteract" onclick="toggleCapability('login_interact')" style="min-width:76px;">开启</button>
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:14px;">RCON / 命令 <span style="font-size:11px;color:var(--text-secondary);">服务器管理员权限</span></div>
+          <div style="font-size:12px;color:var(--text-secondary);">开启后可在服务器执行命令，等同管理员，强烈建议保持关闭</div>
+        </div>
+        <button class="btn btn-warning" id="btnToggleRcon" onclick="toggleCapability('rcon_commands')" style="min-width:76px;">开启</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-secondary);line-height:1.7;">
+      提示：此前观察 / 警告 / 命令图标显示为灰色不可点击，正是因为这些能力默认关闭。开启后顶部徽章会变为 ✓ 并立即解锁对应按钮。
+    </div>
+  </div>
+  <div class="panel">
     <h2>面板配置</h2>
     <div class="form-row">
       <div class="form-group"><label>访问 Token（空=不启用）</label><input type="password" id="setWebToken" placeholder="留空不启用认证"></div>
@@ -1842,6 +1865,25 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <button class="btn btn-primary" onclick="confirmWarn()">发送</button>
     </div>
     <div id="warnResult" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- 能力开启风险确认弹窗 -->
+<div class="modal-overlay hidden" id="capConfirmModal">
+  <div class="modal" style="max-width:520px;border-color:var(--red);">
+    <h3>⚠️ 开启高风险能力确认</h3>
+    <div id="capConfirmBody" style="font-size:13px;line-height:1.8;color:var(--text-secondary);"></div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-secondary);line-height:1.7;">
+      未经授权扫描、登录或控制他人计算机信息系统，可能触犯《刑法》第285/286条、《网络安全法》等法律法规，使用者自行承担法律责任。本能力仅限用于<b>你自己拥有或获得书面授权</b>的服务器。
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="capConfirmCheck" style="width:16px;height:16px;" onchange="document.getElementById('capConfirmBtn').disabled=!this.checked">
+      <label for="capConfirmCheck" style="font-size:13px;">我已阅读并理解上述风险，确认开启该能力</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeCapConfirm()">取消</button>
+      <button class="btn btn-danger" id="capConfirmBtn" onclick="confirmCapabilityEnable()" disabled>确认开启</button>
+    </div>
   </div>
 </div>
 
@@ -2095,6 +2137,7 @@ async function loadSecurityStatus() {
   } catch(e) {}
   renderCapBadges();
   applyCapabilityGuards();
+  renderCapabilityPanel();
 }
 
 function renderCapBadges() {
@@ -2126,6 +2169,66 @@ function applyCapabilityGuards() {
     btn.classList.toggle('cap-disabled', !allowed);
     btn.title = allowed ? '' : '当前能力未启用（见顶部徽章 / 设置 capabilities）';
   });
+}
+
+// ===== 设置页：危险操作能力开关（开启前必须风险确认） =====
+const CAP_LABELS = { scan: '扫描', login_interact: '进服交互', rcon_commands: 'RCON/命令' };
+const CAP_WARNINGS = {
+  login_interact: '开启后，机器人将能够登录服务器（含离线服 / AuthMe自动注册）、发送警告消息、挂入观察者、启动AI托管。<br>此能力只应配合<strong>你自己拥有或获得书面授权</strong>的服务器使用。',
+  rcon_commands: '开启后，将对服务器开放 RCON 远程控制与命令执行权限，等同管理员。<br>滥用将直接触犯《刑法》第285条，强烈建议保持关闭，仅在你自己的服务器上开启。',
+  scan: '开启后，扫描按钮可用。对未授权目标进行扫描同样违法。'
+};
+let _pendingCap = null;
+
+function renderCapabilityPanel() {
+  const c = SEC_STATE.capabilities || {};
+  const b1 = document.getElementById('btnToggleLoginInteract');
+  const b2 = document.getElementById('btnToggleRcon');
+  if (b1) { b1.textContent = c.login_interact ? '关闭' : '开启'; b1.className = 'btn ' + (c.login_interact ? 'btn-danger' : 'btn-primary'); }
+  if (b2) { b2.textContent = c.rcon_commands ? '关闭' : '开启'; b2.className = 'btn ' + (c.rcon_commands ? 'btn-danger' : 'btn-warning'); }
+}
+
+function toggleCapability(cap) {
+  const cur = !!(SEC_STATE.capabilities || {})[cap];
+  if (cur) { _setCapability(cap, false); return; }  // 关闭无需确认
+  // 开启前必须弹风险确认
+  _pendingCap = cap;
+  document.getElementById('capConfirmBody').innerHTML =
+    '<b>你要开启的能力：' + (CAP_LABELS[cap] || cap) + '</b><br>' + (CAP_WARNINGS[cap] || '');
+  document.getElementById('capConfirmCheck').checked = false;
+  document.getElementById('capConfirmBtn').disabled = true;
+  document.getElementById('capConfirmModal').classList.remove('hidden'); animateModalIn(document.getElementById('capConfirmModal'));
+}
+
+function closeCapConfirm() {
+  _pendingCap = null;
+  document.getElementById('capConfirmModal').classList.add('hidden');
+}
+
+function confirmCapabilityEnable() {
+  if (!document.getElementById('capConfirmCheck').checked) return;
+  const cap = _pendingCap;
+  closeCapConfirm();
+  if (cap) _setCapability(cap, true);
+}
+
+async function _setCapability(cap, enabled) {
+  try {
+    const r = await fetch('/api/config/capability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cap, enabled })
+    });
+    const data = await r.json();
+    if (!data.success) { toast('切换失败: ' + (data.error || '未知错误'), 'error'); return; }
+    SEC_STATE.capabilities = data.capabilities;
+    renderCapBadges();
+    applyCapabilityGuards();
+    renderCapabilityPanel();
+    toast('已' + (enabled ? '开启' : '关闭') + ' ' + (CAP_LABELS[cap] || cap), enabled ? 'success' : 'info');
+  } catch (e) {
+    toast('请求失败: ' + e.message, 'error');
+  }
 }
 // HTML转义，防止XSS
 function escapeHtml(str) {
