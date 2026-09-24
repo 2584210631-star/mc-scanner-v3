@@ -178,6 +178,21 @@ def register(app):
             })
         return jsonify({"personas": out})
 
+    @app.route('/api/ai_memory/clear', methods=['POST'])
+    def ai_memory_clear():
+        """清除AI长期玩家记忆。body: {player?: 名字}，不传player则清除全部"""
+        data = request.json or {}
+        player = (data.get("player") or "").strip()
+        try:
+            from core import ai_memory
+            if player:
+                ok = ai_memory.clear_player(player)
+                return jsonify({"success": ok, "cleared_player": player})
+            n = ai_memory.clear_all_memory()
+            return jsonify({"success": True, "cleared_count": n})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
     @app.route('/api/assistant/chat', methods=['POST'])
     def assistant_chat():
         """AI助手：自然语言指令控制扫描器"""

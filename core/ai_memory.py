@@ -234,3 +234,24 @@ def build_memory_prompt(chat_log, mid_memory, sender, short_count=50):
         lines = [f"[{s}] {t}" for _, _, s, t in recent]
         parts.append("【最近聊天】\n" + "\n".join(lines))
     return "\n\n".join(parts) if parts else ""
+
+
+def clear_all_memory():
+    """清除全部长期玩家档案并落盘。返回清除的玩家数量。"""
+    with _LOCK:
+        _load()
+        n = len(_long_term)
+        _long_term.clear()
+        _save()
+    return n
+
+
+def clear_player(sender):
+    """清除单个玩家的长期档案。返回是否存在并删除。"""
+    with _LOCK:
+        _load()
+        if sender in _long_term:
+            del _long_term[sender]
+            _save()
+            return True
+        return False

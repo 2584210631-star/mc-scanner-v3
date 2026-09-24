@@ -67,6 +67,9 @@ class AIBotSession:
         self.topic = cfg.get("topic", "")
         self.chat_log = deque(maxlen=500)
         self._last_reply_time = 0
+        # API连续失败退避：失败达阈值后暂停一段时间，避免死循环打满配额/烧钱
+        self._api_fail_count = 0
+        self._api_backoff_until = 0.0
         self._last_auto_talk = time.time()
         self._seq = 0
         # 分层记忆
@@ -83,6 +86,18 @@ class AIBotSession:
     @staticmethod
     def _ts():
         return datetime.now().strftime("%H:%M:%S")
+
+    def _safe_send_chat(self, line):
+        """安全发送AI回复：拦截以/开头的内容，防止提示词注入诱导AI执行/op、/stop等服务器命令。
+        返回True=已发送，False=被拦截/为空。命令执行只能走独立的rcon/commands模块（默认关闭）。"""
+        line = (line or "").strip()
+        if not line:
+            return False
+        if line.startswith("/"):
+            _log.warning(f"[AI Bot {self.username}] 拦截疑似命令的AI回复，未发送: {line[:40]}")
+            return False
+        self.bot.send_chat(line)
+        return True
 
     def _on_chat(self, text, sender="未知"):
         try:
@@ -102,8 +117,25 @@ class AIBotSession:
         except Exception as e:
             _log.warning(f"[AI Bot {self.username}] _on_chat error: {e}")
 
+    def _in_api_backoff(self):
+        """是否处于API连续失败退避期"""
+        return time.time() < self._api_backoff_until
+
+    def _record_api_result(self, success):
+        """根据API成功/失败更新退避状态：连续失败3次进入60秒退避，成功立即重置"""
+        if success:
+            self._api_fail_count = 0
+            self._api_backoff_until = 0.0
+        else:
+            self._api_fail_count += 1
+            if self._api_fail_count >= 3:
+                self._api_backoff_until = time.time() + 60
+                _log.warning(f"[AI Bot {self.username}] API连续失败{self._api_fail_count}次，退避60秒暂停回复")
+
     def _should_reply(self, sender, text):
         now = time.time()
+        if self._in_api_backoff():
+            return False
         if now - self._last_reply_time < self.reply_cooldown:
             return False
         if sender == self.username:
@@ -174,21 +206,26 @@ class AIBotSession:
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
+                    self._record_api_result(True)
                     reply = result["text"].strip().replace('"', '').replace('「', '').replace('」', '')
                     for line in split_for_minecraft(reply):
                         if self.stop_event.is_set():
                             break
-                        self.bot.send_chat(line)
-                        time.sleep(0.5)
+                        if self._safe_send_chat(line):
+                            time.sleep(0.5)
                 elif not result.get("success"):
+                    self._record_api_result(False)
                     _log.warning(f"[AI Bot] generate failed: {result.get('error', '?')}")
             except Exception as e:
+                self._record_api_result(False)
                 _log.warning(f"[AI Bot] reply error: {e}")
 
         threading.Thread(target=_reply_worker, daemon=True).start()
 
     def _do_auto_talk(self):
         if not self.auto_talk_enabled or not self.bot or self.bot.state != "play":
+            return
+        if self._in_api_backoff():
             return
         now = time.time()
         if now - self._last_auto_talk < self.auto_talk_interval:
@@ -224,13 +261,16 @@ class AIBotSession:
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):
+                    self._record_api_result(True)
                     for line in split_for_minecraft(result["text"]):
                         if self.stop_event.is_set():
                             break
-                        self.bot.send_chat(line)
-                        time.sleep(1.0)
+                        if self._safe_send_chat(line):
+                            time.sleep(1.0)
+                else:
+                    self._record_api_result(False)
             except Exception:
-                pass
+                self._record_api_result(False)
 
         threading.Thread(target=_talk_worker, daemon=True).start()
 
