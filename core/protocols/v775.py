@@ -2,15 +2,78 @@
 26.1 变化：
 - PLAYER_CHAT 包开头新增 Global Index (VarInt)，然后才是 Sender UUID
 - 聊天包 hasSignature+messageCount → signature(option)+offset
-- 无签名时编码结果与 774 相同"""
+- 无签名时编码结果与 774 相同
+- Player Info Update：action 由 varint 改为 u8 bitflags，并新增 update_hat / update_list_order 两位；
+  update_listed 由 bool 改为 varint（详见 parse_player_info）"""
 from __future__ import annotations
 from .v774 import Handler as V774Handler
-from ..buffer import BytesStream, read_varint_from_stream, read_string_from_stream, read_boolean_from_stream
+from ..buffer import BytesStream, read_varint_from_stream, read_string_from_stream, read_boolean_from_stream, read_uuid_from_stream
 
 
 class Handler(V774Handler):
     protocol_version = 775
     version_name = "26.1"
+
+    def parse_player_info(self, data: bytes) -> None:
+        """26.1 Player Info Update（官方 minecraft-data 结构）：
+        u8 bitflags action：
+          0x01 add_player / 0x02 initialize_chat / 0x04 update_game_mode /
+          0x08 update_listed / 0x10 update_latency / 0x20 update_display_name /
+          0x40 update_hat / 0x80 update_list_order
+        每条玩家：UUID + 按 action 位读字段（1.20.5 的 varint action 与 bool listed 在此版本已不同）"""
+        try:
+            from ..nbt import nbt_skip_value
+            stream = BytesStream(data)
+            actions = stream.read(1)[0]  # u8 bitflags
+            count = read_varint_from_stream(stream)
+            for _ in range(count):
+                uid = str(read_uuid_from_stream(stream))
+                if actions & 0x01:  # add_player: name + properties
+                    name = read_string_from_stream(stream)
+                    is_new = uid not in self.bot.player_list
+                    self.bot.player_list[uid] = name
+                    props = read_varint_from_stream(stream)
+                    for _ in range(props):
+                        read_string_from_stream(stream)
+                        read_string_from_stream(stream)
+                        if read_boolean_from_stream(stream):
+                            read_string_from_stream(stream)
+                    if is_new and self.bot.player_callback:
+                        try:
+                            self.bot.player_callback(name, "join")
+                        except Exception:
+                            pass
+                if actions & 0x02:  # initialize_chat: option(uuid + expire i64 + keyBuffer + sigBuffer)
+                    if read_boolean_from_stream(stream):
+                        stream.read(16)
+                        stream.read(8)
+                        klen = read_varint_from_stream(stream)
+                        stream.read(klen)
+                        slen = read_varint_from_stream(stream)
+                        stream.read(slen)
+                if actions & 0x04:  # update_game_mode: varint
+                    read_varint_from_stream(stream)
+                if actions & 0x08:  # update_listed: varint（26.1 由 bool 改 varint）
+                    if not read_varint_from_stream(stream):
+                        old = self.bot.player_list.pop(uid, None)
+                        if old is not None and self.bot.player_callback:
+                            try:
+                                self.bot.player_callback(old, "leave")
+                            except Exception:
+                                pass
+                if actions & 0x10:  # update_latency: varint
+                    read_varint_from_stream(stream)
+                if actions & 0x20:  # update_display_name: option(anonymousNbt)
+                    if read_boolean_from_stream(stream):
+                        raw = stream.read(1)
+                        if raw:
+                            nbt_skip_value(stream, raw[0])
+                if actions & 0x40:  # update_hat: bool
+                    read_boolean_from_stream(stream)
+                if actions & 0x80:  # update_list_order: varint
+                    read_varint_from_stream(stream)
+        except Exception:
+            pass
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         """26.1 PLAYER_CHAT: Global Index(VarInt) + Sender UUID + Index + Signature + Message + ..."""
@@ -39,7 +102,8 @@ class Handler(V774Handler):
             return ""
 
     def extract_chat_sender(self, data: bytes) -> str:
-        """26.1 PLAYER_CHAT: 先跳过 Global Index，再读 Sender UUID"""
+        """26.1 PLAYER_CHAT: 先跳过 Global Index，再读 Sender UUID；
+        UUID 查不到（离线服/插件服常见）时回退从聊天 JSON with[0] 提取"""
         try:
             stream = BytesStream(data)
             read_varint_from_stream(stream)  # Global Index
@@ -47,6 +111,11 @@ class Handler(V774Handler):
             name = self._sender_from_uuid(uuid_bytes)
             if name:
                 return name
-            return "未知玩家"
+            # UUID 查不到 → 尝试从聊天 JSON with[0] 提取 sender
+            try:
+                name = self._sender_from_json(stream)
+            except Exception:
+                name = ""
+            return name or "未知玩家"
         except Exception:
             return "未知玩家"
