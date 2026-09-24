@@ -169,6 +169,9 @@ class AdaptiveRateController:
 
 # ---------------------------------------------------------------- 断点续扫
 
+# 进度文件格式版本：结构不兼容时递增；读取到不匹配版本拒绝resume，防止字段错位
+PROGRESS_VERSION = 1
+
 class ScanProgressStore:
     """
     断点续扫：把"剩余任务"持久化到 JSON 文件。
@@ -195,11 +198,16 @@ class ScanProgressStore:
             try:
                 with open(self.progress_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                saved = data.get("remaining", [])
-                if saved:
-                    remaining = [tuple(item) for item in saved]
-                    resume = True
-                    print(f"[*] 续扫模式：读取 {len(remaining)} 个剩余目标 ({self.progress_file})")
+                ver = data.get("version")
+                if ver != PROGRESS_VERSION:
+                    print(f"[!] 续扫文件版本不兼容（文件={ver}, 程序支持={PROGRESS_VERSION}），"
+                          f"请删除 {self.progress_file} 后重新开始")
+                else:
+                    saved = data.get("remaining", [])
+                    if saved:
+                        remaining = [tuple(item) for item in saved]
+                        resume = True
+                        print(f"[*] 续扫模式：读取 {len(remaining)} 个剩余目标 ({self.progress_file})")
             except Exception as e:
                 print(f"[!] 读取续扫文件失败: {e}，重新开始")
         # 新任务物化上限保护：超限则本次不启用断点续扫（进度文件也会过大）
@@ -235,6 +243,7 @@ class ScanProgressStore:
             tmp = self.progress_file + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({
+                    "version": PROGRESS_VERSION,
                     "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "remaining_count": len(self._remaining),
                     "remaining": [list(item) for item in self._remaining],

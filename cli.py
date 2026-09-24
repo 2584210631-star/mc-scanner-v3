@@ -675,11 +675,11 @@ def cmd_rcon(args, cfg):
         return 4
     if not args.host:
         print("用法: python cli.py rcon <host:port> -p <password> -c <command>")
-        return
+        return 3
     if not getattr(args, "yes", False):
         print("[!] 警告：RCON可执行服务器管理命令（op/ban/stop等），仅限授权服务器使用")
         print("[!] 确认执行请加 --yes 参数")
-        return
+        return 3
     if ":" in args.host:
         host, port = args.host.rsplit(":", 1)
         port = int(port)
@@ -723,11 +723,11 @@ def cmd_commands(args, cfg):
         return 4
     if not args.target:
         print("用法: python cli.py commands <host:port> -u <用户名> [选项]")
-        return
+        return 3
     if not getattr(args, "yes", False):
         print("[!] 警告：命令执行可对服务器运行任意指令，仅限授权服务器使用")
         print("[!] 确认执行请加 --yes 参数")
-        return
+        return 3
     if ":" in args.target:
         host, port = args.target.rsplit(":", 1)
         port = int(port)
