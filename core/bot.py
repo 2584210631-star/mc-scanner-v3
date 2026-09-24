@@ -676,6 +676,7 @@ class MCBot:
         """
         _messages = []
         _old_cb = self.chat_callback
+        self._authme_failed = False
 
         def _collect(text, sender):
             _messages.append(text.lower())
@@ -694,15 +695,19 @@ class MCBot:
                 while time.time() < _deadline:
                     time.sleep(0.3)
                     _joined = " ".join(_messages)
-                    # 检测未注册提示
-                    if any(k in _joined for k in ["未注册", "请先注册", "register", "doesn't exist", "not registered"]):
+                    # 检测未注册提示（AuthMe 中英文常见文案）
+                    if any(k in _joined for k in ["未注册", "请先注册", "register", "doesn't exist", "not registered", "please register", "aren't registered"]):
                         if mode == "auto":
                             self.send_command(f"register {password} {password}")
                             time.sleep(1.5)
                             self.send_command(f"login {password}")
                         break
-                    # 检测登录成功
-                    if any(k in _joined for k in ["登录成功", "logged in", "welcome", "successfully"]):
+                    # 检测登录成功（含 AuthMe 默认英文 "Authentication successful!"）
+                    if any(k in _joined for k in ["登录成功", "欢迎回来", "logged in", "welcome", "successfully", "authentication successful", "authenticated"]):
+                        break
+                    # 检测登录失败（密码错误等），避免傻等并标记
+                    if any(k in _joined for k in ["密码错误", "wrong password", "login failed", "登录失败", "incorrect", "invalid password", "account locked", "已被锁定"]):
+                        self._authme_failed = True
                         break
         finally:
             self.chat_callback = _old_cb
@@ -992,18 +997,18 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
         result.version_name = get_version_name(bot.protocol_version)
         result.modded_channels = set(bot.modded_channels)
 
-        # AuthMe 自动注册/登录
+        # 先等服务器完成Play阶段初始化（区块加载、玩家列表等）
+        # 1.18.x等版本连接后立即发命令会导致解码异常（Index out of bounds）或被服务端吞掉
+        if connect_delay > 0:
+            time.sleep(connect_delay)
+
+        # AuthMe 自动注册/登录（必须在服务器就绪后执行，否则 /login 会被吞）
         if authme_password:
             try:
                 bot.authme_login(authme_password, mode="auto")
                 result.authme_used = True
             except Exception:
                 pass
-
-        # 等待服务器完成Play阶段初始化（区块加载、玩家列表等）
-        # 1.18.x等版本连接后立即发消息会导致服务器解码异常（Index out of bounds）
-        if connect_delay > 0:
-            time.sleep(connect_delay)
 
         # 发送警告消息
         for msg in messages:

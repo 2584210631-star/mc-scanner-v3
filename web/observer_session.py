@@ -179,10 +179,16 @@ class ObserverSession:
                 reconnect_delay = 5.0
                 self._append_log("system", {"text": f"已连接 {self.host}:{self.port}"})
                 if self.authme_password:
+                    # 先等服务器 Play 阶段就绪再发 /login，避免命令被吞导致"不登录"
+                    time.sleep(1.5)
                     try:
                         self.bot.authme_login(self.authme_password, mode="auto")
-                    except Exception:
-                        pass
+                        if getattr(self.bot, "_authme_failed", False):
+                            self._append_log("system", {"text": "AuthMe 登录失败：密码错误或账号被锁定（检查密码/是否已注册）"})
+                        else:
+                            self._append_log("system", {"text": "AuthMe 登录命令已发送"})
+                    except Exception as e:
+                        self._append_log("system", {"text": f"AuthMe 登录异常: {e}"})
                 # 保持连接
                 while not self.stop_event.is_set():
                     if not getattr(self.bot, "connected", True):

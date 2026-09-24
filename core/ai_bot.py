@@ -302,6 +302,8 @@ class AIBotSession:
                 reconnect_count = 0
                 reconnect_delay = 5.0
                 if self.authme_password:
+                    # 先等服务器 Play 阶段就绪再发 /login，避免命令被吞
+                    time.sleep(1.5)
                     try:
                         self.bot.authme_login(self.authme_password, mode="auto")
                     except Exception:
