@@ -95,7 +95,14 @@ body {
 .cap-badge.on { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
 .cap-badge.off { color: var(--red); opacity: .85; }
 .cap-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-@media (max-width: 768px) { .cap-badge .lbl { display: none; } .cap-badge { padding: 4px 7px; } }
+.cap-badge .lbl-short { display: none; }
+@media (max-width: 768px) {
+  .cap-badges { gap: 4px; }
+  .cap-badge { padding: 3px 7px; gap: 3px; font-size: 10px; }
+  .cap-badge .lbl { display: none; }
+  .cap-badge .lbl-short { display: inline; }
+  .cap-badge .dot { display: none; }
+}
 .cap-disabled, [data-need]:disabled {
   opacity: .45; cursor: not-allowed; filter: grayscale(.5);
   pointer-events: auto;
@@ -1401,7 +1408,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group"><label>端口</label><input type="number" id="aiPort" value="25565"></div>
         <div class="form-group"><label>用户名</label><input type="text" id="aiUsername" value="StoryBot"></div>
         <div class="form-group"><label>AuthMe密码</label><input type="text" id="aiAuthme" placeholder="可选"></div>
-        <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="aiPremium" checked onchange="toggleAiPremium()"> 正版验证</label></div>
+        <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="aiPremium" onchange="toggleAiPremium()"> 正版验证</label></div>
         <div class="form-group"><select id="aiPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
       </div>
       <div class="form-group"><label>API Key（留空用全局配置）</label><input type="password" id="aiApiKey" placeholder="sk-..."></div>
@@ -1479,7 +1486,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div class="form-row">
       <input type="password" id="aiBotAuthme" placeholder="AuthMe密码(可选)" style="flex:1">
       <input type="number" id="aiBotDuration" placeholder="时长秒(0=无限)" value="0" style="width:120px">
-      <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="aiBotPremium" checked onchange="toggleAiBotPremium()"> 正版验证</label>
+      <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="aiBotPremium" onchange="toggleAiBotPremium()"> 正版验证</label>
       <select id="aiBotPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select>
     </div>
     <div class="form-row">
@@ -1516,7 +1523,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0;">
       <div>
         <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">毒舌程度 <span id="slVal_salt">50</span></label>
-        <input type="range" id="sl_salt" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--red)">
+        <input type="range" id="sl_salt" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--primary)">
       </div>
       <div>
         <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">话痨程度 <span id="slVal_chatty">50</span></label>
@@ -1524,19 +1531,19 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       </div>
       <div>
         <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">阴阳怪气 <span id="slVal_yinyang">50</span></label>
-        <input type="range" id="sl_yinyang" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--violet)">
+        <input type="range" id="sl_yinyang" min="0" max="100" value="50" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--primary)">
       </div>
       <div>
         <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">攻击性 <span id="slVal_aggro">30</span></label>
-        <input type="range" id="sl_aggro" min="0" max="100" value="30" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--amber)">
+        <input type="range" id="sl_aggro" min="0" max="100" value="30" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--primary)">
       </div>
       <div>
         <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">智商 <span id="slVal_iq">60</span></label>
-        <input type="range" id="sl_iq" min="0" max="100" value="60" oninput="updatePersonaEditor()" style="width:100%;accent-color:#60a5fa">
+        <input type="range" id="sl_iq" min="0" max="100" value="60" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--primary)">
       </div>
       <div>
         <label style="font-size:11px;color:var(--mute);display:flex;justify-content:space-between;">情商 <span id="slVal_eq">30</span></label>
-        <input type="range" id="sl_eq" min="0" max="100" value="30" oninput="updatePersonaEditor()" style="width:100%;accent-color:#f472b6">
+        <input type="range" id="sl_eq" min="0" max="100" value="30" oninput="updatePersonaEditor()" style="width:100%;accent-color:var(--primary)">
       </div>
     </div>
     <div class="form-row">
@@ -1602,7 +1609,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>端口</label><input type="number" id="storyPort" value="25565" style="width:100px"></div>
       <div class="form-group"><label>用户名</label><input type="text" id="storyUser" value="StoryBot" style="width:120px"></div>
       <div class="form-group"><label>AuthMe</label><input type="password" id="storyAuthme" placeholder="可选" style="width:100px"></div>
-      <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="storyPremium" checked onchange="toggleStoryPremium()"> 正版</label></div>
+      <div class="form-group"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="storyPremium" onchange="toggleStoryPremium()"> 正版</label></div>
       <div class="form-group"><select id="storyPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select></div>
     </div>
     <div style="display:flex;gap:8px;margin-top:8px;">
@@ -2148,14 +2155,14 @@ function renderCapBadges() {
   if (SEC_STATE.read_only) {
     html += '<span class="cap-badge off"><span class="dot"></span><span class="lbl">只读模式</span><span>🔒</span></span>';
   }
-  html += capItem('扫描', !!c.scan);
-  html += capItem('进服交互', !!c.login_interact);
-  html += capItem('RCON/命令', !!c.rcon_commands);
+  html += capItem('扫描', '扫', !!c.scan);
+  html += capItem('进服交互', '交互', !!c.login_interact);
+  html += capItem('RCON/命令', 'RCON', !!c.rcon_commands);
   el.innerHTML = html;
 }
-function capItem(name, on) {
+function capItem(name, short, on) {
   return '<span class="cap-badge ' + (on ? 'on' : 'off') + '" title="' + name + ' ' + (on ? '已启用' : '未启用') + '">' +
-         '<span class="dot"></span><span class="lbl">' + name + '</span><span>' + (on ? '✓' : '✕') + '</span></span>';
+         '<span class="dot"></span><span class="lbl">' + name + '</span><span class="lbl-short">' + short + '</span><span>' + (on ? '✓' : '✕') + '</span></span>';
 }
 
 // 需要 login_interact / rcon_commands 的按钮（用 data-need 标记）
@@ -4763,7 +4770,8 @@ setTimeout(updatePersonaEditor, 500);
 function startMultiAi() {
   const host = document.getElementById('multiHost').value.trim();
   if (!host) { alert('请输入服务器地址'); return; }
-  const checked = Array.from(document.querySelectorAll('.persona-cb:checked')).map(cb=>parseInt(cb.value));
+  const grid = document.getElementById('persona' + 'CardGrid');
+  const checked = Array.from((grid || document).querySelectorAll('.persona-cb:checked')).map(cb=>parseInt(cb.value));
   fetch('/api/ai_multi/start', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       host, port: document.getElementById('multiPort').value || 25565,

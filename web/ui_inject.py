@@ -35,6 +35,9 @@ _PERSONA_JS = r"""
       tip.textContent = '点选参与互聊的人格（可多选，不选则随机）';
       host.parentElement.insertBefore(tip, host);
     }
+    // 卡片网格已替代原简单复选框，隐藏旧的 #personaCheckboxes，避免两套人格选择重复
+    var oldCb = document.getElementById('personaCheckboxes');
+    if (oldCb) oldCb.style.display = 'none';
     if (!personas || !personas.length) return;
     host.innerHTML = personas.map(function(p,i){
       var label = esc(p.label || p.name || ('人格'+(i+1)));
