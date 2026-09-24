@@ -356,6 +356,8 @@ def cmd_bot(args, cfg):
         bot.connect()
         print(f"[+] 登录成功 (proto {bot.protocol_version})")
         if args.authme:
+            # 等服务器 Play 阶段就绪再登录，避免 /login 被吞（与 bot.py 时序修复一致）
+            time.sleep(1.5)
             print(f"[+] AuthMe: {'/register' if args.register else '/login'}")
             bot.authme_login(args.authme, mode="register_then_login" if args.register else "auto")
         if args.message:
