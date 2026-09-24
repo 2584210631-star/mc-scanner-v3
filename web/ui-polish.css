@@ -113,3 +113,15 @@ input:focus, select:focus, textarea:focus {
 .persona-card .pc-name { font-size: 11px; color: var(--mute); margin-top: 2px; font-family: var(--mono); }
 .persona-card .pc-preview { font-size: 11px; color: var(--body); margin-top: 6px; line-height: 1.35; max-height: 2.7em; overflow: hidden; }
 .persona-card input { display: none; }
+
+/* 移动端：AI 助手悬浮球缩小 + 半透明，避免遮挡卡片/输入框，点击时恢复实色 */
+@media (max-width: 768px) {
+  #assistantBtn {
+    width: 42px !important; height: 42px !important;
+    bottom: 68px !important; right: 10px !important;
+    font-size: 19px !important; opacity: .45 !important;
+    box-shadow: 0 4px 12px rgba(124,108,240,.25) !important;
+  }
+  #assistantBtn:active, #assistantBtn:focus { opacity: 1 !important; }
+  #assistantPanel { right: 10px !important; max-width: calc(100vw - 20px) !important; bottom: 118px !important; }
+}
