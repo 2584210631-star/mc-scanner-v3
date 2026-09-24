@@ -29,6 +29,8 @@ def register(app):
     def ai_bot_start():
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止AI进服"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)
@@ -99,6 +101,8 @@ def register(app):
     def ai_multi_start():
         if state.is_read_only():
             return jsonify({"error": "只读模式下禁止AI进服"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         host = data.get("host")
         port = int(data.get("port") or 25565)

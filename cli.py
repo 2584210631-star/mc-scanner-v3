@@ -212,6 +212,10 @@ def cmd_scan(args, cfg):
     return 0 if results else 1
 def cmd_warn(args, cfg):
     from service.warn_service import warn_targets
+    caps = cfg.get("capabilities", {})
+    if not (isinstance(caps, dict) and caps.get("login_interact", False)):
+        print("[!] 进服交互能力未启用：请在config中设置 capabilities.login_interact=true")
+        return 4
     if args.workers:
         config.set('scan_threads', args.workers)
     if args.bot_workers:
@@ -253,6 +257,10 @@ def cmd_warn(args, cfg):
 def cmd_warn_db(args, cfg):
     """从数据库读取已扫描结果，直接发警告，不重新扫描"""
     from service.warn_service import warn_from_db
+    caps = cfg.get("capabilities", {})
+    if not (isinstance(caps, dict) and caps.get("login_interact", False)):
+        print("[!] 进服交互能力未启用：请在config中设置 capabilities.login_interact=true")
+        return 4
     db_path = args.db or cfg.get('db_path', 'mcscanner.db')
     auth = args.auth or "cracked"
     messages = None
@@ -661,6 +669,10 @@ def cmd_proxy(args, cfg):
 def cmd_rcon(args, cfg):
     """RCON 客户端（v3.3 新增）"""
     from core.rcon import RCONClient, rcon_execute
+    caps = cfg.get("capabilities", {})
+    if not (isinstance(caps, dict) and caps.get("rcon_commands", False)):
+        print("[!] RCON/命令执行能力未启用：请在config中设置 capabilities.rcon_commands=true")
+        return 4
     if not args.host:
         print("用法: python cli.py rcon <host:port> -p <password> -c <command>")
         return
@@ -705,6 +717,10 @@ def cmd_rcon(args, cfg):
 def cmd_commands(args, cfg):
     """登录后自动执行命令（v3.3 新增）"""
     from core.command_runner import run_commands_on_server, CommandScript
+    caps = cfg.get("capabilities", {})
+    if not (isinstance(caps, dict) and caps.get("rcon_commands", False)):
+        print("[!] RCON/命令执行能力未启用：请在config中设置 capabilities.rcon_commands=true")
+        return 4
     if not args.target:
         print("用法: python cli.py commands <host:port> -u <用户名> [选项]")
         return
