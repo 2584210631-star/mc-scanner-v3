@@ -13,11 +13,13 @@
 /* ===== VoltAgent-inspired Design System ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
-  --canvas: #101010;
+  --canvas: #0e0e0e;
+  --surface: #161616;
+  --surface-2: #1c1c1c;
   --canvas-soft: #1a1a1a;
   --canvas-2: #161616;
-  --hairline: #3d3a39;
-  --hairline-soft: #2a2a2a;
+  --hairline: #343434;
+  --hairline-soft: #262626;
   --ink: #f2f2f2;
   --ink-strong: #ffffff;
   --body: #bdbdbd;
@@ -26,17 +28,22 @@
   --primary: #00d992;
   --primary-soft: #2fd6a1;
   --primary-deep: #10b981;
-  --on-primary: #101010;
+  --primary-dim: rgba(0,217,146,0.12);
+  --on-primary: #0a0a0a;
   --green: #00d992;
   --red: #f87171;
+  --red-dim: rgba(248,113,113,0.1);
   --amber: #fbbf24;
   --violet: #a78bfa;
+  --violet-solid: #7c6cf0;
   --slate: #94a3b8;
   --mono: 'JetBrains Mono','SF Mono','Menlo','Monaco','Consolas',monospace;
   --sans: 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',Roboto,sans-serif;
-  --radius-sm: 6px;
-  --radius: 8px;
+  --radius-sm: 7px;
+  --radius: 10px;
+  --radius-lg: 14px;
   --radius-pill: 9999px;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25);
 }
 html { color-scheme: dark; }
 body {
@@ -114,13 +121,14 @@ body {
 .container { padding: 24px 28px 48px; max-width: 1480px; margin: 0 auto; }
 /* ===== Panels ===== */
 .panel {
-  background: var(--canvas); border: 1px solid var(--hairline);
-  border-radius: var(--radius); padding: 20px 22px; margin-bottom: 16px;
-  transition: border-color .15s;
+  background: var(--surface); border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-lg); padding: 22px 24px; margin-bottom: 18px;
+  transition: border-color .18s, box-shadow .18s, transform .18s;
+  box-shadow: var(--shadow-card);
 }
-.panel:hover { border-color: var(--faint); }
-.panel h2 { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--ink); display: flex; align-items: center; gap: 10px; letter-spacing: -0.2px; }
-.panel h2::before { content:''; width: 3px; height: 14px; border-radius: 1px; background: var(--primary); }
+.panel:hover { border-color: var(--hairline); }
+.panel h2 { font-size: 14px; font-weight: 600; margin-bottom: 18px; color: var(--ink); display: flex; align-items: center; gap: 10px; letter-spacing: -0.2px; }
+.panel h2::before { content:''; width: 3px; height: 15px; border-radius: 2px; background: linear-gradient(180deg,var(--primary-soft),var(--primary-deep)); }
 /* ===== Forms ===== */
 .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .form-group { flex: 1; min-width: 150px; }
@@ -140,25 +148,26 @@ input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px
 /* ===== Buttons ===== */
 .btn {
   padding: 8px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); cursor: pointer;
-  font-size: 13px; font-weight: 600; transition: all .12s; font-family: var(--sans);
-  display: inline-flex; align-items: center; gap: 6px; background: var(--canvas); color: var(--ink);
+  font-size: 13px; font-weight: 600; transition: all .15s cubic-bezier(.4,0,.2,1); font-family: var(--sans);
+  display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--body);
 }
+.btn:hover { color: var(--ink); background: var(--surface-2); border-color: var(--faint); }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary-soft); border-color: var(--primary-soft); }
-.btn-danger { background: var(--canvas); color: var(--red); border-color: rgba(248,113,113,0.3); }
-.btn-danger:hover { background: rgba(248,113,113,0.08); border-color: var(--red); }
-.btn-success { background: var(--canvas); color: var(--primary); border-color: rgba(0,217,146,0.3); }
-.btn-success:hover { background: rgba(0,217,146,0.08); border-color: var(--primary); }
-.btn-warning { background: var(--canvas); color: var(--amber); border-color: rgba(251,191,36,0.3); }
-.btn-warning:hover { background: rgba(251,191,36,0.08); border-color: var(--amber); }
-.btn-info { background: var(--canvas); color: var(--primary-soft); border-color: rgba(0,217,146,0.3); }
-.btn-info:hover { background: rgba(0,217,146,0.08); border-color: var(--primary); }
-.btn-secondary { background: var(--canvas-soft); color: var(--body); border-color: var(--hairline); }
-.btn-secondary:hover { color: var(--ink); background: var(--canvas-2); border-color: var(--faint); }
-.btn-violet { background: var(--canvas); color: var(--violet); border-color: rgba(167,139,250,0.3); }
-.btn-violet:hover { background: rgba(167,139,250,0.08); border-color: var(--violet); }
-.btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+.btn-primary:hover { background: var(--primary-soft); border-color: var(--primary-soft); color: var(--on-primary); box-shadow: 0 4px 16px rgba(0,217,146,0.25); }
+.btn-danger { background: transparent; color: var(--red); border-color: rgba(248,113,113,0.3); }
+.btn-danger:hover { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.btn-success { background: transparent; color: var(--primary); border-color: rgba(0,217,146,0.3); }
+.btn-success:hover { background: var(--primary-dim); border-color: var(--primary); color: var(--primary); }
+.btn-warning { background: transparent; color: var(--amber); border-color: rgba(251,191,36,0.3); }
+.btn-warning:hover { background: rgba(251,191,36,0.1); border-color: var(--amber); color: var(--amber); }
+.btn-info { background: transparent; color: var(--primary-soft); border-color: rgba(0,217,146,0.3); }
+.btn-info:hover { background: var(--primary-dim); border-color: var(--primary); color: var(--primary-soft); }
+.btn-secondary { background: var(--surface-2); color: var(--body); border-color: var(--hairline); }
+.btn-secondary:hover { color: var(--ink); background: var(--surface-2); border-color: var(--faint); }
+.btn-violet { background: transparent; color: var(--violet); border-color: rgba(167,139,250,0.32); }
+.btn-violet:hover { background: rgba(167,139,250,0.1); border-color: var(--violet); color: var(--violet); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
 /* ===== Progress ===== */
 .progress-bar { background: var(--canvas-soft); border-radius: var(--radius-sm); height: 24px; overflow: hidden; margin: 12px 0; border: 1px solid var(--hairline); position: relative; }
 .progress-fill {
@@ -547,16 +556,15 @@ tbody tr:last-child td { border-bottom: none; }
 
 /* ===== AI托管/自动扫描 美化 ===== */
 #tab-aibot .panel, #tab-autoscan .panel {
-  background: linear-gradient(145deg, #151515 0%, #0d0d0d 100%);
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  margin-bottom: 14px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
-  transition: border-color 0.3s, box-shadow 0.3s;
+  background: var(--surface);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--radius-lg);
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 #tab-aibot .panel:hover, #tab-autoscan .panel:hover {
-  border-color: #00d992;
-  box-shadow: 0 4px 24px rgba(0,217,146,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+  border-color: var(--hairline);
 }
 #tab-aibot h3, #tab-autoscan h3 {
   color: #00d992;
@@ -592,11 +600,11 @@ tbody tr:last-child td { border-bottom: none; }
   flex-wrap: wrap;
 }
 #tab-aibot input, #tab-autoscan input, #tab-aibot select, #tab-autoscan select {
-  background: #0a0a0a;
-  border: 1px solid #333;
-  border-radius: 8px;
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
-  color: #e0e0e0;
+  color: var(--ink);
   font-size: 12px;
   transition: all 0.2s;
 }
@@ -607,31 +615,6 @@ tbody tr:last-child td { border-bottom: none; }
 }
 #tab-aibot input::placeholder, #tab-autoscan input::placeholder {
   color: #555;
-}
-#tab-aibot button, #tab-autoscan button {
-  background: linear-gradient(135deg, #00d992 0%, #00a872 100%);
-  color: #0a0a0a;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 18px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.5px;
-}
-#tab-aibot button:hover, #tab-autoscan button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,217,146,0.3);
-}
-#tab-aibot button:active, #tab-autoscan button:active {
-  transform: translateY(0);
-}
-#tab-aibot .btn-danger, #tab-autoscan .btn-danger {
-  background: linear-gradient(135deg, #e05b4e 0%, #b8433a 100%);
-}
-#tab-aibot .btn-danger:hover, #tab-autoscan .btn-danger:hover {
-  box-shadow: 0 4px 12px rgba(224,91,78,0.3);
 }
 #tab-aibot label, #tab-autoscan label {
   color: #aaa;
@@ -859,6 +842,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   .topbar { padding: 8px 12px; }
   .logo { width: 28px; height: 28px; font-size: 12px; }
   .brand .title { font-size: 13px; }
+  /* 扫描配置在窄屏彻底竖排，避免两组字段挤压 */
+  #tab-scan .form-group { min-width: 100%; }
 }
 
 /* ===== 滚动条美化 ===== */
@@ -1227,7 +1212,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-danger" onclick="openBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-info" onclick="openBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
-        <button class="btn btn-primary" onclick="openBatchAiModal()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
+        <button class="btn btn-violet" onclick="openBatchAiModal()">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllServers')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
@@ -1282,7 +1267,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
         <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
         <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
-        <button class="btn btn-primary" onclick="openBatchAiModal('db')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
+        <button class="btn btn-violet" onclick="openBatchAiModal('db')">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'dbSelectAll')">全选</button>
         <button class="btn btn-secondary" onclick="exportDb('txt')">导出TXT</button>
         <button class="btn btn-secondary" onclick="exportDb('csv')">导出CSV</button>
@@ -1335,7 +1320,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-success" onclick="rescanAllFavorites()">全部重查</button>
         <button class="btn btn-danger" onclick="openFavBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-info" onclick="openFavBatchObserverModal()">批量观察选中</button>
-        <button class="btn btn-primary" onclick="openBatchAiModal('fav')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">批量AI托管选中</button>
+        <button class="btn btn-violet" onclick="openBatchAiModal('fav')">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllFav')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
         <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
@@ -1922,7 +1907,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <p class="hint" style="color:#00d992;font-size:12px;">API Key/模型在「设置」页配置，批量启动会消耗API额度</p>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeBatchAiModal()">取消</button>
-      <button class="btn btn-primary" onclick="confirmBatchAi()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);border:none;color:#fff;">开始批量托管</button>
+      <button class="btn btn-violet" onclick="confirmBatchAi()">开始批量托管</button>
     </div>
     <div id="batchAiResult" style="margin-top:12px;max-height:200px;overflow-y:auto;"></div>
   </div>
@@ -2038,7 +2023,7 @@ Protect your server NOW!</textarea></div>
 </nav>
 
 <!-- AI助手浮窗 -->
-<div id="assistantBtn" onclick="toggleAssistant()" style="position:fixed;bottom:80px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;box-shadow:0 4px 20px rgba(139,92,246,0.4);z-index:9999;transition:transform .2s;">🤖</div>
+<div id="assistantBtn" onclick="toggleAssistant()" style="position:fixed;bottom:80px;right:16px;width:52px;height:52px;border-radius:50%;background:#7c6cf0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;box-shadow:0 6px 20px rgba(124,108,240,0.35);z-index:9999;transition:transform .2s;">🤖</div>
 <div id="assistantPanel" style="position:fixed;bottom:140px;right:16px;width:340px;max-width:calc(100vw - 32px);height:480px;max-height:calc(100vh - 200px);background:var(--bg-primary);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.3);display:none;flex-direction:column;z-index:9998;overflow:hidden;">
   <div style="padding:12px 16px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;justify-content:space-between;align-items:center;">
     <span style="font-weight:600;">🤖 AI助手</span>
@@ -2047,7 +2032,7 @@ Protect your server NOW!</textarea></div>
   <div id="assistantMessages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;"></div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
     <input type="text" id="assistantInput" placeholder="说点啥，比如"扫1.2.3.4"或"帮助"" style="flex:1;padding:8px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;" onkeydown="if(event.key==='Enter')sendAssistant()">
-    <button onclick="sendAssistant()" style="padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">发送</button>
+    <button onclick="sendAssistant()" style="padding:8px 14px;background:#7c6cf0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;">发送</button>
   </div>
 </div>
 <style>
