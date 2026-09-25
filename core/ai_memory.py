@@ -211,16 +211,20 @@ class MidTermMemory:
         self._all_senders = set()
 
 
-def build_memory_prompt(chat_log, mid_memory, sender, short_count=50):
+def build_memory_prompt(chat_log, mid_memory, sender, short_count=50, self_name=None):
     """构建完整的记忆prompt文本。
     chat_log: deque of (seq, ts, sender, text)
     mid_memory: MidTermMemory实例
     sender: 当前触发回复的玩家
+    self_name: 当前AI自己的用户名（用于区分"自己说的话"）
     返回: (memory_text, used_short_count)
     """
     parts = []
-    # 长期记忆：相关玩家档案
-    recent_senders = [s for _, _, s, _ in list(chat_log)[-30:] if s not in ("系统", "system", "Server")]
+    if self_name:
+        parts.append(f"你叫{self_name}，以下是聊天记录，标注「你」的条目就是你自己说的话，别把它们当成别人的。")
+    # 长期记忆：相关玩家档案（排除自己）
+    recent_senders = [s for _, _, s, _ in list(chat_log)[-30:]
+                      if s not in ("系统", "system", "Server") and s != self_name]
     profiles = get_relevant_profiles(list(dict.fromkeys(recent_senders)), limit=5)
     if profiles:
         parts.append("【玩家档案】\n" + profiles)
@@ -228,10 +232,15 @@ def build_memory_prompt(chat_log, mid_memory, sender, short_count=50):
     mid = mid_memory.get_summary() if mid_memory else ""
     if mid:
         parts.append("【之前聊了啥】\n" + mid)
-    # 短期记忆：最近N条原文
+    # 短期记忆：最近N条原文（自己的消息标记为「你」）
     recent = list(chat_log)[-short_count:]
     if recent:
-        lines = [f"[{s}] {t}" for _, _, s, t in recent]
+        lines = []
+        for _, _, s, t in recent:
+            if self_name and s == self_name:
+                lines.append(f"[你] {t}")
+            else:
+                lines.append(f"[{s}] {t}")
         parts.append("【最近聊天】\n" + "\n".join(lines))
     return "\n\n".join(parts) if parts else ""
 

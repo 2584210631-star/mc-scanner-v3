@@ -643,15 +643,34 @@ tbody tr:last-child td { border-bottom: none; }
   border-radius: 6px;
   padding: 5px 10px;
   transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
 }
 #personaCheckboxes label:hover {
   border-color: #00d992;
   background: #1a2a22;
 }
+#personaCheckboxes label input {
+  accent-color: #00d992;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
 #personaCheckboxes label:has(input:checked) {
   border-color: #00d992;
   background: rgba(0,217,146,0.1);
   color: #00d992;
+}
+#personaCheckboxes label:has(input:checked)::after {
+  content: '✓';
+  font-weight: 700;
+}
+@media (max-width: 640px) {
+  #personaCheckboxes label { padding: 7px 12px; font-size: 13px; }
+  #personaCheckboxes label input { width: 16px; height: 16px; }
 }
 .server-item {
   background: #111;
@@ -1596,6 +1615,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
       <button class="obs-btn" onclick="toggleAllPersonas(true)">全选</button>
       <button class="obs-btn" onclick="toggleAllPersonas(false)">清空</button>
+      <span id="personaCount" style="color:#00d992;font-size:12px;">已选 0 个</span>
       <label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="multiPremium" onchange="toggleMultiPremium()"> 正版验证</label>
       <select id="multiPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select>
     </div>
@@ -4643,9 +4663,10 @@ function loadPersonas() {
     const el = document.getElementById('personaCheckboxes');
     el.innerHTML = d.personas.map((p,i)=>
       `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${p.persona}">
-        <input type="checkbox" class="persona-cb" value="${i}"> ${p.label || p.name}
+        <input type="checkbox" class="persona-cb" value="${i}" onchange="updatePersonaCount()"> ${p.label || p.name}
       </label>`
     ).join('');
+    updatePersonaCount();
     // 单AI托管的下拉框
     const sel = document.getElementById('aiBotPersonaSelect');
     if (sel) {
@@ -4737,6 +4758,13 @@ function toggleAllPersonas(selectAll) {
   const grid = document.getElementById('personaCheckboxes');
   if (!grid) return;
   grid.querySelectorAll('.persona-cb').forEach(cb => { cb.checked = selectAll; });
+  updatePersonaCount();
+}
+function updatePersonaCount() {
+  const grid = document.getElementById('personaCheckboxes');
+  const n = grid ? grid.querySelectorAll('.persona-cb:checked').length : 0;
+  const el = document.getElementById('personaCount');
+  if (el) el.textContent = '已选 ' + n + ' 个';
 }
 function startMultiAi() {
   const host = document.getElementById('multiHost').value.trim();
