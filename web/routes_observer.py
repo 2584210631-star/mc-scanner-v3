@@ -48,7 +48,7 @@ def register(app):
         authme = data.get("authme_password") or None
         timeout = float(data.get("timeout", 20.0))
         duration = max(0, float(data.get("duration", 0) or 0))
-        use_premium = bool(data.get("use_premium", True))
+        use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
         if not host:
             return jsonify({"error": "host 不能为空"}), 400

@@ -70,7 +70,7 @@ class MCBot:
     _TRANSLATE_MAP = _nbt.TRANSLATE_MAP
 
     def __init__(self, host: str, port: int = 25565, protocol_version: int | None = None,
-                 username: str = "SecurityBot", timeout: float = 20.0, use_premium: bool = True,
+                 username: str = "SecurityBot", timeout: float = 20.0, use_premium: bool = False,
                  premium_uuid: str | None = None):
         self.host = host
         self.port = port
@@ -976,7 +976,7 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
                   messages: list | None = None, timeout: float = 20.0,
                   message_delay: float = 0.6, protocol_version: int | None = None,
                   authme_password: str | None = None,
-                  connect_delay: float = 1.5, use_premium: bool = True,
+                  connect_delay: float = 1.5, use_premium: bool = False,
                   premium_uuid: str | None = None) -> BotResult:
     """
     完整流程：连接 → 登录 → 发警告 → 退出

@@ -1593,6 +1593,12 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <input type="password" id="multiAuthme" placeholder="AuthMe密码(可选)" style="width:150px">
     </div>
     <div id="personaCheckboxes" style="margin:8px 0;display:flex;flex-wrap:wrap;gap:8px"></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+      <button class="obs-btn" onclick="toggleAllPersonas(true)">全选</button>
+      <button class="obs-btn" onclick="toggleAllPersonas(false)">清空</button>
+      <label style="display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="multiPremium" onchange="toggleMultiPremium()"> 正版验证</label>
+      <select id="multiPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select>
+    </div>
     <p class="hint" style="color:#00d992">API Key/地址/模型在「设置」页配置，这里直接用</p>
     <button onclick="startMultiAi()" class="btn-primary">启动多AI群聊</button>
   </div>
@@ -4721,11 +4727,22 @@ function randomPersonaEditor() {
 // 初始化
 setTimeout(updatePersonaEditor, 500);
 
+function toggleMultiPremium() {
+  const checked = document.getElementById('multiPremium').checked;
+  const selectEl = document.getElementById('multiPremiumAccount');
+  if (checked) { selectEl.style.display = 'block'; loadPremiumAccounts(selectEl); }
+  else { selectEl.style.display = 'none'; }
+}
+function toggleAllPersonas(selectAll) {
+  const grid = document.getElementById('personaCheckboxes');
+  if (!grid) return;
+  grid.querySelectorAll('.persona-cb').forEach(cb => { cb.checked = selectAll; });
+}
 function startMultiAi() {
   const host = document.getElementById('multiHost').value.trim();
   if (!host) { alert('请输入服务器地址'); return; }
-  const grid = document.getElementById('persona' + 'CardGrid');
-  const checked = Array.from((grid || document).querySelectorAll('.persona-cb:checked')).map(cb=>parseInt(cb.value));
+  const grid = document.getElementById('personaCheckboxes');
+  const checked = Array.from(grid.querySelectorAll('.persona-cb:checked')).map(cb=>parseInt(cb.value));
   fetch('/api/ai_multi/start', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       host, port: document.getElementById('multiPort').value || 25565,
@@ -4733,6 +4750,8 @@ function startMultiAi() {
       topic: document.getElementById('multiTopic').value,
       authme_password: document.getElementById('multiAuthme').value || null,
       persona_indices: checked.length > 0 ? checked : null,
+      use_premium: document.getElementById('multiPremium').checked,
+      premium_uuid: document.getElementById('multiPremiumAccount').value || undefined,
     })
   }).then(r=>r.json()).then(d=>{
     if (d.success) { alert('多AI群聊已启动！它们会自动互相对话'); loadMultiAiList(); }
