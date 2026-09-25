@@ -20,9 +20,9 @@ ERROR_FILE = os.path.join(DATA_DIR, "startup_error.html")
 def write_error(msg):
     """把启动错误写到HTML文件"""
     with open(ERROR_FILE, "w") as f:
-        f.write(f"<html><body style='font-family:monospace;padding:20px'>")
+        f.write("<html><body style='font-family:monospace;padding:20px'>")
         f.write(f"<h2>Flask启动失败</h2><pre style='white-space:pre-wrap;color:red'>{msg}</pre>")
-        f.write(f"</body></html>")
+        f.write("</body></html>")
 
 def start_flask():
     from flask import Flask
@@ -36,7 +36,7 @@ def start_flask():
         files = os.listdir(cwd)[:20]
         web_dir = os.path.join(cwd, "web")
         web_files = os.listdir(web_dir)[:20] if os.path.isdir(web_dir) else ["NO web dir"]
-        info = f"<h2>MC Scanner 诊断</h2>"
+        info = "<h2>MC Scanner 诊断</h2>"
         info += f"<p>cwd: {cwd}</p>"
         info += f"<p>cwd files: {files}</p>"
         info += f"<p>web files: {web_files}</p>"
@@ -58,7 +58,7 @@ def start_flask():
             tb = traceback.format_exc()
             return f"<h2>错误详情</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
         real_app.run(host="127.0.0.1", port=8090, debug=False, use_reloader=False, threaded=True)
-    except Exception as e:
+    except Exception:
         err = traceback.format_exc()
         print(f"[MC Scanner] app加载失败: {err}")
         error_msg["msg"] = err
@@ -144,7 +144,6 @@ if __name__ == "__main__":
         print("[MC Scanner] WebView已加载")
     except Exception as e:
         print(f"[MC Scanner] WebView加载失败: {e}")
-        import traceback
         traceback.print_exc()
 
     while True:

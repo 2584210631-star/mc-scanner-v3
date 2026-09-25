@@ -34,7 +34,7 @@ def main():
         print(f"[+] 登录成功 (协议 {bot.protocol_version}, {bot.version_name if hasattr(bot, 'version_name') else ''})")
         print(f"[*] 执行命令: /{args.command}")
         bot.send_command(args.command)
-        print(f"[+] 命令已发送")
+        print("[+] 命令已发送")
         bot.keep_alive(args.hold)
         print(f"[*] 保持连接 {args.hold}s 后退出")
     except Exception as e:

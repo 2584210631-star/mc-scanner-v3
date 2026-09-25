@@ -145,7 +145,7 @@ class MCConnection:
             self._enc_cipher = _cipher.encryptor()
             self._dec_cipher = _cipher.decryptor()
             self._crypto_backend = "cryptography"
-            print(f"[加密] 使用cryptography(OpenSSL)后端")
+            print("[加密] 使用cryptography(OpenSSL)后端")
             return
         except ImportError:
             pass
@@ -160,7 +160,7 @@ class MCConnection:
             self._enc_cipher.init(Cipher.ENCRYPT_MODE, self._aes_key)
             self._dec_cipher.init(Cipher.DECRYPT_MODE, self._aes_key)
             self._crypto_backend = "pyjnius"
-            print(f"[加密] 使用pyjnius(Java)后端")
+            print("[加密] 使用pyjnius(Java)后端")
             return
         except ImportError:
             pass
@@ -171,11 +171,11 @@ class MCConnection:
             self._enc_shift = bytearray(shared_secret)
             self._dec_shift = bytearray(shared_secret)
             self._crypto_backend = "pycryptodome_cfb8"
-            print(f"[加密] 使用pycryptodome手动CFB8后端（兜底，可能和Java不一致）")
+            print("[加密] 使用pycryptodome手动CFB8后端（兜底，可能和Java不一致）")
             return
         except ImportError:
             pass
-        raise RuntimeError("当前环境不支持正版服加密，请安装cryptography（pip install cryptography）或使用APK")
+        raise RuntimeError("当前环境不支持正版服加密，请安装 cryptography（pip install cryptography）；Termux/手机可改装 pycryptodome（pip install pycryptodome），或使用 APK")
 
     def _encrypt(self, data: bytes) -> bytes:
         """加密数据，自动适配后端"""

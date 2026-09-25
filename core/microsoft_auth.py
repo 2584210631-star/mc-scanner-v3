@@ -4,10 +4,6 @@ Azure AD v2.0 设备码流程 + RSA/AES加密握手。
 用Azure CLI官方client_id，支持v2.0端点。
 """
 import json
-import os
-import time
-import struct
-import hashlib
 import urllib.request
 import urllib.parse
 import urllib.error

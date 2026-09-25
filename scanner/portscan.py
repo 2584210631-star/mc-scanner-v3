@@ -101,7 +101,7 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
               f"模式 {profile.mode}"
               + (f"，限速 {rate}/s" if rate > 0 else ""))
         if do_shuffle:
-            print(f"[*] 已随机化扫描顺序（防顺序扫描特征）")
+            print("[*] 已随机化扫描顺序（防顺序扫描特征）")
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {}
