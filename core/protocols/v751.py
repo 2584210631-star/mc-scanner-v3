@@ -41,6 +41,13 @@ class Handler(ProtocolHandler):
             if uuid_bytes == b'\x00' * 16:
                 return "系统"
             name = self._sender_from_uuid(uuid_bytes)
+            if name:
+                return name
+            # 离线服/插件服 UUID 查不到 → 回退从聊天 JSON with[0] 提取
+            try:
+                name = self._sender_from_json(stream)
+            except Exception:
+                name = ""
             return name or "未知玩家"
         except Exception:
             return "未知玩家"

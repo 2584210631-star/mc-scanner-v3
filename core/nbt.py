@@ -49,6 +49,10 @@ TRANSLATE_MAP = {
     "death.attack.drown": "淹死了",
     "death.attack.lava": "被岩浆烧死了",
     "death.attack.fire": "被烧死了",
+    "death.attack.inFire": "被火烧死了",
+    "death.attack.onFire": "着火烧死了",
+    "death.attack.arrow": "被箭射死了",
+    "death.attack.trident": "被三叉戟扎死了",
     "death.attack.explosion": "被炸死了",
     "death.attack.void": "掉入虚空",
     "death.attack.outOfWorld": "掉出了世界",
@@ -58,6 +62,88 @@ TRANSLATE_MAP = {
     "death.attack.anvil": "被铁砧砸死了",
     "death.attack.cactus": "被仙人掌扎死了",
     "death.attack.dragonBreath": "被龙息杀死了",
+    "death.attack.flyIntoWall": "撞墙撞死了",
+    "death.attack.thorns": "被荆棘刺死了",
+    "death.attack.lightningBolt": "被闪电劈死了",
+    "death.attack.cramming": "被挤死了",
+    "death.attack.sweetBerryBush": "被甜浆果丛扎死了",
+    "death.attack.freeze": "被冻死了",
+    "death.attack.sonic_boom": "被音波杀死了",
+    "death.attack.mob.projectile": "被射死了",
+    "death.attack.player.projectile": "被射死了",
+    "death.attack.badRespawnPoint.message": "被床炸死了",
+    "death.attack.stalagmite": "被石笋戳死了",
+    "death.attack.fallingBlock": "被掉落的方块砸死了",
+    "death.attack.indirectMagic": "被间接魔法杀死了",
+    "death.attack.fireworks": "被烟花炸死了",
+    # 常见实体（entity.minecraft.xxx）
+    "entity.minecraft.zombie": "僵尸",
+    "entity.minecraft.skeleton": "骷髅",
+    "entity.minecraft.creeper": "苦力怕",
+    "entity.minecraft.spider": "蜘蛛",
+    "entity.minecraft.cave_spider": "洞穴蜘蛛",
+    "entity.minecraft.enderman": "末影人",
+    "entity.minecraft.witch": "女巫",
+    "entity.minecraft.slime": "史莱姆",
+    "entity.minecraft.phantom": "幻翼",
+    "entity.minecraft.blaze": "烈焰人",
+    "entity.minecraft.ghast": "恶魂",
+    "entity.minecraft.wither_skeleton": "凋零骷髅",
+    "entity.minecraft.stray": "流浪者",
+    "entity.minecraft.husk": "尸壳",
+    "entity.minecraft.drowned": "溺尸",
+    "entity.minecraft.zombified_piglin": "僵尸猪灵",
+    "entity.minecraft.piglin": "猪灵",
+    "entity.minecraft.piglin_brute": "猪灵蛮兵",
+    "entity.minecraft.hoglin": "猪灵兽",
+    "entity.minecraft.zoglin": "僵尸猪灵兽",
+    "entity.minecraft.villager": "村民",
+    "entity.minecraft.wandering_trader": "流浪商人",
+    "entity.minecraft.iron_golem": "铁傀儡",
+    "entity.minecraft.snow_golem": "雪傀儡",
+    "entity.minecraft.wolf": "狼",
+    "entity.minecraft.cat": "猫",
+    "entity.minecraft.chicken": "鸡",
+    "entity.minecraft.cow": "牛",
+    "entity.minecraft.pig": "猪",
+    "entity.minecraft.sheep": "羊",
+    "entity.minecraft.horse": "马",
+    "entity.minecraft.rabbit": "兔子",
+    "entity.minecraft.guardian": "守卫者",
+    "entity.minecraft.elder_guardian": "远古守卫者",
+    "entity.minecraft.shulker": "潜影贝",
+    "entity.minecraft.vindicator": "卫道士",
+    "entity.minecraft.evoker": "唤魔者",
+    "entity.minecraft.pillager": "掠夺者",
+    "entity.minecraft.ravager": "劫掠兽",
+    "entity.minecraft.vex": "恼鬼",
+    "entity.minecraft.endermite": "末影螨",
+    "entity.minecraft.silverfish": "蠹虫",
+    "entity.minecraft.polar_bear": "北极熊",
+    "entity.minecraft.panda": "熊猫",
+    "entity.minecraft.fox": "狐狸",
+    "entity.minecraft.bee": "蜜蜂",
+    "entity.minecraft.llama": "羊驼",
+    "entity.minecraft.strider": "炽足兽",
+    "entity.minecraft.warden": "循声守卫",
+    "entity.minecraft.allay": "悦灵",
+    "entity.minecraft.goat": "山羊",
+    "entity.minecraft.axolotl": "美西螈",
+    "entity.minecraft.glow_squid": "发光鱿鱼",
+    "entity.minecraft.squid": "鱿鱼",
+    "entity.minecraft.turtle": "海龟",
+    "entity.minecraft.dolphin": "海豚",
+    "entity.minecraft.cod": "鳕鱼",
+    "entity.minecraft.salmon": "鲑鱼",
+    "entity.minecraft.pufferfish": "河豚",
+    "entity.minecraft.bat": "蝙蝠",
+    "entity.minecraft.ocelot": "豹猫",
+    "entity.minecraft.parrot": "鹦鹉",
+    "entity.minecraft.mooshroom": "哞菇",
+    "entity.minecraft.wither": "凋灵",
+    "entity.minecraft.ender_dragon": "末影龙",
+    "entity.minecraft.giant": "巨人",
+    "entity.minecraft.illusioner": "幻术师",
     # 系统
     "multiplayer.gameMode.changed": "游戏模式已更改",
     "multiplayer.disconnect.generic": "连接断开",
@@ -160,10 +246,21 @@ def nbt_compound_to_text(stream) -> str:
             if friendly:
                 return f"{player} {friendly} [{adv}]"
             return f"{player} {translate_key} [{adv}]"
-        prefix = "".join(with_parts)
+        # 死亡类消息：with = [玩家名, 凶手]，如 "WatchDog123 被怪物杀死了 (僵尸)"（与 JSON 版格式对齐）
+        if translate_key.startswith("death.attack") and len(with_parts) >= 2:
+            player = with_parts[0]
+            killer = with_parts[1]
+            if friendly:
+                return f"{player} {friendly} ({killer})" if killer else f"{player} {friendly}"
+            return f"{player} {translate_key} ({killer})" if killer else f"{player} {translate_key}"
+        prefix = " ".join(part for part in with_parts if part)
         if friendly is not None:
-            return prefix + (" " + friendly if friendly else "")
-        return prefix + " " + translate_key
+            if prefix:
+                return prefix + (" " + friendly if friendly else "")
+            return friendly
+        if prefix:
+            return prefix + " " + translate_key
+        return translate_key
     return text_val + "".join(extra_parts)
 
 
