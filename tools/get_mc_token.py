@@ -45,7 +45,7 @@ def step1_device_code():
     resp = http_post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", data)
     print(f"\n请在浏览器打开: {resp['verification_uri']}")
     print(f"输入验证码: {resp['user_code']}")
-    print(f"\n(页面打开后登录你的微软账号，输入上面的验证码并授权)")
+    print("\n(页面打开后登录你的微软账号，输入上面的验证码并授权)")
     return resp["device_code"], int(resp["interval"])
 
 

@@ -424,11 +424,11 @@ class MCBot:
     def _do_configuration(self):
         """Configuration 阶段：等服务器发 Finish Configuration 后回应，兼容 vanilla / Paper / Spigot / Velocity"""
         cfg = self.config_packets
-        _dprint(f"[Config调试] 进入Configuration阶段")
+        _dprint("[Config调试] 进入Configuration阶段")
         deadline = time.time() + max(self.timeout, 15.0)
         self._send_client_information()
         self._send_brand()
-        _dprint(f"[Config调试] 已发送Client Information和Brand")
+        _dprint("[Config调试] 已发送Client Information和Brand")
         sent_known = False
         sent_finish = False
         _cfg_packet_count = 0
@@ -440,7 +440,7 @@ class MCBot:
                 _dprint(f"[Config调试] 收到包: id=0x{resp_id:02x}, len={len(resp_payload)}")
             except ConnectionError:
                 # 连接已断开：立即失败，避免在已关闭连接上空转忙循环
-                _dprint(f"[Config调试] 连接已断开")
+                _dprint("[Config调试] 连接已断开")
                 raise
             except Exception:
                 # 超时兜底：某些旧服务器/代理不主动发Finish，超时后才主动发
@@ -448,14 +448,14 @@ class MCBot:
                     try:
                         self.conn.send_packet(cfg["sb_finish"], b"")
                         sent_finish = True
-                        _dprint(f"[Config调试] 超时主动发送Finish")
+                        _dprint("[Config调试] 超时主动发送Finish")
                     except Exception:
                         pass
                 continue
 
             if resp_id == cfg["cb_finish"]:
                 # 服务器发 Finish Configuration，客户端回复后进入 Play
-                _dprint(f"[Config调试] 收到Finish Configuration，回复并进入Play")
+                _dprint("[Config调试] 收到Finish Configuration，回复并进入Play")
                 if cfg.get("sb_finish") is not None and not sent_finish:
                     try:
                         self.conn.send_packet(cfg["sb_finish"], b"")
@@ -497,7 +497,7 @@ class MCBot:
         # 超时后：再发一次Finish，等2秒，仍无响应才强行进Play（兼容不发finish的代理服）
         _last_packet_id = None
         if _cfg_packet_count > 0:
-            _dprint(f"[Config调试] 超时未收到Finish，重发一次Finish后再等2秒")
+            _dprint("[Config调试] 超时未收到Finish，重发一次Finish后再等2秒")
             try:
                 if cfg.get("sb_finish") is not None:
                     self.conn.send_packet(cfg["sb_finish"], b"")
@@ -512,7 +512,7 @@ class MCBot:
                     _last_packet_id = resp_id
                     _cfg_packet_count += 1
                     if resp_id == cfg.get("cb_finish"):
-                        _dprint(f"[Config调试] 重发Finish后收到cb_finish，进入Play")
+                        _dprint("[Config调试] 重发Finish后收到cb_finish，进入Play")
                         self.conn.state = PROTO_STATE_PLAY
                         if self.conn.sock is not None:
                             self.conn.sock.settimeout(self.timeout)
@@ -571,7 +571,7 @@ class MCBot:
             try:
                 self.conn.send_packet(cfg["sb_plugin_message"],
                                       write_string(channel) + write_varint(0))
-                _dprint(f"[Config调试] 已回复NeoForge register(varint 0)")
+                _dprint("[Config调试] 已回复NeoForge register(varint 0)")
             except Exception:
                 pass
         elif channel in ("neoforge:mod_list", "forge:mod_list", "fml:handshake"):
@@ -812,7 +812,7 @@ class MCBot:
                             sb_ka = pkts.get("sb_keep_alive")
                             if sb_ka is not None:
                                 self.conn.send_packet(sb_ka, data[:8])
-                                _dprint(f"[Play调试] 已回复keep_alive")
+                                _dprint("[Play调试] 已回复keep_alive")
                         except Exception as _e:
                             _dprint(f"[Play调试] 回复keep_alive失败: {_e}")
                             break

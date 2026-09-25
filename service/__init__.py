@@ -4,7 +4,6 @@
 cli.py 和 web/app.py 都调用这里，消除重复逻辑。
 """
 import os
-from typing import Optional
 
 import config
 import logger
@@ -12,7 +11,7 @@ from scanner.engine import ScanEngine
 from scanner.portscan import scan_ports, get_open_ports
 from scanner.masscan import has_masscan, run_masscan
 from scanner.random_scan import random_scan, parse_port_ranges
-from scanner.targets import parse_targets, count_targets
+from scanner.targets import parse_targets
 from scanner.exclude import Excluder
 from storage import db
 

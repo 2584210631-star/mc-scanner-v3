@@ -59,7 +59,6 @@
   "email_to": "",
   "api_rate_limit": 0,
   "db_retention_days": 30,
-  "app_mode": "lab",
   "web_token": "",
   "capabilities": {
     "scan": true,

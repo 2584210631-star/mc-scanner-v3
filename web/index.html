@@ -780,6 +780,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   .form-group { min-width: 100%; }
   .btn { padding: 10px 14px; font-size: 13px; justify-content: center; }
   .form-row .btn { width: 100%; }
+  /* 危险操作能力开关项：竖排，文字信息完整横排显示、按钮在下方满宽 */
+  .cap-item { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
+  .cap-item > div { flex: none !important; width: 100%; min-width: 0; }
 
   /* 表格转卡片 */
   .table-wrap { overflow-x: visible; }
@@ -1717,31 +1720,17 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     </div>
   </div>
   <div class="panel">
-    <h2>应用模式</h2>
-    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">切换后立即生效，正经模式会隐藏娱乐功能并对危险操作加确认。</p>
-    <div style="display:flex;gap:12px;align-items:center;">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;" id="modeFunLabel" onclick="setAppMode('fun')">
-        <input type="radio" name="appMode" value="fun" checked> 🎉 搞怪模式
-        <span style="font-size:11px;color:var(--text-secondary);margin-left:4px;">全功能，AI搞事/吵架/毒舌全开</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;" id="modeSeriousLabel" onclick="setAppMode('serious')">
-        <input type="radio" name="appMode" value="serious"> 🔒 正经模式
-        <span style="font-size:11px;color:var(--text-secondary);margin-left:4px;">隐藏娱乐功能，危险操作需确认</span>
-      </label>
-    </div>
-  </div>
-  <div class="panel">
     <h2>危险操作能力开关</h2>
     <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">高风险能力默认关闭（灰色按钮就是被它锁的）。开启需先确认风险，仅用于你自己拥有或获得书面授权的服务器。</p>
     <div class="form-row">
-      <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+      <div class="form-group cap-item" style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;">
           <div style="font-weight:600;font-size:14px;">进服交互 <span style="font-size:11px;color:var(--text-secondary);">登录 / 警告 / 观察 / AI托管</span></div>
           <div style="font-size:12px;color:var(--text-secondary);">开启后机器人可登录服务器、发送消息、挂观察者、启动AI托管</div>
         </div>
         <button class="btn btn-primary" id="btnToggleLoginInteract" onclick="toggleCapability('login_interact')" style="min-width:76px;">开启</button>
       </div>
-      <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+      <div class="form-group cap-item" style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;">
           <div style="font-weight:600;font-size:14px;">RCON / 命令 <span style="font-size:11px;color:var(--text-secondary);">服务器管理员权限</span></div>
           <div style="font-size:12px;color:var(--text-secondary);">开启后可在服务器执行命令，等同管理员，强烈建议保持关闭</div>
@@ -3623,43 +3612,6 @@ async function loadSettings() {
     document.getElementById('setEmailFrom').value = cfg.email_from || '';
     document.getElementById('setEmailTo').value = cfg.email_to || '';
   } catch(e) { console.error('加载配置失败', e); }
-  // 加载应用模式
-  try {
-    const modeRes = await fetch('/api/config/mode');
-    const modeData = await modeRes.json();
-    window._appMode = modeData.mode || 'fun';
-    applyAppMode(window._appMode);
-  } catch(e) { window._appMode = 'fun'; applyAppMode('fun'); }
-}
-
-// ===== 应用模式切换 =====
-let _appMode = 'fun';
-async function setAppMode(mode) {
-  _appMode = mode;
-  applyAppMode(mode);
-  try {
-    await fetch('/api/config/mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode})});
-    toast('已切换到' + (mode === 'fun' ? '搞怪模式' : '正经模式'), 'success');
-  } catch(e) { toast('模式切换失败', 'error'); }
-}
-function applyAppMode(mode) {
-  // 更新radio选中状态
-  document.querySelectorAll('input[name="appMode"]').forEach(r => r.checked = (r.value === mode));
-  document.getElementById('modeFunLabel').style.borderColor = mode === 'fun' ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('modeSeriousLabel').style.borderColor = mode === 'serious' ? 'var(--accent)' : 'var(--border)';
-  // 正经模式隐藏搞事功能
-  const serious = mode === 'serious';
-  // 多AI群聊tab
-  const multiAiTab = document.querySelector('.tab[data-tab="multi_ai"]');
-  if (multiAiTab) multiAiTab.style.display = serious ? 'none' : '';
-  // 批量警告按钮（结果页）
-  document.querySelectorAll('[onclick*="openBatchWarnModal"],[onclick*="openMultiWarnModal"]').forEach(el => {
-    el.style.display = serious ? 'none' : '';
-  });
-  // 毒舌人格在AI托管人格选择里过滤（正经模式只显示中性人格）
-  window._seriousMode = serious;
-  // 重新加载人格列表
-  if (typeof loadPersonas === 'function') loadPersonas();
 }
 async function saveAiConfig() {
   const status = document.getElementById('setAiStatus');
@@ -4672,27 +4624,20 @@ let multiAiPollTimer = null;
 // 加载人设复选框和下拉框
 function loadPersonas() {
   fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
-    // 正经模式过滤掉毒舌/挑衅类人格
-    const toxicKeywords = ['毒舌','阴阳','挑衅','骂','怼','贱','喷','刻薄','凡尔赛','flatterer','debater','keyboard','nerd','logic','spectator','versailles'];
-    const isToxic = (p) => {
-      const name = (p.name + ' ' + (p.label||'')).toLowerCase();
-      return toxicKeywords.some(k => name.includes(k.toLowerCase()));
-    };
-    const visiblePersonas = window._seriousMode ? d.personas.filter(p => !isToxic(p)) : d.personas;
     // 多AI群聊的复选框
     const el = document.getElementById('personaCheckboxes');
-    el.innerHTML = visiblePersonas.map((p,i)=>
+    el.innerHTML = d.personas.map((p,i)=>
       `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${p.persona}">
-        <input type="checkbox" class="persona-cb" value="${d.personas.indexOf(p)}"> ${p.label || p.name}
+        <input type="checkbox" class="persona-cb" value="${i}"> ${p.label || p.name}
       </label>`
     ).join('');
     // 单AI托管的下拉框
     const sel = document.getElementById('aiBotPersonaSelect');
     if (sel) {
       sel.innerHTML = '<option value="">选择预设人格...</option>';
-      visiblePersonas.forEach((p)=>{
+      d.personas.forEach((p,i)=>{
         const opt = document.createElement('option');
-        opt.value = d.personas.indexOf(p);
+        opt.value = i;
         opt.textContent = p.label || p.name;
         sel.appendChild(opt);
       });

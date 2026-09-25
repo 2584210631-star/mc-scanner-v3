@@ -11,11 +11,6 @@ import logger
 
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
-try:
-    from web import state
-except ImportError:
-    import state  # type: ignore
-
 app = Flask(__name__)
 try:
     app.json.ensure_ascii = False
@@ -129,32 +124,6 @@ def _audit_log():
     return None
 
 
-@app.before_request
-def _serious_mode_check():
-    """正经模式：危险操作需要confirm=true确认"""
-    try:
-        if config.get("app_mode", "fun") != "serious":
-            return None
-        path = request.path
-        # 正经模式下需要确认的危险API
-        dangerous = ("/api/warn/" in path and request.method == "POST") or \
-                    ("/api/ai_multi/start" in path) or \
-                    ("/api/ai_multi/stop" in path)
-        if not dangerous:
-            return None
-        data = {}
-        if request.method == "POST":
-            try:
-                data = request.get_json(silent=True) or {}
-            except Exception:
-                data = {}
-        if not data.get("confirm"):
-            return jsonify({"error": "正经模式下此操作需要确认，请在请求中加 confirm:true", "need_confirm": True}), 403
-    except Exception:
-        pass
-    return None
-
-
 def _register_routes():
     modules = [
         "routes_core", "routes_scan", "routes_scan_extra", "routes_warn",
@@ -208,7 +177,7 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
             logger.warning(f"[!] 0.0.0.0 绑定已自动生成 API Token: {token}")
             logger.warning("[!] 请在设置页填入此 Token，或使用 127.0.0.1 本地访问（无需鉴权）")
         else:
-            logger.warning(f"[!] 0.0.0.0 绑定已启用 API Token 鉴权")
+            logger.warning("[!] 0.0.0.0 绑定已启用 API Token 鉴权")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 

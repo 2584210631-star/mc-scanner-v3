@@ -244,7 +244,7 @@ def cmd_warn(args, cfg):
     offline = sum(1 for r in results if r.is_offline)
     msg_sent = sum(r.messages_sent for r in results)
     print(f"\n{'='*50}")
-    print(f"  警告完成")
+    print("  警告完成")
     print(f"  总目标: {len(results)}")
     print(f"  离线模式服务器: {offline}")
     print(f"  成功登录: {success}")
@@ -287,7 +287,7 @@ def cmd_warn_db(args, cfg):
     success = sum(1 for r in results if r.success)
     msg_sent = sum(r.messages_sent for r in results)
     print(f"\n{'='*50}")
-    print(f"  警告完成（从数据库，未重新扫描）")
+    print("  警告完成（从数据库，未重新扫描）")
     print(f"  总目标: {len(results)}")
     print(f"  成功登录: {success}")
     print(f"  发送消息总数: {msg_sent}")
@@ -331,10 +331,10 @@ def cmd_query(args, cfg):
         return
     if args.stats:
         s = get_db_stats(db_path)
-        print(f"\n数据库统计:")
+        print("\n数据库统计:")
         print(f"  总记录: {s['total']}")
         print(f"  有人在线: {s['online_servers']}")
-        print(f"  认证模式分布:")
+        print("  认证模式分布:")
         for auth, count in s['by_auth'].items():
             print(f"    {auth}: {count}")
         return
@@ -501,7 +501,7 @@ def cmd_fav(args, cfg):
             else:
                 print(f"[-] {ip}:{port} 离线或不可达")
         else:
-            print(f"[*] 重新探测所有收藏...")
+            print("[*] 重新探测所有收藏...")
             def _progress(done, total):
                 print(f"\r[*] 进度: {done}/{total}", end="", flush=True)
             favs = favorites.rescan_all(timeout=args.timeout, workers=args.workers, progress_callback=_progress)
@@ -526,17 +526,16 @@ def cmd_fav(args, cfg):
 
 def cmd_rescan(args, cfg):
     """智能重扫管理（v3.3 新增）"""
-    from storage import rescan as rescan_db
     from scanner.rescanner import RescanScheduler
     db_path = args.db or cfg["db_path"]
     scheduler = RescanScheduler(db_path, enabled=True)
 
     if args.list:
         stats = scheduler.stats()
-        print(f"\n重扫队列统计:")
+        print("\n重扫队列统计:")
         print(f"  总数: {stats['total']}")
         print(f"  到期待扫: {stats['due_now']}")
-        print(f"  按策略分布:")
+        print("  按策略分布:")
         for strategy, count in stats["by_strategy"].items():
             print(f"    {strategy}: {count}")
         all_items = scheduler.get_all(limit=args.limit)
@@ -605,9 +604,6 @@ def cmd_distributed(args, cfg):
             print("[-] 没有可用分片")
             return
         print(f"[*] Worker {args.worker} 领取分片 {shard['shard_id']}: {shard['targets']}")
-        # 执行扫描
-        engine = ScanEngine(db_path=args.db or cfg["db_path"], workers=cfg["workers"],
-                            timeout=cfg["timeout"], rescan_enabled=cfg.get("rescan_enabled", False))
         from service import run_full_scan
         results = run_full_scan(shard["targets"], workers=cfg["workers"],
                                  timeout=cfg["timeout"], db_path=args.db or cfg["db_path"])
@@ -660,7 +656,7 @@ def cmd_proxy(args, cfg):
         print(f"[+] 已添加代理: {args.add}")
         return
     # 默认列出代理
-    proxies = manager.load_from_file()
+    manager.load_from_file()
     print(f"\n代理列表 ({len(manager)} 个):")
     for p in manager.proxies if hasattr(manager, 'proxies') else []:
         print(f"  {p.proto}://{p.host}:{p.port} (失败={p.fail_count})")
@@ -753,7 +749,7 @@ def cmd_commands(args, cfg):
         results = run_commands_on_server(host, port, username, script.commands,
                                           timeout=args.timeout or 15.0,
                                           authme_password=args.authme)
-        print(f"\n[+] 执行完成:")
+        print("\n[+] 执行完成:")
         for r in results:
             status = "✅" if r.success else "❌"
             print(f"  {status} {r.command}")
