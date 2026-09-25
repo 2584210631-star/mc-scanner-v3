@@ -5,6 +5,7 @@ AI托管Bot模块。
 """
 import threading
 import time
+import random
 from collections import deque
 from datetime import datetime
 
@@ -60,6 +61,7 @@ class AIBotSession:
         self.persona = cfg.get("persona", "你是普通MC玩家，说话短，像真人打字，别像客服。")
         self.reply_enabled = cfg.get("reply_enabled", True)
         self.reply_cooldown = float(cfg.get("reply_cooldown", 2.0))
+        self.group_chat = cfg.get("group_chat", False)
         self.trigger_keywords = cfg.get("trigger_keywords", [])
         self.auto_talk_enabled = cfg.get("auto_talk_enabled", False)
         self.auto_talk_interval = float(cfg.get("auto_talk_interval", 120.0))
@@ -138,6 +140,9 @@ class AIBotSession:
             return False
         if now - self._last_reply_time < self.reply_cooldown:
             return False
+        # 群聊模式：别人已经接了话，40%概率沉默，避免机器人乒乓刷屏
+        if self.group_chat and random.random() < 0.4:
+            return False
         if sender == self.username:
             return False
         if text and (f"]{self.username}:" in text or text.startswith(f"{self.username}:")):
@@ -161,19 +166,22 @@ class AIBotSession:
 
         def _reply_worker():
             try:
-                # 分层记忆：短期50条原文 + 中期摘要 + 长期玩家档案
+                # 分层记忆：短期50条原文 + 中期摘要 + 长期玩家档案（自己的消息标记为「你」）
                 memory_text = ""
                 try:
                     from core.ai_memory import build_memory_prompt
                     memory_text = build_memory_prompt(
-                        self.chat_log, self.mid_memory, sender, short_count=50
+                        self.chat_log, self.mid_memory, sender, short_count=50,
+                        self_name=self.username,
                     )
                 except Exception:
                     # 回退：最近20条
                     try:
                         recent = list(self.chat_log)[-20:]
                         if len(recent) > 1:
-                            memory_text = "\n".join(f"[{s}] {t}" for seq, ts, s, t in recent[:-1])
+                            memory_text = "\n".join(
+                                f"[你] {t}" if s == self.username else f"[{s}] {t}"
+                                for seq, ts, s, t in recent[:-1])
                     except Exception:
                         pass
                 style = (
@@ -181,10 +189,7 @@ class AIBotSession:
                     "不要解释、不要角色旁白、不要括号心理活动。"
                     "尽量不超过25个字，可以很随意。"
                 )
-                if memory_text:
-                    prompt = f"{self.persona}\n{memory_text}\n{sender} 说：{text}\n{style}"
-                else:
-                    prompt = f"{self.persona}\n{sender} 说：{text}\n{style}"
+                prompt = f"你是{self.username}，一个MC玩家。{self.persona}\n{memory_text}\n{sender} 说：{text}\n{style}"
                 _acquire_api_slot()
                 try:
                     result = generate_content(topic=prompt, preset="custom", api_key=self.api_key,
@@ -239,22 +244,26 @@ class AIBotSession:
                 try:
                     from core.ai_memory import build_memory_prompt
                     memory_text = build_memory_prompt(
-                        self.chat_log, self.mid_memory, "自动", short_count=40
+                        self.chat_log, self.mid_memory, "自动", short_count=40,
+                        self_name=self.username,
                     )
                 except Exception:
                     try:
                         recent = list(self.chat_log)[-15:]
                         if recent:
-                            memory_text = "\n".join(f"[{s}] {t}" for seq, ts, s, t in recent)
+                            memory_text = "\n".join(
+                                f"[你] {t}" if s == self.username else f"[{s}] {t}"
+                                for seq, ts, s, t in recent)
                     except Exception:
                         pass
                 _acquire_api_slot()
                 try:
                     ctx = f"\n\n{memory_text}" if memory_text else ""
+                    me = f"你是{self.username}，一个MC玩家。"
                     if self.topic:
-                        prompt = f"{self.persona}{ctx}\n当前话题：{self.topic}\n随便接一句，像群聊水一句，别正式。"
+                        prompt = f"{me}{self.persona}{ctx}\n当前话题：{self.topic}\n随便接一句，像群聊水一句，别正式。"
                     else:
-                        prompt = f"{self.persona}{ctx}\n水一句，短一点，像真人摸鱼聊天。"
+                        prompt = f"{me}{self.persona}{ctx}\n水一句，短一点，像真人摸鱼聊天。"
                     result = generate_content(topic=self.topic or "随机话题", preset="custom", api_key=self.api_key,
                                               base_url=self.base_url, model=self.model,
                                               custom_prompt=prompt, max_tokens=1024)
@@ -409,11 +418,12 @@ class MultiAIBot:
                 cfg["persona"] += f"\n大家在聊：{topic}。你就顺着抬杠/接话，别端着。"
             else:
                 cfg["persona"] += "\n偶尔接话就行，别像主持。"
-            cfg["reply_cooldown"] = 0.5 + i * 0.3
+            cfg["reply_cooldown"] = random.uniform(3.0, 8.0) + i * 0.5
             cfg["reply_enabled"] = True
+            cfg["group_chat"] = True
             cfg["trigger_keywords"] = []
             cfg["auto_talk_enabled"] = True
-            cfg["auto_talk_interval"] = 12.0 + i * 4.0
+            cfg["auto_talk_interval"] = 30.0 + i * 15.0
             cfg["topic"] = topic
             bot = AIBotSession(host=host, port=port, username=persona["name"],
                                authme_password=authme_password, timeout=20.0,
