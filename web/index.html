@@ -659,12 +659,12 @@ tbody tr:last-child td { border-bottom: none; }
   height: 13px;
   flex-shrink: 0;
 }
-#personaCheckboxes label:has(input:checked) {
+#personaCheckboxes label.checked {
   border-color: #00d992;
   background: rgba(0,217,146,0.1);
   color: #00d992;
 }
-#personaCheckboxes label:has(input:checked)::after {
+#personaCheckboxes label.checked::after {
   content: '✓';
   font-weight: 700;
 }
@@ -4661,9 +4661,11 @@ function loadPersonas() {
   fetch('/api/ai_multi/personas').then(r=>r.json()).then(d=>{
     // 多AI群聊的复选框
     const el = document.getElementById('personaCheckboxes');
+    window.PERSONA_MAP = {};
+    d.personas.forEach(p => { window.PERSONA_MAP[p.name] = p.label || p.name; });
     el.innerHTML = d.personas.map((p,i)=>
       `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${p.persona}">
-        <input type="checkbox" class="persona-cb" value="${i}" onchange="updatePersonaCount()"> ${p.label || p.name}
+        <input type="checkbox" class="persona-cb" value="${i}" onchange="togglePersonaCb(this)"> ${p.label || p.name}
       </label>`
     ).join('');
     updatePersonaCount();
@@ -4762,9 +4764,21 @@ function toggleAllPersonas(selectAll) {
 }
 function updatePersonaCount() {
   const grid = document.getElementById('personaCheckboxes');
-  const n = grid ? grid.querySelectorAll('.persona-cb:checked').length : 0;
+  let n = 0;
+  if (grid) {
+    grid.querySelectorAll('.persona-cb').forEach(cb => {
+      const lbl = cb.closest('label');
+      if (lbl) lbl.classList.toggle('checked', cb.checked);
+      if (cb.checked) n++;
+    });
+  }
   const el = document.getElementById('personaCount');
   if (el) el.textContent = '已选 ' + n + ' 个';
+}
+function togglePersonaCb(cb) {
+  const lbl = cb.closest('label');
+  if (lbl) lbl.classList.toggle('checked', cb.checked);
+  updatePersonaCount();
 }
 function startMultiAi() {
   const host = document.getElementById('multiHost').value.trim();
@@ -4797,7 +4811,10 @@ function loadMultiAiList() {
           <span class="badge ${g.connected>0?'badge-online':'badge-offline'}">${g.connected}/${g.bot_count}在线</span>
           <span class="hint">话题: ${g.topic||'随机'}</span>
         </div>
-        <div class="hint" style="margin-top:4px">${g.bots.map(b=>`${b.username}(${b.status})`).join(' | ')}</div>
+        <div class="hint" style="margin-top:4px">${g.bots.map(b=>{
+          const lbl = (window.PERSONA_MAP && window.PERSONA_MAP[b.username]) || b.username;
+          return `${lbl}(${b.status})`;
+        }).join(' | ')}</div>
         <div style="margin-top:6px">
           <button onclick="viewMultiAiChat('${g.group_id}')">查看群聊</button>
           <button onclick="stopMultiAi('${g.group_id}')" class="btn-danger">全部停止</button>
@@ -4824,7 +4841,10 @@ function fetchMultiAiChat() {
   if (!currentMultiAiId) return;
   fetch(`/api/ai_multi/chat?group_id=${currentMultiAiId}&since=0`).then(r=>r.json()).then(d=>{
     const el = document.getElementById('multiAiChatLog');
-    el.innerHTML = d.messages.map(m=>`<div>[${escapeHtml(m.time)}] <strong style="color:#00d992">${escapeHtml(m.sender)}</strong>: ${escapeHtml(m.text)}</div>`).join('');
+    el.innerHTML = d.messages.map(m=>{
+      const nm = (window.PERSONA_MAP && window.PERSONA_MAP[m.sender]) || m.sender;
+      return `<div>[${escapeHtml(m.time)}] <strong style="color:#00d992">${escapeHtml(nm)}</strong>: ${escapeHtml(m.text)}</div>`;
+    }).join('');
     el.scrollTop = el.scrollHeight;
   });
 }
