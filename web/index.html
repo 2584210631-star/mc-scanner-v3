@@ -559,6 +559,15 @@ tbody tr:last-child td { border-bottom: none; }
   .form-group { min-width: 100%; }
   th, td { font-size: 12px; padding: 8px 10px; }
   .panel { padding: 14px; }
+  /* 观察终端移动端：头部按钮换行、消息区自适应高度、输入框易点 */
+  .obs-terminal-header { flex-wrap: wrap; gap: 5px; padding: 8px 10px; }
+  .obs-terminal-header > span:last-child { margin-left: 0; display: flex; flex-wrap: wrap; gap: 5px; width: 100%; }
+  .obs-terminal-header > span:last-child .obs-btn { flex: 1; text-align: center; padding: 6px 6px; }
+  .obs-terminal-body { height: 45vh; padding: 8px 10px; font-size: 12px; }
+  .obs-terminal-input { padding: 8px 10px; }
+  .obs-terminal-input input { font-size: 14px; }
+  .obs-btn { padding: 5px 9px; }
+  .obs-session-card { width: 100%; }
 }
 
 /* ===== AI托管/自动扫描 美化 ===== */

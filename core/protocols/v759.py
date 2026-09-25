@@ -52,7 +52,15 @@ class Handler(ProtocolHandler):
             stream = BytesStream(data)
             stream.read(16)  # UUID
             nick_json = read_string_from_stream(stream)
-            return self._parse_json_chat(nick_json) or "未知玩家"
+            name = self._parse_json_chat(nick_json)
+            if name:
+                return name
+            # nick 组件为空 → 回退从聊天 JSON with[0] 提取
+            try:
+                name = self._sender_from_json(stream)
+            except Exception:
+                name = ""
+            return name or "未知玩家"
         except Exception:
             return "未知玩家"
 

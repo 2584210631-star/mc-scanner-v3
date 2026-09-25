@@ -231,6 +231,7 @@ def register(app):
     .msg{{padding:8px 16px;border-bottom:1px solid #1a1a1a;display:flex;gap:12px;font-size:13px}}
     .msg:hover{{background:#161616}}
     .msg .time{{color:#555;min-width:60px}}.msg .sender{{font-weight:bold;min-width:100px}}.msg .text{{color:#ccc;flex:1;word-break:break-all}}
+    @media(max-width:640px){{body{{padding:12px}}.header{{padding:16px;border-radius:10px}}.header h1{{font-size:18px}}.msg{{flex-wrap:wrap;gap:4px 8px;padding:8px 12px}}.msg .time{{min-width:0;font-size:11px}}.msg .sender{{min-width:0}}.msg .text{{flex-basis:100%}}}}
     .footer{{text-align:center;color:#444;font-size:12px;margin-top:16px}}</style>
     </head><body><div class="container">
     <div class="header"><h1>观察者聊天记录</h1>
