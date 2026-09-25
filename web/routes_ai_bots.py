@@ -57,7 +57,7 @@ def register(app):
             duration=float(data.get("duration", 0) or 0),
             protocol_version=data.get("protocol_version"),
             ai_config=ai_cfg,
-            use_premium=bool(data.get("use_premium", True)),
+            use_premium=bool(data.get("use_premium", False)),
             premium_uuid=data.get("premium_uuid") or None,
         )
         session.session_id = session_id
@@ -129,6 +129,8 @@ def register(app):
             authme_password=data.get("authme_password"),
             ai_config=ai_cfg,
             persona_indices=data.get("persona_indices"),
+            use_premium=bool(data.get("use_premium", False)),
+            premium_uuid=data.get("premium_uuid") or None,
         )
         return jsonify({"success": True, "group_id": group_id})
 

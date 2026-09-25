@@ -35,7 +35,7 @@ def register(app):
         username = data.get("username", "SecurityBot")
         messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
         authme_password = data.get("authme_password")
-        use_premium = bool(data.get("use_premium", True))
+        use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
         if not ip:
             return jsonify({"error": "请指定 IP"}), 400
@@ -74,7 +74,7 @@ def register(app):
         workers = int(data.get("workers", 5))
         authme_password = data.get("authme_password")
         message_delay = float(data.get("message_delay", 0.8))
-        use_premium = bool(data.get("use_premium", True))
+        use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
 
         # 解析目标列表，支持 [{"ip":...,"port":...,"proto":...}] 或 ["ip:port", ...]
@@ -124,7 +124,7 @@ def register(app):
         message_delay = float(data.get("message_delay", 0.5))
         authme_password = data.get("authme_password")
         workers = int(data.get("workers", 20))
-        use_premium = bool(data.get("use_premium", True))
+        use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
 
         # 解析目标列表
@@ -198,7 +198,7 @@ def register(app):
         authme_password = data.get("authme_password")
         workers = int(data.get("workers", 5))
         message_delay = float(data.get("message_delay", 0.8))
-        use_premium = bool(data.get("use_premium", True))
+        use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
 
         targets = []

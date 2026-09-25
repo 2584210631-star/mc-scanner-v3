@@ -32,7 +32,7 @@ def _release_api_slot():
 
 class AIBotSession:
     def __init__(self, host, port, username, authme_password=None, timeout=20.0,
-                 duration=0, protocol_version=None, ai_config=None, use_premium=True,
+                 duration=0, protocol_version=None, ai_config=None, use_premium=False,
                  premium_uuid=None):
         self.session_id = ""
         self.host = host
@@ -391,7 +391,8 @@ class MultiAIBot:
         return f"multi_{self._seq}"
 
     def start_group(self, host, port, bot_count=3, topic="", duration=0,
-                    authme_password=None, ai_config=None, persona_indices=None):
+                    authme_password=None, ai_config=None, persona_indices=None,
+                    use_premium=False, premium_uuid=None):
         group_id = self._next_id()
         base_config = ai_config or {}
         bots = []
@@ -416,7 +417,8 @@ class MultiAIBot:
             cfg["topic"] = topic
             bot = AIBotSession(host=host, port=port, username=persona["name"],
                                authme_password=authme_password, timeout=20.0,
-                               duration=duration, ai_config=cfg)
+                               duration=duration, ai_config=cfg,
+                               use_premium=use_premium, premium_uuid=premium_uuid)
             bot.session_id = f"{group_id}_{i}"
             bot.start()
             bots.append(bot)
