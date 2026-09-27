@@ -184,11 +184,11 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 conn.handshake(protocol=proto, next_state=PROTO_STATE_LOGIN)
                 pid = login_pkts["sb_start"]
                 payload = write_string(username)
-                if proto >= 766:
-                    # 1.20.5+ 格式: 直接 UUID（无 hasPlayerUUID）
+                if proto >= 764:
+                    # 1.20.2+ (764+): 直接 UUID，无 hasPlayerUUID 标志位
                     payload += write_uuid(offline_uuid(username))
-                elif proto >= 760:
-                    # 1.19.1-1.20.4 格式: hasPlayerUUID(true) + UUID
+                else:
+                    # 1.19-1.19.4 (759-763): hasPlayerUUID(true) + UUID
                     payload += b'\x01' + write_uuid(offline_uuid(username))
                 conn.send_packet(pid, payload)
 
@@ -215,6 +215,9 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 last_detail = f"意外响应 0x{resp_id:02x}"
         except (ConnectionError, OSError, TimeoutError, socket_timeout) as e:
             last_detail = str(e)
+    # 连接被直接关闭（无disconnect包）通常是白名单服或代理拒绝，归为rejected而非offline
+    if last_detail and "连接被关闭" in last_detail:
+        return {"state": STATE_REJECTED, "detected_proto": None, "detail": last_detail}
     return {"state": STATE_OFFLINE, "detected_proto": None, "detail": last_detail}
 
 

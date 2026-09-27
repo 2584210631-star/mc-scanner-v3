@@ -177,7 +177,7 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
         logger.warning(f"[!] 代理初始化失败: {e}")
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
     if host in ("0.0.0.0", "::"):
-        logger.warning("[!] 已绑定 0.0.0.0（局域网可访问），所有 API 需登录（默认账号 admin/admin123，首次登录强制改密）")
+        logger.warning("[!] 已绑定 0.0.0.0（局域网可访问）——本工具无鉴权，局域网内任何人可操作，请确保网络可信")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 

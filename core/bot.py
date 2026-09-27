@@ -615,6 +615,10 @@ class MCBot:
                        + struct.pack("?", True)    # chatColors
                        + struct.pack("B", 0x7F)    # displayedSkinParts
                        + write_varint(1))          # mainHand: 1=right
+            # 1.19.3+ (协议761+) 新增两个布尔字段：enableTextFiltering + enableServerListing
+            if (self.protocol_version or 0) >= 761:
+                payload += struct.pack("?", False)  # enableTextFiltering
+                payload += struct.pack("?", True)   # enableServerListing
             self.conn.send_packet(pkts["sb_client_info"], payload)
         except Exception:
             pass
