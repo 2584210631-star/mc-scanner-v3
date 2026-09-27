@@ -387,7 +387,7 @@ def cmd_random(args, cfg=None):
     logger.info(f"[*] 目标数: {args.count} | 模式: {mode} | 超时: {args.timeout}s")
     logger.info(f"[*] 端口范围: {args.ports}")
     if exclude_file:
-        logger.info(f"[*] 排除列表: {exclude_file}（含中国IP段，专扫国外）")
+        logger.info(f"[*] 排除列表: {exclude_file}（排除私网/保留段）")
     else:
         logger.info("[*] 不使用排除列表")
     print()
