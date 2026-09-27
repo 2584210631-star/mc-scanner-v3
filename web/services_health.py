@@ -15,35 +15,6 @@ def _log(msg):
     state.log_scan(msg)
 
 
-async def _probe_all(hosts, timeout=4.0, concurrency=3, ip_gap=4.5):
-    """温和并发探测：限制总并发 + 同一IP强制节流。
-
-    Minecraft 服务器默认 connection-throttle=4000ms（同一IP 4秒内限一次连接），
-    同IP不同端口连续探测会被限速甚至被防火墙拉黑。ip_gap 默认 4.5s 留有余量。
-    返回 [(ip, port, result|None)]。
-    """
-    import asyncio
-    from scanner.async_probe import async_slp_probe
-    sem = asyncio.Semaphore(max(1, concurrency))
-    last_hit = {}  # ip -> 上次探测时刻（同一事件循环内访问，无并发竞争）
-
-    async def _one(ip, port):
-        async with sem:
-            if ip_gap > 0:
-                while True:
-                    now = asyncio.get_event_loop().time()
-                    wait = last_hit.get(ip, 0.0) + ip_gap - now
-                    if wait <= 0:
-                        last_hit[ip] = now
-                        break
-                    await asyncio.sleep(wait)
-            try:
-                return (ip, port, await async_slp_probe(ip, port, timeout=timeout))
-            except Exception:
-                return (ip, port, None)
-
-    return await asyncio.gather(*[_one(ip, port) for ip, port in hosts])
-
 def _health_monitor_loop(once=False):
     """后台健康监控线程：定期检查收藏的服务器，状态/人数变化时记录，一轮汇总发一封邮件。
     once=True 时只跑一轮就返回（供 Web "立即检查"按钮调用）。"""

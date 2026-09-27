@@ -4255,11 +4255,18 @@ async function runHealthOnce() {
   try {
     await fetch('/api/health/run_once', {method:'POST'});
   } catch(e) {}
-  // 探测需要几秒（温和并发），3秒后刷新状态
-  setTimeout(() => {
-    btn.disabled = false; btn.textContent = '立即检查';
-    loadHealthStatus();
-  }, 3000);
+  // 轮询直到检查完成（once_running=false）
+  const timer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/health/status');
+      const d = await r.json();
+      if (!d.once_running) {
+        clearInterval(timer);
+        btn.disabled = false; btn.textContent = '立即检查';
+        loadHealthStatus();
+      }
+    } catch(e) {}
+  }, 2000);
 }
 async function saveHealthInterval() {
   const val = Math.max(60, parseInt(document.getElementById('healthIntervalInput').value) || 300);

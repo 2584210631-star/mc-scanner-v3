@@ -30,6 +30,7 @@ def register(app):
     def health_status():
         return jsonify({
             "running": health_monitor["running"],
+            "once_running": health_monitor.get("once_running", False),
             "interval": health_monitor["interval"],
             "last_check": health_monitor["last_check"],
             "monitored": len(health_monitor["status"]),
@@ -53,11 +54,19 @@ def register(app):
 
     @app.route('/api/health/run_once', methods=['POST'])
     def health_run_once():
-        """立即手动跑一轮探测。监控正在运行时不重复触发，避免并发探测同一批服务器。"""
+        """立即手动跑一轮探测。定时监控或上一次手动检查在跑时不重复触发。"""
         if _health_monitor_loop is None:
             return jsonify({"success": False, "error": "监控模块未加载"}), 500
         if health_monitor.get("running"):
             return jsonify({"success": False, "error": "定时监控正在运行，本轮结束后会自动检查"}), 409
-        threading.Thread(target=_health_monitor_loop, kwargs={"once": True}, daemon=True).start()
+        if health_monitor.get("once_running"):
+            return jsonify({"success": False, "error": "上一次手动检查还在进行中"}), 409
+        health_monitor["once_running"] = True
+        def _run():
+            try:
+                _health_monitor_loop(once=True)
+            finally:
+                health_monitor["once_running"] = False
+        threading.Thread(target=_run, daemon=True).start()
         return jsonify({"success": True})
 
