@@ -88,12 +88,16 @@ def build_scan_report(results, targets_count, duration_sec, task_id=None):
         motd = _html_escape((r.get("motd") or "")[:40])
         auth = _html_escape(r.get("auth", "?"))
         # 玩家列表
-        sample = r.get("sample") or []
-        if sample:
-            names = [_html_escape(p.get("name", "")) for p in sample if p.get("name")][:10]
+        player_list = r.get("player_list") or r.get("sample") or []
+        if player_list:
+            # player_list 是 ["name1","name2"] 字符串列表；兼容 sample=[{"name":...}] 格式
+            if isinstance(player_list[0], dict):
+                names = [_html_escape(p.get("name", "")) for p in player_list if p.get("name")][:10]
+            else:
+                names = [_html_escape(str(n)) for n in player_list if n][:10]
             player_str = ", ".join(names)
-            if len(sample) > 10:
-                player_str += f" 等{len(sample)}人"
+            if len(player_list) > 10:
+                player_str += f" 等{len(player_list)}人"
         else:
             player_str = "-"
         online_rows += f"""<tr>
