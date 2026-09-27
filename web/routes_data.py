@@ -236,6 +236,20 @@ def register(app):
             _log(f"收藏移除: {ip}:{port}")
         return jsonify({"success": ok})
 
+    @app.route('/api/favorites/batch_remove', methods=['POST'])
+    def fav_batch_remove():
+        data = request.json or {}
+        items = data.get("items") or []
+        removed = 0
+        for it in items:
+            try:
+                if favorites.remove_favorite(it["ip"], int(it["port"])):
+                    removed += 1
+            except Exception:
+                pass
+        _log(f"批量删除收藏: {removed}/{len(items)} 个")
+        return jsonify({"success": True, "removed": removed})
+
     @app.route('/api/favorites/tags', methods=['POST'])
     def fav_tags():
         data = request.json or {}

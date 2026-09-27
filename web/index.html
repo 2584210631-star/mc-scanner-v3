@@ -1396,6 +1396,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-danger" onclick="openFavBatchWarnModal()">批量警告选中</button>
         <button class="btn btn-info" onclick="openFavBatchObserverModal()">批量观察选中</button>
         <button class="btn btn-violet" onclick="openBatchAiModal('fav')">批量AI托管选中</button>
+        <button class="btn btn-danger" onclick="batchDeleteFavorites()">批量删除选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllFav')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
         <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
@@ -4437,6 +4438,17 @@ function getSelectedFavServers() {
   return Array.from(document.querySelectorAll('.fav-server-check:checked')).map(c => ({
     ip: c.dataset.ip, port: parseInt(c.dataset.port)
   }));
+}
+async function batchDeleteFavorites() {
+  const selected = getSelectedFavServers();
+  if (selected.length === 0) { alert('请先勾选要删除的服务器'); return; }
+  if (!confirm(`确定删除选中的 ${selected.length} 个收藏？此操作不可恢复。`)) return;
+  const res = await fetch('/api/favorites/batch_remove', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({items: selected})
+  });
+  const data = await res.json();
+  loadFavorites();
 }
 function openFavBatchWarnModal() {
   const selected = getSelectedFavServers();

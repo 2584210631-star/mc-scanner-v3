@@ -107,14 +107,31 @@ def _health_monitor_loop(once=False):
                     del health_monitor["last_players"][k]
             _log(f"[健康监控] 本轮目标数: {len(targets)}, 并发{probe_concurrency} 同IP间隔{probe_ip_gap}s")
 
-            # 温和并发探测一轮（限制并发 + 同IP节流，避免限速/拉黑；探测完再逐条处理）
-            results = asyncio.run(_probe_all(targets, timeout=4.0,
-                                             concurrency=probe_concurrency,
-                                             ip_gap=probe_ip_gap)) if targets else []
-            for ip, port, r in results:
+            # 逐台探测、逐台更新（扫一个报一个，不用等全部跑完）
+            async def _probe_stream():
+                sem = asyncio.Semaphore(max(1, probe_concurrency))
+                last_hit = {}
+                async def _one(ip, port):
+                    async with sem:
+                        if probe_ip_gap > 0:
+                            while True:
+                                now = asyncio.get_event_loop().time()
+                                wait = last_hit.get(ip, 0.0) + probe_ip_gap - now
+                                if wait <= 0:
+                                    last_hit[ip] = now
+                                    break
+                                await asyncio.sleep(wait)
+                        try:
+                            return (ip, port, await async_slp_probe(ip, port, timeout=4.0))
+                        except Exception:
+                            return (ip, port, None)
+                for fut in asyncio.as_completed([_one(ip, port) for ip, port in targets]):
+                    ip, port, r = await fut
+                    _process_one(ip, port, r)
+
+            def _process_one(ip, port, r):
                 key = f"{ip}:{port}"
                 try:
-                    # 在线时的信息写回收藏（last_good_info），离线不覆盖，保留上次在线信息
                     if r and r.get("state") == "up":
                         try:
                             from storage.favorites import update_from_probe
@@ -126,13 +143,11 @@ def _health_monitor_loop(once=False):
                     prev = health_monitor["status"].get(key, {})
                     prev_online = prev.get('players', 0)
                     prev_flag = prev.get('online', False)
-                    # 获取玩家列表
                     player_names = []
                     if r:
                         sample = r.get('sample', [])
                         if isinstance(sample, list):
                             player_names = [p.get('name', '') for p in sample if isinstance(p, dict) and p.get('name')]
-                    # 记录人数趋势（try/finally 保证连接关闭，异常不泄漏）
                     if r and online > 0:
                         conn = None
                         try:
@@ -147,21 +162,17 @@ def _health_monitor_loop(once=False):
                         finally:
                             if conn:
                                 conn.close()
-                    # 对比玩家进出
                     prev_players = set(health_monitor.get("last_players", {}).get(key, []))
                     curr_players = set(player_names)
                     new_players = list(curr_players - prev_players)
                     left_players = list(prev_players - curr_players)
-                    # 状态跳变（在线↔离线）优先于人数变化记录，避免用人数误判
                     if online_flag != prev_flag:
                         event = {
                             "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             "ip": ip, "port": port,
                             "from": prev_online, "to": online,
-                            "joined": len(new_players),
-                            "left": len(left_players),
-                            "new_players": new_players,
-                            "left_players": left_players,
+                            "joined": len(new_players), "left": len(left_players),
+                            "new_players": new_players, "left_players": left_players,
                             "type": "up" if online_flag else "down"
                         }
                         health_monitor["events"].insert(0, event)
@@ -171,20 +182,16 @@ def _health_monitor_loop(once=False):
                             "prev": prev_online, "curr": online,
                             "joined": len(new_players), "left": len(left_players),
                             "player_names": player_names,
-                            "new_players": new_players,
-                            "left_players": left_players,
+                            "new_players": new_players, "left_players": left_players,
                         })
                         _log(f"[健康监控] {ip}:{port} 状态变化: {'在线' if online_flag else '离线'} ({prev_online}→{online}人)")
                     elif online != prev_online:
-                        # 保持在线，仅人数变化
                         event = {
                             "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             "ip": ip, "port": port,
                             "from": prev_online, "to": online,
-                            "joined": len(new_players),
-                            "left": len(left_players),
-                            "new_players": new_players,
-                            "left_players": left_players,
+                            "joined": len(new_players), "left": len(left_players),
+                            "new_players": new_players, "left_players": left_players,
                             "type": "change"
                         }
                         health_monitor["events"].insert(0, event)
@@ -194,11 +201,9 @@ def _health_monitor_loop(once=False):
                             "prev": prev_online, "curr": online,
                             "joined": len(new_players), "left": len(left_players),
                             "player_names": player_names,
-                            "new_players": new_players,
-                            "left_players": left_players,
+                            "new_players": new_players, "left_players": left_players,
                         })
                         _log(f"[健康监控] {ip}:{port} 人数变化: {prev_online}→{online} (进{len(new_players)}走{len(left_players)})")
-                    # 更新上次玩家列表
                     if "last_players" not in health_monitor:
                         health_monitor["last_players"] = {}
                     health_monitor["last_players"][key] = player_names
@@ -211,6 +216,9 @@ def _health_monitor_loop(once=False):
                     }
                 except Exception:
                     pass
+
+            if targets:
+                asyncio.run(_probe_stream())
             # 一轮检查结束，汇总发送一封邮件（有人数变化就发）
             if changed_servers:
                 try:
