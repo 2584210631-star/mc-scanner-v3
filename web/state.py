@@ -72,7 +72,7 @@ health_monitor = {
     "running": False,
     "thread": None,
     "stop_event": threading.Event(),
-    "interval": 300,
+    "interval": max(60, int(config.get("health_interval", 300))),
     "events": [],
     "last_check": None,
     "status": {},

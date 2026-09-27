@@ -60,6 +60,9 @@
   "api_rate_limit": 0,
   "db_retention_days": 30,
   "max_concurrent_scans": 2,
+  "health_interval": 300,
+  "health_probe_concurrency": 3,
+  "health_probe_ip_gap": 4.5,
   "capabilities": {
     "scan": true,
     "login_interact": false,

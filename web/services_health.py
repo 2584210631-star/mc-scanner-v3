@@ -14,12 +14,50 @@ scan_lock = state.scan_lock
 def _log(msg):
     state.log_scan(msg)
 
+
+async def _probe_all(hosts, timeout=4.0, concurrency=3, ip_gap=4.5):
+    """温和并发探测：限制总并发 + 同一IP强制节流。
+
+    Minecraft 服务器默认 connection-throttle=4000ms（同一IP 4秒内限一次连接），
+    同IP不同端口连续探测会被限速甚至被防火墙拉黑。ip_gap 默认 4.5s 留有余量。
+    返回 [(ip, port, result|None)]。
+    """
+    import asyncio
+    from scanner.async_probe import async_slp_probe
+    sem = asyncio.Semaphore(max(1, concurrency))
+    last_hit = {}  # ip -> 上次探测时刻（同一事件循环内访问，无并发竞争）
+
+    async def _one(ip, port):
+        async with sem:
+            if ip_gap > 0:
+                while True:
+                    now = asyncio.get_event_loop().time()
+                    wait = last_hit.get(ip, 0.0) + ip_gap - now
+                    if wait <= 0:
+                        last_hit[ip] = now
+                        break
+                    await asyncio.sleep(wait)
+            try:
+                return (ip, port, await async_slp_probe(ip, port, timeout=timeout))
+            except Exception:
+                return (ip, port, None)
+
+    return await asyncio.gather(*[_one(ip, port) for ip, port in hosts])
+
 def _health_monitor_loop():
     """后台健康监控线程：定期检查收藏的服务器，状态/人数变化时记录，一轮汇总发一封邮件"""
     import asyncio
     from scanner.async_probe import async_slp_probe
-    _log("[健康监控] 启动，间隔5分钟")
     db_path = config.get("db_path", "mcscanner.db")
+    # 健康监控速率配置（可调，避免被限速/拉黑）：
+    #   health_probe_concurrency: 同时探测的最大服务器数（默认3，保守温和）
+    #   health_probe_ip_gap:      同一IP两次探测的最小间隔秒数（Minecraft connection-throttle 默认4秒，留余量）
+    #   health_interval:          每轮间隔秒数（默认300）
+    probe_concurrency = max(1, min(int(config.get("health_probe_concurrency", 3)), 10))
+    probe_ip_gap = max(0.0, float(config.get("health_probe_ip_gap", 4.5)))
+    probe_interval = max(60, int(config.get("health_interval", 300)))
+    _log(f"[健康监控] 启动，速率配置: 并发≤{probe_concurrency} 同IP间隔≥{probe_ip_gap}s 轮询间隔{probe_interval}s")
+    health_monitor["interval"] = probe_interval
     while not health_monitor["stop_event"].is_set():
         # 本轮收集到变化的服务器（用于汇总邮件）
         changed_servers = []  # [{ip, port, prev, curr, joined, left, player_names, new_players, left_players}]
@@ -63,18 +101,10 @@ def _health_monitor_loop():
                 if k not in valid_keys:
                     del health_monitor["last_players"][k]
 
-            # 并发探测一轮（限制并发，避免瞬间大量请求；探测完再逐条处理）
-            async def _probe_all(hosts, timeout=4.0):
-                sem = asyncio.Semaphore(20)
-                async def _one(ip, port):
-                    async with sem:
-                        try:
-                            return (ip, port, await async_slp_probe(ip, port, timeout=timeout))
-                        except Exception:
-                            return (ip, port, None)
-                return await asyncio.gather(*[_one(ip, port) for ip, port in hosts])
-
-            results = asyncio.run(_probe_all(targets)) if targets else []
+            # 温和并发探测一轮（限制并发 + 同IP节流，避免限速/拉黑；探测完再逐条处理）
+            results = asyncio.run(_probe_all(targets, timeout=4.0,
+                                             concurrency=probe_concurrency,
+                                             ip_gap=probe_ip_gap)) if targets else []
             for ip, port, r in results:
                 key = f"{ip}:{port}"
                 try:
