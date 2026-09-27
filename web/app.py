@@ -150,6 +150,31 @@ def _register_routes():
 _register_routes()
 
 
+@app.errorhandler(404)
+def _not_found(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "接口不存在", "path": request.path}), 404
+    return "Not Found", 404
+
+
+@app.errorhandler(500)
+def _internal_error(e):
+    # API 统一返回 JSON，避免前端 fetch().json() 拿到 HTML 错误页
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "服务器内部错误"}), 500
+    return "Internal Server Error", 500
+
+
+@app.after_request
+def _security_headers(resp):
+    # 基础安全响应头：防 MIME 嗅探、防嵌入、限制来源泄露
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    resp.headers.setdefault("X-XSS-Protection", "1; mode=block")
+    return resp
+
+
 def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"):
     logger.setup_logger()
     from storage import db

@@ -123,6 +123,7 @@
 
 - 周期探测收藏服务器，记录在线/离线、人数、玩家进出，变化可汇总邮件
 - **温和探测速率**（避免被限速/拉黑）：并发 ≤ `health_probe_concurrency`（默认 3）；同一 IP 两次探测间隔 ≥ `health_probe_ip_gap` 秒（默认 4.5，Minecraft connection-throttle 默认 4 秒）；每轮间隔 `health_interval` 秒（默认 300）——均在 `config.json` 可调
+- 默认还会带上数据库里"有人气"的服务器（最多 20 个）；只想监控收藏时设 `health_monitor_db_extra: false`
 
 ---
 

@@ -81,16 +81,20 @@ def _health_monitor_loop():
                             targets = [(f['ip'], f['port']) for f in favs['servers']]
                     except Exception:
                         pass
-            # 也从数据库取有人过的服务器
-            try:
-                conn = sqlite3.connect(db_path)
-                rows = conn.execute("SELECT ip, port FROM servers WHERE players_online > 0 LIMIT 20").fetchall()
-                conn.close()
-                for ip, port in rows:
-                    if (ip, port) not in targets:
-                        targets.append((ip, port))
-            except Exception:
-                pass
+            # 也从数据库取有人过的服务器（health_monitor_db_extra=false 时只监控收藏）
+            if config.get("health_monitor_db_extra", True):
+                conn = None
+                try:
+                    conn = sqlite3.connect(db_path)
+                    rows = conn.execute("SELECT ip, port FROM servers WHERE players_online > 0 LIMIT 20").fetchall()
+                    for ip, port in rows:
+                        if (ip, port) not in targets:
+                            targets.append((ip, port))
+                except Exception:
+                    pass
+                finally:
+                    if conn:
+                        conn.close()
 
             # 清理已不在监控列表中的残留状态（收藏删除后不留脏数据）
             valid_keys = {f"{ip}:{port}" for ip, port in targets}
@@ -126,8 +130,9 @@ def _health_monitor_loop():
                         sample = r.get('sample', [])
                         if isinstance(sample, list):
                             player_names = [p.get('name', '') for p in sample if isinstance(p, dict) and p.get('name')]
-                    # 记录人数趋势
+                    # 记录人数趋势（try/finally 保证连接关闭，异常不泄漏）
                     if r and online > 0:
+                        conn = None
                         try:
                             conn = sqlite3.connect(db_path)
                             conn.execute(
@@ -135,9 +140,11 @@ def _health_monitor_loop():
                                 (ip, port, online, r.get('max', 0), datetime.now(timezone.utc).isoformat())
                             )
                             conn.commit()
-                            conn.close()
                         except Exception:
                             pass
+                        finally:
+                            if conn:
+                                conn.close()
                     # 对比玩家进出
                     prev_players = set(health_monitor.get("last_players", {}).get(key, []))
                     curr_players = set(player_names)
