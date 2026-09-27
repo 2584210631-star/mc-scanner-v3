@@ -123,8 +123,39 @@ def is_favorite(ip: str, port: int, path: str = None) -> bool:
     return _find(load_favorites(path), ip, port) >= 0
 
 
+def update_from_probe(ip: str, port: int, info: dict, path: str = None) -> Optional[dict]:
+    """用一次探测结果更新收藏。
+
+    在线：刷新 last_info 和 last_good_info（保留最近一次在线时的完整信息）。
+    离线：只记录离线状态，不覆盖 last_good_info（上次在线信息）。
+    """
+    if not info:
+        return None
+    favorites = load_favorites(path)
+    idx = _find(favorites, ip, port)
+    if idx < 0:
+        return None
+    fav = favorites[idx]
+    now = datetime.now().isoformat()
+    fav["last_check"] = now
+    if info.get("state") == "up":
+        clean = {k: v for k, v in info.items() if k != "_raw"}
+        fav["last_info"] = clean
+        fav["last_good_info"] = clean
+        fav.pop("last_offline_at", None)
+    else:
+        # 离线：不覆盖上次在线信息
+        if (fav.get("last_info") or {}).get("state") == "up":
+            fav["last_good_info"] = fav["last_info"]
+        fav["last_info"] = {"state": "offline", "error": info.get("error", "")}
+        fav["last_offline_at"] = now
+    save_favorites(favorites, path)
+    return fav
+
+
 def rescan_one(ip: str, port: int, timeout: float = 5.0, path: str = None) -> Optional[dict]:
-    """重新探测单个收藏服务器，更新 last_info 和 last_check。"""
+    """重新探测单个收藏服务器，更新 last_info 和 last_check。
+    离线时保留上次在线信息（last_good_info）。"""
     info = slp_probe(ip, port, timeout=timeout)
     if not info or info.get("state") != "up":
         info = {"state": "offline", "error": info.get("error", "") if info else "unreachable"}
@@ -137,18 +168,13 @@ def rescan_one(ip: str, port: int, timeout: float = 5.0, path: str = None) -> Op
                 info["auth_detail"] = auth.get("detail", "")
         except Exception:
             pass
-    favorites = load_favorites(path)
-    idx = _find(favorites, ip, port)
-    if idx >= 0:
-        favorites[idx]["last_check"] = datetime.now().isoformat()
-        favorites[idx]["last_info"] = {k: v for k, v in info.items() if k != "_raw"}
-        save_favorites(favorites, path)
+    update_from_probe(ip, port, info, path=path)
     return info
 
 
 def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
                progress_callback=None) -> list:
-    """重新探测所有收藏服务器。返回更新后的收藏列表。"""
+    """重新探测所有收藏服务器。离线时保留上次在线信息。返回更新后的收藏列表。"""
     import concurrent.futures
     favorites = load_favorites(path)
     if not favorites:
@@ -178,9 +204,10 @@ def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
                 if info and info.get("state") == "up":
                     results[(ip, port)] = {k: v for k, v in info.items() if k != "_raw"}
                 else:
-                    results[(ip, port)] = {"state": "offline"}
+                    results[(ip, port)] = {"state": "offline",
+                                           "error": info.get("error", "") if info else "unreachable"}
             except Exception:
-                results[(ip, port)] = {"state": "error"}
+                results[(ip, port)] = {"state": "offline", "error": "probe error"}
             done += 1
             if progress_callback:
                 progress_callback(done, len(favorites))
@@ -189,7 +216,17 @@ def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
         key = (fav["ip"], fav["port"])
         if key in results:
             fav["last_check"] = now
-            fav["last_info"] = results[key]
+            res = results[key]
+            if res.get("state") == "up":
+                fav["last_info"] = res
+                fav["last_good_info"] = res
+                fav.pop("last_offline_at", None)
+            else:
+                # 离线：不覆盖上次在线信息
+                if (fav.get("last_info") or {}).get("state") == "up":
+                    fav["last_good_info"] = fav["last_info"]
+                fav["last_info"] = res
+                fav["last_offline_at"] = now
     save_favorites(favorites, path)
     return favorites
 
@@ -234,7 +271,8 @@ def filter_favorites(tag: str = None, search: str = None, path: str = None) -> l
         if search:
             haystack = f"{fav['ip']}:{fav['port']} {fav.get('note', '')} {' '.join(fav.get('tags', []))}"
             info = fav.get("last_info") or {}
-            haystack += f" {info.get('version', '')} {info.get('motd', '')}"
+            good = fav.get("last_good_info") or (info if info.get("state") == "up" else {})
+            haystack += f" {good.get('version', '')} {good.get('motd', '')}"
             if search.lower() not in haystack.lower():
                 continue
         result.append(fav)

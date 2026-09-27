@@ -397,7 +397,10 @@ def register(app):
         result = []
         for f in favs:
             key = f"{f['ip']}:{f['port']}"
-            st = health_monitor["status"].get(key, {})
+            st = health_monitor["status"].get(key)
+            if not st:
+                # 还没有实时监控数据：不返回该项，前端保留收藏中上次探查的信息
+                continue
             result.append({
                 "ip": f['ip'], "port": f['port'],
                 "tag": f.get('tag', ''),
