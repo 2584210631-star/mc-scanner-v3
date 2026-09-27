@@ -247,12 +247,15 @@ def _scan_worker(task_id, targets_list, scan_cfg):
         elif use_masscan:
             from scanner.masscan import run_masscan, parse_masscan_json
             _log("使用 masscan 快速端口扫描")
-            masscan_targets = ",".join(str(t) for t in targets_list) if isinstance(targets_list, list) else str(targets_list)
+            # targets_list 是 [(ip,port),...]，提取去重IP给masscan（masscan不认元组字符串）
+            masscan_targets = ",".join(sorted(set(ip for ip, _ in targets_list)))
             masscan_ports = ",".join(str(p) for p in scan_cfg.get("ports", [25565]))
             output_file = run_masscan(masscan_targets, ports=masscan_ports,
                                       rate=scan_cfg.get("masscan_rate", 1000))
             open_ports = list(parse_masscan_json(output_file))
-            _log(f"masscan 发现 {len(open_ports)} 个开放端口，开始SLP探测")
+            # parse_masscan_json 返回 (ip,port,banner) 三元组，probe_list 要 (ip,port) 二元组
+            open_pairs = [(ip, port) for ip, port, _ in open_ports]
+            _log(f"masscan 发现 {len(open_pairs)} 个开放端口，开始SLP探测")
             if not portscan_only:
                 from scanner.engine import ScanEngine
                 engine = ScanEngine(stop_event=stop_evt,
@@ -261,12 +264,12 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     timeout=scan_cfg.get("timeout", 4.0),
                     auth_check=scan_cfg.get("auth_check", True),
                 )
-                results = engine.probe_list(open_ports, progress_callback=_on_progress)
+                results = engine.probe_list(open_pairs, progress_callback=_on_progress)
             else:
                 results = [{"ip": ip, "port": port, "state": "open",
                             "version": "", "motd": "", "players_online": 0, "players_max": 0,
                             "ping_ms": None, "proto": None}
-                           for ip, port in open_ports]
+                           for ip, port in open_pairs]
                 _log(f"端口扫描完成，开放: {len(results)} 个")
         else:
             if scan_cfg.get("async_mode"):
