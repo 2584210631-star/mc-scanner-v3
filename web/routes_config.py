@@ -13,8 +13,6 @@ except ImportError:
 def register(app):
     def _log(msg):
         state.log_scan(msg)
-    def _get_web_token():
-        return state.get_web_token()
     def _safe_db_path(path):
         return state.safe_db_path(path)
     def parse_ports_spec(ports_spec):
@@ -103,7 +101,7 @@ def register(app):
         """读取当前配置（敏感字段打码）"""
         cfg = config.get_all()
         # 敏感字段打码
-        for k in ("ai_api_key", "web_token", "authme_password", "email_password",
+        for k in ("ai_api_key", "authme_password", "email_password",
                   "mc_access_token", "msa_access_token"):
             if cfg.get(k):
                 v = str(cfg[k])
@@ -121,7 +119,7 @@ def register(app):
         """保存配置到文件"""
         data = request.json or {}
         # 只允许保存白名单字段
-        allowed = {"ai_api_key", "ai_base_url", "ai_model", "web_token", "web_host", "web_port",
+        allowed = {"ai_api_key", "ai_base_url", "ai_model", "web_host", "web_port",
                    "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level",
                    "email_enabled", "email_smtp_host", "email_smtp_port", "email_smtp_ssl",
                    "email_username", "email_password", "email_from", "email_to"}
@@ -129,8 +127,6 @@ def register(app):
         # api_key如果是打码状态（含****），不覆盖原值
         if "ai_api_key" in to_save and "****" in str(to_save["ai_api_key"]):
             del to_save["ai_api_key"]
-        if "web_token" in to_save and "****" in str(to_save["web_token"]):
-            del to_save["web_token"]
         if "email_password" in to_save and "****" in str(to_save["email_password"]):
             del to_save["email_password"]
         ok = config.save_config(to_save)

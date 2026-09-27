@@ -80,7 +80,9 @@ def _rate_limit():
 
 @app.before_request
 def _check_auth():
-    """API鉴权：静态资源放行，API需要X-API-Token。鉴权判断异常时拒绝访问（fail-closed）。"""
+    """API鉴权：静态资源放行；API 需要登录会话（X-API-Token 携带会话token）。
+    首次登录未改密时，除改密/退出/状态接口外一律拒绝（强制先改密）。
+    鉴权判断异常时拒绝访问（fail-closed）。"""
     path = request.path
     # 静态资源和页面放行
     if path in ("/", "/index.html") or path.startswith("/static/") or \
@@ -88,16 +90,21 @@ def _check_auth():
         return None
     if not path.startswith("/api/"):
         return None
+    # 登录接口本身无需鉴权
+    if path == "/api/auth/login":
+        return None
     try:
-        token = config.get("web_token", "")
+        from web import auth as web_auth
     except Exception:
-        # 鉴权系统异常时拒绝访问，而不是放行
         return jsonify({"error": "鉴权系统异常，拒绝访问"}), 500
-    if not token:
-        return None  # 未配置token则不鉴权（本地127.0.0.1使用）
-    client_token = request.headers.get("X-API-Token", "")
-    if client_token != token:
-        return jsonify({"error": "未授权访问，请配置正确的API Token"}), 401
+    token = request.headers.get("X-API-Token", "")
+    username = web_auth.verify_session(token)
+    if not username:
+        return jsonify({"error": "未登录或会话已过期", "code": "not_logged_in"}), 401
+    # 首次登录必须改密：未改密时只放行改密/退出/状态接口
+    if web_auth.load_account().get("must_change") and path not in (
+            "/api/auth/change_password", "/api/auth/logout", "/api/auth/status"):
+        return jsonify({"error": "首次登录必须先修改用户名和密码", "code": "must_change"}), 403
     return None
 
 
@@ -127,7 +134,7 @@ def _audit_log():
 
 def _register_routes():
     modules = [
-        "routes_core", "routes_scan", "routes_scan_extra", "routes_warn",
+        "auth", "routes_core", "routes_scan", "routes_scan_extra", "routes_warn",
         "routes_data", "routes_ai", "routes_ai_bots", "routes_observer",
         "routes_config", "routes_ops", "routes_tools",
     ]
@@ -169,16 +176,7 @@ def run(db_path: str = "mcscanner.db", port: int = 8080, host: str = "127.0.0.1"
         logger.warning(f"[!] 代理初始化失败: {e}")
     logger.info(f"[*] Web 面板启动: http://{host}:{port}")
     if host in ("0.0.0.0", "::"):
-        token = config.get("web_token", "")
-        if not token:
-            import secrets
-            token = secrets.token_hex(16)
-            config.set("web_token", token)
-            config.save_config()
-            logger.warning(f"[!] 0.0.0.0 绑定已自动生成 API Token: {token}")
-            logger.warning("[!] 请在设置页填入此 Token，或使用 127.0.0.1 本地访问（无需鉴权）")
-        else:
-            logger.warning("[!] 0.0.0.0 绑定已启用 API Token 鉴权")
+        logger.warning("[!] 已绑定 0.0.0.0（局域网可访问），所有 API 需登录（默认账号 admin/admin123，首次登录强制改密）")
     app.run(host=host, port=port, debug=False, threaded=True)
 
 

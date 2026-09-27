@@ -90,10 +90,6 @@ def set_read_only(enabled: bool):
     read_only_mode = enabled
 
 
-def get_web_token():
-    return config.get("web_token", "") or ""
-
-
 def capability_enabled(cap: str) -> bool:
     """能力分级检查：高风险能力默认关闭，需在config.capabilities显式开启。
     cap: 'scan' / 'login_interact' / 'rcon_commands'"""

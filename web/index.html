@@ -978,6 +978,36 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   .form-row { gap: 8px; }
   .form-group { min-width: 120px; }
 }
+
+/* ===== 登录遮罩 ===== */
+.auth-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: radial-gradient(ellipse at 50% 30%, rgba(15,20,35,0.96), rgba(6,9,16,0.99));
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.auth-overlay.hidden { display: none; }
+.auth-card {
+  width: 100%; max-width: 360px;
+  background: var(--bg-secondary, #101522);
+  border: 1px solid var(--hairline, #1f2937);
+  border-radius: 14px; padding: 28px 26px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.auth-logo {
+  width: 52px; height: 52px; margin: 0 auto 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: var(--primary, #00d992);
+  background: rgba(0,217,146,0.08); border: 1px solid rgba(0,217,146,0.25);
+  border-radius: 12px;
+}
+.auth-title { text-align: center; font-size: 20px; font-weight: 800; letter-spacing: .5px; }
+.auth-title span { color: var(--primary, #00d992); }
+.auth-subtitle { text-align: center; font-size: 12px; color: var(--text-secondary, #8b98ab); margin: 4px 0 20px; }
+.auth-btn { width: 100%; margin-top: 14px; padding: 11px; font-size: 15px; }
+.auth-msg { min-height: 20px; margin-top: 10px; font-size: 13px; color: var(--red, #f56565); text-align: center; }
+.auth-hint { margin-top: 14px; text-align: center; font-size: 12px; color: var(--text-secondary, #8b98ab); }
+.auth-card .form-group { margin-bottom: 12px; }
+.auth-card input { width: 100%; box-sizing: border-box; }
 </style>
 </head>
 <body>
@@ -1780,12 +1810,14 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div class="panel">
     <h2>面板配置</h2>
     <div class="form-row">
-      <div class="form-group"><label>访问 Token（空=不启用）</label><input type="password" id="setWebToken" placeholder="留空不启用认证"></div>
+      <div class="form-group"><label>当前账号</label><input type="text" id="setAccountName" readonly value="-"></div>
       <div class="form-group"><label>消息间隔(秒)</label><input type="number" id="setMsgDelay" step="0.1" min="0.1"></div>
       <div class="form-group"><label>机器人超时(秒)</label><input type="number" id="setBotTimeout" min="1"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-primary" onclick="savePanelConfig()">保存面板配置</button>
+      <button class="btn" onclick="showAuthOverlay('change')">修改账号/密码</button>
+      <button class="btn btn-danger" onclick="logoutAccount()">退出登录</button>
       <span id="setPanelStatus" style="font-size:13px;"></span>
     </div>
   </div>
@@ -2140,23 +2172,158 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
+<!-- ===== 登录遮罩 ===== -->
+<div id="authOverlay" class="auth-overlay hidden">
+  <div class="auth-card">
+    <div class="auth-logo">◈</div>
+    <div class="auth-title">MC Scanner <span>v3</span></div>
+    <div class="auth-subtitle">服务器扫描 · 安全提醒 控制面板</div>
+    <!-- 登录表单 -->
+    <div id="authLoginForm">
+      <div class="form-group"><label>用户名</label><input type="text" id="authUsername" autocomplete="username" placeholder="默认 admin"></div>
+      <div class="form-group"><label>密码</label><input type="password" id="authPassword" autocomplete="current-password" placeholder="默认 admin123"></div>
+      <button class="btn btn-primary auth-btn" onclick="doLogin()">登 录</button>
+      <div class="auth-msg" id="authLoginMsg"></div>
+      <div class="auth-hint">首次登录必须修改用户名和密码</div>
+    </div>
+    <!-- 强制改密表单 -->
+    <div id="authChangeForm" class="hidden">
+      <div class="auth-subtitle" style="color:var(--red);">首次登录：请先修改用户名和密码</div>
+      <div class="form-group"><label>当前密码</label><input type="password" id="authOldPassword" autocomplete="current-password"></div>
+      <div class="form-group"><label>新用户名</label><input type="text" id="authNewUsername" autocomplete="username"></div>
+      <div class="form-group"><label>新密码（至少6位）</label><input type="password" id="authNewPassword" autocomplete="new-password"></div>
+      <div class="form-group"><label>确认新密码</label><input type="password" id="authNewPassword2" autocomplete="new-password"></div>
+      <button class="btn btn-primary auth-btn" onclick="doChangeAccount()">保存并进入</button>
+      <div class="auth-msg" id="authChangeMsg"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// 全局fetch包装器：自动带X-API-Token（如果配置了web_token）
+// ===== 登录会话：fetch 自动带会话token，未登录/需改密时弹出登录遮罩 =====
 const _origFetch = window.fetch.bind(window);
+const AUTH_TOKEN_KEY = 'mcscanner_auth_token';
+
+function getAuthToken() {
+  try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch(e) { return ''; }
+}
+function setAuthToken(t) {
+  try { if (t) localStorage.setItem(AUTH_TOKEN_KEY, t); else localStorage.removeItem(AUTH_TOKEN_KEY); } catch(e) {}
+}
+
 window.fetch = function(url, opts) {
   opts = opts || {};
+  const isApi = typeof url === 'string' && url.startsWith('/api/');
   try {
-    const token = window.__WEB_TOKEN__ || (JSON.parse(localStorage.getItem('mcscanner_config') || '{}').web_token) || '';
-    if (token && typeof url === 'string' && url.startsWith('/api/')) {
+    const token = getAuthToken();
+    if (token && isApi) {
       opts.headers = Object.assign({}, opts.headers || {}, {'X-API-Token': token});
     }
   } catch(e) {}
-  return _origFetch(url, opts);
+  return _origFetch(url, opts).then(r => {
+    if (isApi && r.status === 401 && !url.includes('/api/auth/login')) {
+      setAuthToken('');
+      showAuthOverlay('login');
+    } else if (isApi && r.status === 403) {
+      r.clone().json().then(j => { if (j && j.code === 'must_change') showAuthOverlay('change'); }).catch(() => {});
+    }
+    return r;
+  });
 };
+
+function showAuthOverlay(mode) {
+  const ov = document.getElementById('authOverlay');
+  if (!ov) return;
+  ov.classList.remove('hidden');
+  document.getElementById('authLoginForm').classList.toggle('hidden', mode !== 'login');
+  document.getElementById('authChangeForm').classList.toggle('hidden', mode !== 'change');
+  document.getElementById('authLoginMsg').textContent = '';
+  document.getElementById('authChangeMsg').textContent = '';
+  if (mode === 'change') {
+    const an = document.getElementById('authNewUsername');
+    if (!an.value) {
+      _origFetch('/api/auth/status').then(r => r.json()).then(j => {
+        if (j && j.username && !an.value) an.value = j.username;
+      }).catch(() => {});
+    }
+  }
+}
+function hideAuthOverlay() {
+  const ov = document.getElementById('authOverlay');
+  if (ov) ov.classList.add('hidden');
+}
+
+async function doLogin() {
+  const msg = document.getElementById('authLoginMsg');
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!username || !password) { msg.textContent = '请输入用户名和密码'; return; }
+  try {
+    const res = await _origFetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (data.success) {
+      setAuthToken(data.token);
+      if (data.must_change) {
+        showAuthOverlay('change');
+      } else {
+        hideAuthOverlay();
+        location.reload();
+      }
+    } else {
+      msg.textContent = data.error || '登录失败';
+    }
+  } catch(e) { msg.textContent = '网络错误: ' + e.message; }
+}
+
+async function doChangeAccount() {
+  const msg = document.getElementById('authChangeMsg');
+  const oldPassword = document.getElementById('authOldPassword').value;
+  const newUsername = document.getElementById('authNewUsername').value.trim();
+  const newPassword = document.getElementById('authNewPassword').value;
+  const newPassword2 = document.getElementById('authNewPassword2').value;
+  if (!oldPassword) { msg.textContent = '请输入当前密码'; return; }
+  if (newUsername.length < 2) { msg.textContent = '用户名至少 2 个字符'; return; }
+  if (newPassword.length < 6) { msg.textContent = '密码至少 6 位'; return; }
+  if (newPassword !== newPassword2) { msg.textContent = '两次输入的新密码不一致'; return; }
+  try {
+    const res = await _origFetch('/api/auth/change_password', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({old_password: oldPassword, new_username: newUsername, new_password: newPassword})
+    });
+    const data = await res.json();
+    if (data.success) {
+      hideAuthOverlay();
+      location.reload();
+    } else {
+      msg.textContent = data.error || '修改失败';
+    }
+  } catch(e) { msg.textContent = '网络错误: ' + e.message; }
+}
+
+async function logoutAccount() {
+  try { await _origFetch('/api/auth/logout', {method: 'POST'}); } catch(e) {}
+  setAuthToken('');
+  showAuthOverlay('login');
+}
+
+// 启动时检查登录状态
+(async function bootAuth() {
+  try {
+    const r = await _origFetch('/api/auth/status');
+    if (r.status === 401) { showAuthOverlay('login'); return; }
+    const j = await r.json();
+    if (j.must_change) { showAuthOverlay('change'); }
+  } catch(e) {
+    showAuthOverlay('login');
+  }
+})();
 
 // ===== 安全/能力状态：常显徽章 + 未授权禁用按钮 =====
 let SEC_STATE = { read_only:false, capabilities:{ scan:true, login_interact:false, rcon_commands:false } };
@@ -3634,9 +3801,16 @@ async function loadSettings() {
     document.getElementById('setAiBaseUrl').value = cfg.ai_base_url || '';
     document.getElementById('setAiModel').value = cfg.ai_model || '';
     document.getElementById('setAiCooldown').value = cfg.ai_reply_cooldown ?? 2;
-    document.getElementById('setWebToken').value = cfg.web_token || '';
     document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
     document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
+    // 当前账号（登录会话）
+    try {
+      const ar = await fetch('/api/auth/status');
+      if (ar.ok) {
+        const aj = await ar.json();
+        document.getElementById('setAccountName').value = aj.username || '-';
+      }
+    } catch(e) {}
     // 邮件配置
     document.getElementById('setEmailEnabled').checked = !!cfg.email_enabled;
     document.getElementById('setEmailSmtpHost').value = cfg.email_smtp_host || '';
@@ -3680,7 +3854,6 @@ async function savePanelConfig() {
     const res = await fetch('/api/config/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        web_token: document.getElementById('setWebToken').value,
         message_delay: parseFloat(document.getElementById('setMsgDelay').value),
         bot_timeout: parseInt(document.getElementById('setBotTimeout').value),
       })
