@@ -14,6 +14,10 @@ scan_tasks = {}          # task_id -> task_state dict
 scan_queue = []          # 排队中的 task_id 列表
 current_task_id = None   # 当前正在运行的 task_id
 
+# 同时最多可运行的扫描任务数（>1 时多个扫描任务可并发执行，适合多网段并行扫描）
+# 注意：并发扫描会成倍增加网络请求与被扫方的告警风险，按需调大
+max_concurrent_scans = max(1, int(config.get("max_concurrent_scans", 2)))
+
 scan_state = {
     "running": False,
     "progress": 0,
