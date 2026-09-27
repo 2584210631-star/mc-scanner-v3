@@ -78,19 +78,18 @@ def build_scan_report(results, targets_count, duration_sec, task_id=None):
     online_count = len(online)
     cracked_count = len(cracked)
 
-    # 有人的服务器列表
+    # 有人的服务器列表（卡片式，手机友好）
     online_rows = ""
     for r in sorted(online, key=lambda x: x.get("players_online", 0), reverse=True)[:30]:
         ip = _html_escape(r.get("ip", "?"))
         port = r.get("port", 25565)
         ver = _html_escape(r.get("version", "") or "?")
         players = f"{r.get('players_online', 0)}/{r.get('players_max', 0)}"
-        motd = _html_escape((r.get("motd") or "")[:40])
+        motd = _html_escape((r.get("motd") or "")[:60])
         auth = _html_escape(r.get("auth", "?"))
         # 玩家列表
         player_list = r.get("player_list") or r.get("sample") or []
         if player_list:
-            # player_list 是 ["name1","name2"] 字符串列表；兼容 sample=[{"name":...}] 格式
             if isinstance(player_list[0], dict):
                 names = [_html_escape(p.get("name", "")) for p in player_list if p.get("name")][:10]
             else:
@@ -100,9 +99,16 @@ def build_scan_report(results, targets_count, duration_sec, task_id=None):
                 player_str += f" 等{len(player_list)}人"
         else:
             player_str = "-"
-        online_rows += f"""<tr>
-            <td>{ip}:{port}</td><td>{ver}</td><td>{players}</td><td>{auth}</td><td>{motd}</td><td style="font-size:11px;color:#666;max-width:200px;word-break:break-all;">{player_str}</td>
-        </tr>"""
+        online_rows += f"""
+        <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-top:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:15px;font-weight:bold;color:#1a73e8;">{ip}:{port}</span>
+            <span style="font-size:14px;font-weight:bold;color:#e94560;">{players}人</span>
+          </div>
+          <div style="font-size:12px;color:#888;margin-top:4px;">版本 {ver} · {auth}</div>
+          <div style="font-size:13px;color:#555;margin-top:4px;">{motd}</div>
+          <div style="font-size:12px;color:#999;margin-top:4px;">在线: {player_str}</div>
+        </div>"""
 
     duration_str = f"{int(duration_sec//60)}分{int(duration_sec%60)}秒" if duration_sec > 60 else f"{int(duration_sec)}秒"
 
@@ -133,8 +139,8 @@ tr:hover{{background:#f9f9f9}}
 <p><strong>扫描目标数：</strong>{targets_count}</p>
 """
     if online_rows:
-        html += f"""<h3 style="margin-top:20px;">有人的服务器（前30）</h3>
-<table><tr><th>地址</th><th>版本</th><th>人数</th><th>验证</th><th>MOTD</th><th>在线玩家</th></tr>{online_rows}</table>"""
+        html += f"""<h3 style="margin-top:20px;font-size:16px;">有人的服务器（前30）</h3>
+{online_rows}"""
     else:
         html += "<p style='color:#999;margin-top:16px;'>本次扫描未发现有人的服务器。</p>"
 
