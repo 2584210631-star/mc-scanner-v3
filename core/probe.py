@@ -160,6 +160,19 @@ def probe_with_fallback(host: str, port: int, timeout: float = 5.0) -> dict | No
     return result
 
 
+def build_login_start_payload(username: str, proto: int) -> bytes:
+    """构造 Login Start 包体。
+    - 764+ (1.20.2+): username + UUID（无 hasPlayerUUID 标志位）
+    - <=763 (1.19-1.20.1): username + hasPlayerUUID(true) + UUID
+    """
+    payload = write_string(username)
+    if proto >= 764:
+        payload += write_uuid(offline_uuid(username))
+    else:
+        payload += b'\x01' + write_uuid(offline_uuid(username))
+    return payload
+
+
 def auth_probe(host: str, port: int, reported_proto: int, username: str = "ScannerTest",
                timeout: float = 4.0, try_versions: list | None = None) -> dict:
     """
@@ -183,13 +196,7 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
             with MCConnection(host, port, timeout) as conn:
                 conn.handshake(protocol=proto, next_state=PROTO_STATE_LOGIN)
                 pid = login_pkts["sb_start"]
-                payload = write_string(username)
-                if proto >= 764:
-                    # 1.20.2+ (764+): 直接 UUID，无 hasPlayerUUID 标志位
-                    payload += write_uuid(offline_uuid(username))
-                else:
-                    # 1.19-1.19.4 (759-763): hasPlayerUUID(true) + UUID
-                    payload += b'\x01' + write_uuid(offline_uuid(username))
+                payload = build_login_start_payload(username, proto)
                 conn.send_packet(pid, payload)
 
                 try:
