@@ -122,7 +122,9 @@ def register(app):
         allowed = {"ai_api_key", "ai_base_url", "ai_model", "web_host", "web_port",
                    "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level",
                    "email_enabled", "email_smtp_host", "email_smtp_port", "email_smtp_ssl",
-                   "email_username", "email_password", "email_from", "email_to"}
+                   "email_username", "email_password", "email_from", "email_to",
+                   "health_interval", "health_probe_concurrency", "health_probe_ip_gap",
+                   "health_monitor_db_extra"}
         to_save = {k: v for k, v in data.items() if k in allowed}
         # api_key如果是打码状态（含****），不覆盖原值
         if "ai_api_key" in to_save and "****" in str(to_save["ai_api_key"]):

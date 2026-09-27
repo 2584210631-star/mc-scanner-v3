@@ -44,21 +44,22 @@ async def _probe_all(hosts, timeout=4.0, concurrency=3, ip_gap=4.5):
 
     return await asyncio.gather(*[_one(ip, port) for ip, port in hosts])
 
-def _health_monitor_loop():
-    """后台健康监控线程：定期检查收藏的服务器，状态/人数变化时记录，一轮汇总发一封邮件"""
+def _health_monitor_loop(once=False):
+    """后台健康监控线程：定期检查收藏的服务器，状态/人数变化时记录，一轮汇总发一封邮件。
+    once=True 时只跑一轮就返回（供 Web "立即检查"按钮调用）。"""
     import asyncio
     from scanner.async_probe import async_slp_probe
     db_path = config.get("db_path", "mcscanner.db")
-    # 健康监控速率配置（可调，避免被限速/拉黑）：
-    #   health_probe_concurrency: 同时探测的最大服务器数（默认3，保守温和）
-    #   health_probe_ip_gap:      同一IP两次探测的最小间隔秒数（Minecraft connection-throttle 默认4秒，留余量）
-    #   health_interval:          每轮间隔秒数（默认300）
-    probe_concurrency = max(1, min(int(config.get("health_probe_concurrency", 3)), 10))
-    probe_ip_gap = max(0.0, float(config.get("health_probe_ip_gap", 4.5)))
-    probe_interval = max(60, int(config.get("health_interval", 300)))
-    _log(f"[健康监控] 启动，速率配置: 并发≤{probe_concurrency} 同IP间隔≥{probe_ip_gap}s 轮询间隔{probe_interval}s")
-    health_monitor["interval"] = probe_interval
+    _log(f"[健康监控] {'启动单次手动检查' if once else '启动定时监控'}")
     while not health_monitor["stop_event"].is_set():
+        # 每轮重读配置，Web 面板改完下一轮即生效，无需重启
+        #   health_probe_concurrency: 同时探测的最大服务器数（默认3，保守温和）
+        #   health_probe_ip_gap:      同一IP两次探测最小间隔秒（MC connection-throttle 默认4s）
+        #   health_interval:          每轮间隔秒数（默认300，最小60）
+        probe_concurrency = max(1, min(int(config.get("health_probe_concurrency", 3)), 10))
+        probe_ip_gap = max(0.0, float(config.get("health_probe_ip_gap", 4.5)))
+        probe_interval = max(60, int(config.get("health_interval", 300)))
+        health_monitor["interval"] = probe_interval
         # 本轮收集到变化的服务器（用于汇总邮件）
         changed_servers = []  # [{ip, port, prev, curr, joined, left, player_names, new_players, left_players}]
         try:
@@ -246,6 +247,9 @@ def _health_monitor_loop():
                     _log(f"[健康监控] 汇总邮件异常: {e}\n{traceback.format_exc()}")
         except Exception as e:
             _log(f"[健康监控] 错误: {e}")
+        # 手动单次检查：跑完一轮就退出，不进入等待
+        if once:
+            return
         # 等待间隔，可被中断
         health_monitor["stop_event"].wait(health_monitor["interval"])
 
