@@ -105,6 +105,7 @@ def _health_monitor_loop(once=False):
             for k in list(health_monitor.get("last_players", {}).keys()):
                 if k not in valid_keys:
                     del health_monitor["last_players"][k]
+            _log(f"[健康监控] 本轮目标数: {len(targets)}, 并发{probe_concurrency} 同IP间隔{probe_ip_gap}s")
 
             # 温和并发探测一轮（限制并发 + 同IP节流，避免限速/拉黑；探测完再逐条处理）
             results = asyncio.run(_probe_all(targets, timeout=4.0,
@@ -210,8 +211,6 @@ def _health_monitor_loop(once=False):
                     }
                 except Exception:
                     pass
-            health_monitor["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
             # 一轮检查结束，汇总发送一封邮件（有人数变化就发）
             if changed_servers:
                 try:
@@ -247,6 +246,8 @@ def _health_monitor_loop(once=False):
                     _log(f"[健康监控] 汇总邮件异常: {e}\n{traceback.format_exc()}")
         except Exception as e:
             _log(f"[健康监控] 错误: {e}")
+        finally:
+            health_monitor["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         # 手动单次检查：跑完一轮就退出，不进入等待
         if once:
             return
