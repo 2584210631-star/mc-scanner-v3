@@ -1371,9 +1371,13 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
           <div class="value" id="healthLastCheck">-</div>
           <div class="label">最后检查</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button class="btn" id="healthToggleBtn" onclick="toggleHealthMonitor()">启动监控</button>
           <button class="btn btn-primary" id="healthRunOnceBtn" onclick="runHealthOnce()">立即检查</button>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--mute);">
+            间隔(秒)<input type="number" id="healthIntervalInput" min="60" step="10" style="width:72px;padding:4px;">
+          </label>
+          <button class="btn" onclick="saveHealthInterval()">保存</button>
         </div>
       </div>
       <div style="max-height:150px;overflow-y:auto;background:var(--canvas-soft);border-radius:8px;padding:8px;font-size:12px;font-family:var(--mono);" id="healthEvents">
@@ -4240,6 +4244,11 @@ async function loadHealthStatus() {
     document.getElementById('healthLastCheck').textContent = (d.last_check || '-').slice(11, 16);
     document.getElementById('healthToggleBtn').textContent = d.running ? '停止监控' : '启动监控';
     document.getElementById('healthToggleBtn').className = 'btn ' + (d.running ? 'btn-danger' : 'btn-primary');
+    // 回填当前轮询间隔
+    const intervalInput = document.getElementById('healthIntervalInput');
+    if (intervalInput && !intervalInput.matches(':focus')) {
+      intervalInput.value = d.interval || 300;
+    }
     const eventsEl = document.getElementById('healthEvents');
     if (d.events && d.events.length > 0) {
       eventsEl.innerHTML = d.events.map(e => {
@@ -4272,6 +4281,16 @@ async function runHealthOnce() {
     btn.disabled = false; btn.textContent = '立即检查';
     loadHealthStatus();
   }, 3000);
+}
+async function saveHealthInterval() {
+  const val = Math.max(60, parseInt(document.getElementById('healthIntervalInput').value) || 300);
+  try {
+    await fetch('/api/config/save', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({health_interval: val})
+    });
+    loadHealthStatus();
+  } catch(e) {}
 }
 // 切换到收藏页时加载健康状态
 document.addEventListener('click', e=>{
