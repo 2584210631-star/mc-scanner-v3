@@ -56,7 +56,7 @@ def _health_monitor_loop(once=False):
         #   health_probe_concurrency: 同时探测的最大服务器数（默认3，保守温和）
         #   health_probe_ip_gap:      同一IP两次探测最小间隔秒（MC connection-throttle 默认4s）
         #   health_interval:          每轮间隔秒数（默认300，最小60）
-        probe_concurrency = max(1, min(int(config.get("health_probe_concurrency", 3)), 10))
+        probe_concurrency = max(1, min(int(config.get("health_probe_concurrency", 8)), 20))
         probe_ip_gap = max(0.0, float(config.get("health_probe_ip_gap", 1.5)))
         probe_interval = max(60, int(config.get("health_interval", 300)))
         health_monitor["interval"] = probe_interval
