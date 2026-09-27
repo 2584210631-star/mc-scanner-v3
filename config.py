@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
     # 收藏服务器健康监控
     "health_interval": 300,       # 每轮探测间隔秒数（最小60）
     "health_probe_concurrency": 3,  # 同时探测数（温和模式，避免被限速）
-    "health_probe_ip_gap": 4.5,   # 同IP两次探测最小间隔秒（MC connection-throttle 默认4s）
+    "health_probe_ip_gap": 1.5,   # 同IP两次探测最小间隔秒（不同IP不受限；同IP多端口时节流）
     "health_monitor_db_extra": True,  # 是否额外监控数据库里有人气的服
 }
 
