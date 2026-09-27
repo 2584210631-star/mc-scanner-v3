@@ -14,8 +14,6 @@ except ImportError:
 def register(app):
     def _log(msg):
         state.log_scan(msg)
-    def _get_web_token():
-        return state.get_web_token()
     def _safe_db_path(path):
         return state.safe_db_path(path)
     def parse_ports_spec(ports_spec):

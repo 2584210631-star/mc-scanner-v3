@@ -25,6 +25,8 @@
 | **mdberkey/minecraft-protocol** | Minecraft 协议握手流程、加密握手思路 | `core/bot.py`, `core/conn.py` |
 | **PrismarineJS/minecraft-data** | 协议数据包 ID 数据源 | `tools/gen_packets.py`（自动下载生成，MIT 许可） |
 | **Fold Craft Launcher (FCL)** | 微软 OAuth 设备码流程的 client_id | `core/microsoft_auth.py`（仅使用公开 client_id） |
+| **Web Admin (SpigotMC 生态)** | Web 面板账号登录模式：默认凭据 + 首次登录改密 + 会话 token 存 localStorage | `web/auth.py`, `web/index.html`（重新实现，仅借鉴交互模式） |
+| **VelocityWebPanel / aethera-next** | 密码哈希存储（BCrypt/JWT 思路） | `web/auth.py`（采用标准库 PBKDF2-SHA256 加盐哈希，零依赖） |
 
 ## 直接依赖（第三方库）
 
