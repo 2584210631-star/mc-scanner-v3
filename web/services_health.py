@@ -59,7 +59,15 @@ def _health_monitor_loop():
                     from scanner.async_probe import async_slp_probe
                     r = asyncio.run(async_slp_probe(ip, port, timeout=4))
                     key = f"{ip}:{port}"
+                    # 在线时的信息写回收藏（last_good_info），离线不覆盖，保留上次在线信息
+                    if r and r.get("state") == "up":
+                        try:
+                            from storage.favorites import update_from_probe
+                            update_from_probe(ip, port, r)
+                        except Exception:
+                            pass
                     online = r.get('online', 0) if r else 0
+                    online_flag = bool(r and r.get("state") == "up")
                     prev = health_monitor["status"].get(key, {})
                     prev_online = prev.get('players', 0)
                     # 获取玩家列表
@@ -114,7 +122,7 @@ def _health_monitor_loop():
                         health_monitor["last_players"] = {}
                     health_monitor["last_players"][key] = player_names
                     health_monitor["status"][key] = {
-                        "online": bool(r), "players": online,
+                        "online": online_flag, "players": online,
                         "prev_players": prev_online,
                         "joined": len(new_players), "left": len(left_players),
                         "player_names": player_names,

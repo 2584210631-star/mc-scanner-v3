@@ -4143,6 +4143,8 @@ async function loadFavorites() {
   tbody.innerHTML = favToRender.map(f => {
     const info = f.last_info || {};
     const state = info.state || 'unknown';
+    // 上次在线信息：优先 last_good_info，兼容旧数据（last_info 在线时）回退
+    const good = (f.last_good_info && f.last_good_info.state === 'up') ? f.last_good_info : (info.state === 'up' ? info : null);
     const stateColor = state === 'up' ? 'var(--green)' : (state === 'offline' ? 'var(--red)' : 'var(--mute)');
     const ip = escapeHtml(f.ip);
     const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
@@ -4155,16 +4157,27 @@ async function loadFavorites() {
       playersHtml = `<span style="color:var(--green);">${rt.players}人</span>${deltaStr}`;
     } else if (rt && !rt.online) {
       playersHtml = '<span style="color:var(--red);">离线</span>';
+    } else if (good) {
+      // 无实时数据但保留着上次在线信息：展示上次在线时的状态
+      playersHtml = `<span style="color:var(--mute);">上次在线 ${good.online || 0}/${good.max || 0}人</span>`;
+    } else if (state === 'up') {
+      playersHtml = (info.online || 0) + '/' + (info.max || 0);
+    } else if (state === 'offline') {
+      playersHtml = '<span style="color:var(--red);">离线</span>';
     } else {
-      playersHtml = state === 'up' ? (info.online || 0) + '/' + (info.max || 0) : (state === 'offline' ? '离线' : '-');
+      playersHtml = '-';
     }
+    const disp = good || info;
+    const playerNames = (rt && rt.player_names && rt.player_names.length) ? rt.player_names.join(', ')
+      : (Array.isArray(disp.sample) ? disp.sample.map(p => (p && p.name) || '').filter(Boolean).join(', ')
+      : (disp.player_list || []).join(', '));
     return `<tr>
       <td><input type="checkbox" class="fav-server-check" data-ip="${ip}" data-port="${f.port}"></td>
       <td data-label="地址">${ip}:${f.port}</td>
-      <td data-label="版本">${escapeHtml(info.version || '-')}</td>
-      <td data-label="核心"><span class="badge badge-${escapeHtml(info.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(info.core_type || '-')}</span></td>
-      <td data-label="人数" style="color:${stateColor};" title="${escapeHtml((rt && rt.player_names ? rt.player_names.join(', ') : (info.player_list || []).join(', ')) || '无玩家')}">${playersHtml}</td>
-      <td data-label="认证"><span class="badge badge-${escapeHtml(info.auth || 'unknown')}">${escapeHtml(info.auth || '-')}</span></td>
+      <td data-label="版本">${escapeHtml(disp.version || '-')}</td>
+      <td data-label="核心"><span class="badge badge-${escapeHtml(disp.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(disp.core_type || '-')}</span></td>
+      <td data-label="人数" style="color:${stateColor};" title="${escapeHtml(playerNames || '无玩家')}">${playersHtml}</td>
+      <td data-label="认证"><span class="badge badge-${escapeHtml(disp.auth || 'unknown')}">${escapeHtml(disp.auth || '-')}</span></td>
       <td data-label="标签">${tags || '-'}</td>
       <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
       <td data-label="检查" style="font-size:11px;color:var(--mute);">${rt && rt.last_check ? rt.last_check : (f.last_check ? new Date(f.last_check).toLocaleString() : '-')}</td>
