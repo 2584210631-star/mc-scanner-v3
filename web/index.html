@@ -1226,6 +1226,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="progress-bar">
         <div class="progress-fill" id="progressFill" style="width:0%">0%</div>
       </div>
+      <h3 style="font-size:14px;margin:14px 0 8px;color:var(--body);font-weight:600;">任务队列（并发上限可在 config.max_concurrent_scans 调整）</h3>
+      <div class="log-box" id="taskList" style="min-height:60px;max-height:180px;overflow-y:auto;"></div>
       <h3 style="font-size:14px;margin:14px 0 8px;color:var(--body);font-weight:600;">实时日志</h3>
       <div class="log-box" id="logBox"></div>
     </div>
@@ -3032,9 +3034,33 @@ async function startRandomScan() {
 
 function stopScan() { fetch('/api/scan/stop', {method: 'POST'}); }
 
+async function loadTaskList() {
+  try {
+    const r = await fetch('/api/scan/tasks');
+    const d = await r.json();
+    const box = document.getElementById('taskList');
+    if (!box) return;
+    if (!d.tasks || !d.tasks.length) { box.innerHTML = '<div style="color:#8b98ab;padding:6px;font-size:12px;">暂无任务</div>'; return; }
+    const icons = {running: '🟢', queued: '⏳', done: '✅', stopped: '⏹', error: '❌'};
+    box.innerHTML = d.tasks.map(t => {
+      const icon = icons[t.status] || '⚪';
+      const right = t.status === 'running' ? `${t.scanned}/${t.total}` :
+                    t.status === 'queued' ? `排队#${t.queue_position}` : t.status;
+      const bar = t.status === 'running'
+        ? `<div class="progress-bar" style="height:4px;margin-top:3px;"><div class="progress-fill" style="width:${t.progress || 0}%;height:4px;"></div></div>`
+        : '';
+      return `<div style="padding:4px 2px;border-bottom:1px solid var(--hairline,#1f2937);font-size:12px;">
+        ${icon} 任务 #${t.task_id} <span style="color:var(--text-secondary,#8b98ab);">${t.scan_type}</span>
+        <span style="float:right;color:${t.status==='running' ? 'var(--primary,#00d992)' : 'var(--text-secondary,#8b98ab)'};">${right}</span>${bar}
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
 async function pollStatus() {
   const res = await fetch('/api/scan/status');
   const data = await res.json();
+  loadTaskList();
   if (data.error) {
     document.getElementById('headerStatus').textContent = '错误: ' + data.error;
     document.getElementById('headerStatus').style.color = '#ef4444';

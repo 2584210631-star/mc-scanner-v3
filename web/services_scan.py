@@ -38,32 +38,55 @@ def _update_current_view(task_id):
         scan_state["start_time"] = task["start_time"]
 
 
-def _run_next_queued():
-    """从队列取下一个任务执行"""
+def _start_queued_workers():
+    """从队列尽可能多地启动排队任务（不超过并发上限）。
+
+    每个 worker 结束时调用一次；锁内 pop 保证不会重复启动同一任务。
+    注意：scan_lock 是非重入锁，锁内禁止调用 _log（log_scan 内部会再次取锁），
+    因此日志统一在锁外输出。
+    """
     with scan_lock:
-        if not state.scan_queue:
+        running_count = sum(1 for t in state.scan_tasks.values() if t.get("running"))
+        started_ids = []
+        while running_count < state.max_concurrent_scans and state.scan_queue:
+            next_id = state.scan_queue.pop(0)
+            task = state.scan_tasks.get(next_id)
+            if not task:
+                continue
+            queued_targets = task.pop("_queued_targets", None)
+            queued_config = task.pop("_queued_config", None)
+            if not queued_targets or not queued_config:
+                task["status"] = "error"
+                task["running"] = False
+                continue
+            task["status"] = "running"
+            task["running"] = True
+            state.current_task_id = next_id  # 主视图指向最新启动的任务
+            running_count += 1
+            started_ids.append(next_id)
+            thread = threading.Thread(target=_scan_worker, args=(next_id, queued_targets, queued_config), daemon=True)
+            thread.start()
+        if running_count == 0:
             state.current_task_id = None
-            return None
-        next_id = state.scan_queue.pop(0)
-        state.current_task_id = next_id
-    task = _get_task_state(next_id)
-    if task:
-        task["status"] = "running"
-        task["running"] = True
-        _log(f"任务 #{next_id} 从队列启动", task_id=next_id)
-    return next_id
+            scan_state["running"] = False
+    for tid in started_ids:
+        _update_current_view(tid)
+        _log(f"任务 #{tid} 从队列启动", task_id=tid)
+    if started_ids:
+        _log(f"并发调度: 新启动 {len(started_ids)} 个任务，当前运行 {running_count} 个")
+    return len(started_ids)
 
 
 def start_scan_task(targets_list, scan_config, scan_type="manual"):
-    """启动扫描任务，如果有任务在跑则排队。返回task_id。"""
+    """启动扫描任务。并发数未达上限直接启动，超出排队。返回task_id。"""
     with scan_lock:
         state.task_counter += 1
         task_id = state.task_counter
         task = state.new_task_state(task_id, len(targets_list), scan_type)
         state.scan_tasks[task_id] = task
-        # 在锁内检查是否有任务在跑，避免竞态
-        running = any(t["running"] for t in state.scan_tasks.values())
-        if running:
+        # 在锁内统计运行中的任务数，避免竞态
+        running_count = sum(1 for t in state.scan_tasks.values() if t.get("running"))
+        if running_count >= state.max_concurrent_scans:
             task["status"] = "queued"
             task["_queued_targets"] = targets_list
             task["_queued_config"] = scan_config
@@ -80,7 +103,8 @@ def start_scan_task(targets_list, scan_config, scan_type="manual"):
         thread = threading.Thread(target=_scan_worker, args=(task_id, targets_list, scan_config), daemon=True)
         thread.start()
     else:
-        _log(f"任务 #{task_id} 已排队（前方{queue_len}个任务）", task_id=task_id)
+        _log(f"任务 #{task_id} 已排队（当前运行{running_count}个/上限{state.max_concurrent_scans}个，前方{queue_len}个任务）",
+             task_id=task_id)
     return task_id
 
 
@@ -321,23 +345,5 @@ def _scan_worker(task_id, targets_list, scan_cfg):
     finally:
         with scan_lock:
             task["running"] = False
-        # 从队列取下一个任务
-        next_id = _run_next_queued()
-        if next_id:
-            next_task = _get_task_state(next_id)
-            if next_task:
-                # 重新构造targets_list和scan_cfg（排队时存了）
-                queued_targets = next_task.pop("_queued_targets", None)
-                queued_config = next_task.pop("_queued_config", None)
-                if queued_targets and queued_config:
-                    thread = threading.Thread(target=_scan_worker, args=(next_id, queued_targets, queued_config), daemon=True)
-                    thread.start()
-                else:
-                    _log(f"任务 #{next_id} 排队数据丢失，跳过", task_id=next_id)
-                    with scan_lock:
-                        next_task["status"] = "error"
-                        next_task["running"] = False
-        else:
-            with scan_lock:
-                scan_state["running"] = False
-                state.current_task_id = None
+        # 从队列启动后续任务（可能同时启动多个，直到达到并发上限）
+        _start_queued_workers()

@@ -59,7 +59,7 @@
   "email_to": "",
   "api_rate_limit": 0,
   "db_retention_days": 30,
-  "web_token": "",
+  "max_concurrent_scans": 2,
   "capabilities": {
     "scan": true,
     "login_interact": false,
