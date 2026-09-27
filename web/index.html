@@ -2246,7 +2246,7 @@ function showAuthOverlay(mode) {
   if (mode === 'change') {
     const an = document.getElementById('authNewUsername');
     if (!an.value) {
-      _origFetch('/api/auth/status').then(r => r.json()).then(j => {
+      fetch('/api/auth/status').then(r => r.json()).then(j => {
         if (j && j.username && !an.value) an.value = j.username;
       }).catch(() => {});
     }
@@ -2293,7 +2293,7 @@ async function doChangeAccount() {
   if (newPassword.length < 6) { msg.textContent = '密码至少 6 位'; return; }
   if (newPassword !== newPassword2) { msg.textContent = '两次输入的新密码不一致'; return; }
   try {
-    const res = await _origFetch('/api/auth/change_password', {
+    const res = await fetch('/api/auth/change_password', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({old_password: oldPassword, new_username: newUsername, new_password: newPassword})
     });
@@ -2308,7 +2308,7 @@ async function doChangeAccount() {
 }
 
 async function logoutAccount() {
-  try { await _origFetch('/api/auth/logout', {method: 'POST'}); } catch(e) {}
+  try { await fetch('/api/auth/logout', {method: 'POST'}); } catch(e) {}
   setAuthToken('');
   showAuthOverlay('login');
 }
@@ -2316,7 +2316,7 @@ async function logoutAccount() {
 // 启动时检查登录状态
 (async function bootAuth() {
   try {
-    const r = await _origFetch('/api/auth/status');
+    const r = await fetch('/api/auth/status');
     if (r.status === 401) { showAuthOverlay('login'); return; }
     const j = await r.json();
     if (j.must_change) { showAuthOverlay('change'); }
