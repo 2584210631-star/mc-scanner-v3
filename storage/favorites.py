@@ -12,7 +12,8 @@ from typing import Optional
 
 from core.probe import slp_probe, auth_probe
 
-_LOCK = threading.Lock()
+# 可重入锁：读-改-写整段加锁，避免健康监控线程与 Web 操作并发丢更新
+_LOCK = threading.RLock()
 _DEFAULT_PATH = "favorites.json"
 
 
@@ -38,12 +39,14 @@ def load_favorites(path: str = None) -> list:
 
 
 def save_favorites(favorites: list, path: str = None):
-    """保存收藏列表到 JSON 文件。"""
+    """保存收藏列表到 JSON 文件（原子写：先写临时文件再替换，读取方不会读到半截文件）。"""
     path = path or _default_path()
     with _LOCK:
         try:
-            with open(path, 'w', encoding='utf-8') as f:
+            tmp = path + ".tmp"
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(favorites, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
         except OSError as e:
             print(f"[!] 收藏保存失败: {e}")
 
@@ -58,63 +61,67 @@ def _find(favorites: list, ip: str, port: int) -> int:
 def add_favorite(ip: str, port: int, tags: list = None, note: str = "",
                  info: dict = None, path: str = None) -> dict:
     """添加收藏。已存在则更新标签和备注。"""
-    favorites = load_favorites(path)
-    idx = _find(favorites, ip, port)
-    now = datetime.now().isoformat()
-    if idx >= 0:
-        fav = favorites[idx]
-        if tags is not None:
-            fav["tags"] = tags
-        if note:
-            fav["note"] = note
-        if info:
-            fav["last_info"] = info
-            fav["last_check"] = now
-    else:
-        fav = {
-            "ip": ip,
-            "port": port,
-            "tags": tags or [],
-            "note": note,
-            "added_at": now,
-            "last_check": now if info else None,
-            "last_info": info or None,
-        }
-        favorites.append(fav)
-    save_favorites(favorites, path)
+    with _LOCK:
+        favorites = load_favorites(path)
+        idx = _find(favorites, ip, port)
+        now = datetime.now().isoformat()
+        if idx >= 0:
+            fav = favorites[idx]
+            if tags is not None:
+                fav["tags"] = tags
+            if note:
+                fav["note"] = note
+            if info:
+                fav["last_info"] = info
+                fav["last_check"] = now
+        else:
+            fav = {
+                "ip": ip,
+                "port": port,
+                "tags": tags or [],
+                "note": note,
+                "added_at": now,
+                "last_check": now if info else None,
+                "last_info": info or None,
+            }
+            favorites.append(fav)
+        save_favorites(favorites, path)
     return fav
 
 
 def remove_favorite(ip: str, port: int, path: str = None) -> bool:
     """移除收藏。返回是否成功移除。"""
-    favorites = load_favorites(path)
-    idx = _find(favorites, ip, port)
-    if idx < 0:
-        return False
-    favorites.pop(idx)
-    save_favorites(favorites, path)
+    with _LOCK:
+        favorites = load_favorites(path)
+        idx = _find(favorites, ip, port)
+        if idx < 0:
+            return False
+        favorites.pop(idx)
+        save_favorites(favorites, path)
     return True
 
 
 def update_tags(ip: str, port: int, tags: list, path: str = None) -> Optional[dict]:
     """更新收藏的标签。"""
-    favorites = load_favorites(path)
-    idx = _find(favorites, ip, port)
-    if idx < 0:
-        return None
-    favorites[idx]["tags"] = tags
-    save_favorites(favorites, path)
+    with _LOCK:
+        favorites = load_favorites(path)
+        idx = _find(favorites, ip, port)
+        if idx < 0:
+            return None
+        favorites[idx]["tags"] = tags
+        save_favorites(favorites, path)
     return favorites[idx]
 
 
 def update_note(ip: str, port: int, note: str, path: str = None) -> Optional[dict]:
     """更新收藏的备注。"""
-    favorites = load_favorites(path)
-    idx = _find(favorites, ip, port)
-    if idx < 0:
-        return None
-    favorites[idx]["note"] = note
-    save_favorites(favorites, path)
+    with _LOCK:
+        favorites = load_favorites(path)
+        idx = _find(favorites, ip, port)
+        if idx < 0:
+            return None
+        favorites[idx]["note"] = note
+        save_favorites(favorites, path)
     return favorites[idx]
 
 
@@ -123,33 +130,45 @@ def is_favorite(ip: str, port: int, path: str = None) -> bool:
     return _find(load_favorites(path), ip, port) >= 0
 
 
-def update_from_probe(ip: str, port: int, info: dict, path: str = None) -> Optional[dict]:
+def update_from_probe(ip: str, port: int, info: dict, path: str = None,
+                      force: bool = False) -> Optional[dict]:
     """用一次探测结果更新收藏。
 
     在线：刷新 last_info 和 last_good_info（保留最近一次在线时的完整信息）。
     离线：只记录离线状态，不覆盖 last_good_info（上次在线信息）。
+    内容无变化时不写盘（避免监控每轮重写文件）；force=True 时强制更新 last_check 并写盘。
     """
     if not info:
         return None
-    favorites = load_favorites(path)
-    idx = _find(favorites, ip, port)
-    if idx < 0:
-        return None
-    fav = favorites[idx]
-    now = datetime.now().isoformat()
-    fav["last_check"] = now
-    if info.get("state") == "up":
-        clean = {k: v for k, v in info.items() if k != "_raw"}
-        fav["last_info"] = clean
-        fav["last_good_info"] = clean
-        fav.pop("last_offline_at", None)
-    else:
-        # 离线：不覆盖上次在线信息
-        if (fav.get("last_info") or {}).get("state") == "up":
-            fav["last_good_info"] = fav["last_info"]
-        fav["last_info"] = {"state": "offline", "error": info.get("error", "")}
-        fav["last_offline_at"] = now
-    save_favorites(favorites, path)
+    with _LOCK:
+        favorites = load_favorites(path)
+        idx = _find(favorites, ip, port)
+        if idx < 0:
+            return None
+        fav = favorites[idx]
+        now = datetime.now().isoformat()
+        changed = False
+        if info.get("state") == "up":
+            clean = {k: v for k, v in info.items() if k != "_raw"}
+            if fav.get("last_info") != clean:
+                fav["last_info"] = clean
+                changed = True
+            if fav.get("last_good_info") != clean:
+                fav["last_good_info"] = clean
+                changed = True
+        else:
+            # 离线：不覆盖上次在线信息
+            if (fav.get("last_info") or {}).get("state") == "up":
+                if fav.get("last_good_info") != fav["last_info"]:
+                    fav["last_good_info"] = fav["last_info"]
+                    changed = True
+            offline = {"state": "offline", "error": info.get("error", "")}
+            if fav.get("last_info") != offline:
+                fav["last_info"] = offline
+                changed = True
+        if changed or force:
+            fav["last_check"] = now
+            save_favorites(favorites, path)
     return fav
 
 
@@ -168,7 +187,7 @@ def rescan_one(ip: str, port: int, timeout: float = 5.0, path: str = None) -> Op
                 info["auth_detail"] = auth.get("detail", "")
         except Exception:
             pass
-    update_from_probe(ip, port, info, path=path)
+    update_from_probe(ip, port, info, path=path, force=True)
     return info
 
 
@@ -176,58 +195,57 @@ def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
                progress_callback=None) -> list:
     """重新探测所有收藏服务器。离线时保留上次在线信息。返回更新后的收藏列表。"""
     import concurrent.futures
-    favorites = load_favorites(path)
-    if not favorites:
-        return []
-    results = {}
-    def _probe_with_auth(ip, port):
-        info = slp_probe(ip, port, timeout=timeout)
-        if info and info.get("state") == "up":
-            try:
-                auth = auth_probe(ip, port, info.get("proto", 0), timeout=timeout)
-                if auth:
-                    info["auth"] = auth.get("state", "unknown")
-                    info["auth_detail"] = auth.get("detail", "")
-            except Exception:
-                pass
-        return info
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {}
+    with _LOCK:
+        favorites = load_favorites(path)
+        if not favorites:
+            return []
+        results = {}
+        def _probe_with_auth(ip, port):
+            info = slp_probe(ip, port, timeout=timeout)
+            if info and info.get("state") == "up":
+                try:
+                    auth = auth_probe(ip, port, info.get("proto", 0), timeout=timeout)
+                    if auth:
+                        info["auth"] = auth.get("state", "unknown")
+                        info["auth_detail"] = auth.get("detail", "")
+                except Exception:
+                    pass
+            return info
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {}
+            for fav in favorites:
+                fut = ex.submit(_probe_with_auth, fav["ip"], fav["port"])
+                futures[fut] = (fav["ip"], fav["port"])
+            done = 0
+            for fut in concurrent.futures.as_completed(futures):
+                ip, port = futures[fut]
+                try:
+                    info = fut.result()
+                    if info and info.get("state") == "up":
+                        results[(ip, port)] = {k: v for k, v in info.items() if k != "_raw"}
+                    else:
+                        results[(ip, port)] = {"state": "offline",
+                                               "error": info.get("error", "") if info else "unreachable"}
+                except Exception:
+                    results[(ip, port)] = {"state": "offline", "error": "probe error"}
+                done += 1
+                if progress_callback:
+                    progress_callback(done, len(favorites))
+        now = datetime.now().isoformat()
         for fav in favorites:
-            fut = ex.submit(_probe_with_auth, fav["ip"], fav["port"])
-            futures[fut] = (fav["ip"], fav["port"])
-        done = 0
-        for fut in concurrent.futures.as_completed(futures):
-            ip, port = futures[fut]
-            try:
-                info = fut.result()
-                if info and info.get("state") == "up":
-                    results[(ip, port)] = {k: v for k, v in info.items() if k != "_raw"}
+            key = (fav["ip"], fav["port"])
+            if key in results:
+                fav["last_check"] = now
+                res = results[key]
+                if res.get("state") == "up":
+                    fav["last_info"] = res
+                    fav["last_good_info"] = res
                 else:
-                    results[(ip, port)] = {"state": "offline",
-                                           "error": info.get("error", "") if info else "unreachable"}
-            except Exception:
-                results[(ip, port)] = {"state": "offline", "error": "probe error"}
-            done += 1
-            if progress_callback:
-                progress_callback(done, len(favorites))
-    now = datetime.now().isoformat()
-    for fav in favorites:
-        key = (fav["ip"], fav["port"])
-        if key in results:
-            fav["last_check"] = now
-            res = results[key]
-            if res.get("state") == "up":
-                fav["last_info"] = res
-                fav["last_good_info"] = res
-                fav.pop("last_offline_at", None)
-            else:
-                # 离线：不覆盖上次在线信息
-                if (fav.get("last_info") or {}).get("state") == "up":
-                    fav["last_good_info"] = fav["last_info"]
-                fav["last_info"] = res
-                fav["last_offline_at"] = now
-    save_favorites(favorites, path)
+                    # 离线：不覆盖上次在线信息
+                    if (fav.get("last_info") or {}).get("state") == "up":
+                        fav["last_good_info"] = fav["last_info"]
+                    fav["last_info"] = res
+        save_favorites(favorites, path)
     return favorites
 
 

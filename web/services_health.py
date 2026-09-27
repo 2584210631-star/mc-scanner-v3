@@ -15,10 +15,13 @@ def _log(msg):
     state.log_scan(msg)
 
 def _health_monitor_loop():
-    """后台健康监控线程：定期检查收藏的服务器，人数变化时记录，一轮汇总发一封邮件"""
+    """后台健康监控线程：定期检查收藏的服务器，状态/人数变化时记录，一轮汇总发一封邮件"""
+    import asyncio
+    from scanner.async_probe import async_slp_probe
     _log("[健康监控] 启动，间隔5分钟")
+    db_path = config.get("db_path", "mcscanner.db")
     while not health_monitor["stop_event"].is_set():
-        # 本轮收集到的人数变化服务器（用于汇总邮件）
+        # 本轮收集到变化的服务器（用于汇总邮件）
         changed_servers = []  # [{ip, port, prev, curr, joined, left, player_names, new_players, left_players}]
         try:
             # 从收藏列表获取服务器
@@ -28,8 +31,8 @@ def _health_monitor_loop():
                 favs = filter_favorites()
                 targets = [(f['ip'], f['port']) for f in favs]
             except Exception:
-                # 兜底：直接读文件
-                fav_file = 'favorites.json'
+                # 兜底：直接读收藏文件（与 favorites 模块默认路径一致）
+                fav_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'favorites.json')
                 if os.path.exists(fav_file):
                     try:
                         with open(fav_file, 'r', encoding='utf-8') as f:
@@ -42,7 +45,7 @@ def _health_monitor_loop():
                         pass
             # 也从数据库取有人过的服务器
             try:
-                conn = sqlite3.connect('mcscanner.db')
+                conn = sqlite3.connect(db_path)
                 rows = conn.execute("SELECT ip, port FROM servers WHERE players_online > 0 LIMIT 20").fetchall()
                 conn.close()
                 for ip, port in rows:
@@ -51,14 +54,30 @@ def _health_monitor_loop():
             except Exception:
                 pass
 
-            for ip, port in targets:
-                if health_monitor["stop_event"].is_set():
-                    break
+            # 清理已不在监控列表中的残留状态（收藏删除后不留脏数据）
+            valid_keys = {f"{ip}:{port}" for ip, port in targets}
+            for k in list(health_monitor["status"].keys()):
+                if k not in valid_keys:
+                    del health_monitor["status"][k]
+            for k in list(health_monitor.get("last_players", {}).keys()):
+                if k not in valid_keys:
+                    del health_monitor["last_players"][k]
+
+            # 并发探测一轮（限制并发，避免瞬间大量请求；探测完再逐条处理）
+            async def _probe_all(hosts, timeout=4.0):
+                sem = asyncio.Semaphore(20)
+                async def _one(ip, port):
+                    async with sem:
+                        try:
+                            return (ip, port, await async_slp_probe(ip, port, timeout=timeout))
+                        except Exception:
+                            return (ip, port, None)
+                return await asyncio.gather(*[_one(ip, port) for ip, port in hosts])
+
+            results = asyncio.run(_probe_all(targets)) if targets else []
+            for ip, port, r in results:
+                key = f"{ip}:{port}"
                 try:
-                    import asyncio
-                    from scanner.async_probe import async_slp_probe
-                    r = asyncio.run(async_slp_probe(ip, port, timeout=4))
-                    key = f"{ip}:{port}"
                     # 在线时的信息写回收藏（last_good_info），离线不覆盖，保留上次在线信息
                     if r and r.get("state") == "up":
                         try:
@@ -70,6 +89,7 @@ def _health_monitor_loop():
                     online_flag = bool(r and r.get("state") == "up")
                     prev = health_monitor["status"].get(key, {})
                     prev_online = prev.get('players', 0)
+                    prev_flag = prev.get('online', False)
                     # 获取玩家列表
                     player_names = []
                     if r:
@@ -79,7 +99,7 @@ def _health_monitor_loop():
                     # 记录人数趋势
                     if r and online > 0:
                         try:
-                            conn = sqlite3.connect('mcscanner.db')
+                            conn = sqlite3.connect(db_path)
                             conn.execute(
                                 'INSERT INTO server_popularity (ip, port, players_online, players_max, recorded_at) VALUES (?,?,?,?,?)',
                                 (ip, port, online, r.get('max', 0), datetime.now(timezone.utc).isoformat())
@@ -93,8 +113,8 @@ def _health_monitor_loop():
                     curr_players = set(player_names)
                     new_players = list(curr_players - prev_players)
                     left_players = list(prev_players - curr_players)
-                    # 检测变化（只要人数变了就记录，不只是0→有人）
-                    if online != prev_online:
+                    # 状态跳变（在线↔离线）优先于人数变化记录，避免用人数误判
+                    if online_flag != prev_flag:
                         event = {
                             "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                             "ip": ip, "port": port,
@@ -103,11 +123,33 @@ def _health_monitor_loop():
                             "left": len(left_players),
                             "new_players": new_players,
                             "left_players": left_players,
-                            "type": "up" if online > prev_online else "down"
+                            "type": "up" if online_flag else "down"
                         }
                         health_monitor["events"].insert(0, event)
                         health_monitor["events"] = health_monitor["events"][:100]
-                        # 收集人数变化的服务器，一轮结束汇总发邮件
+                        changed_servers.append({
+                            "ip": ip, "port": port,
+                            "prev": prev_online, "curr": online,
+                            "joined": len(new_players), "left": len(left_players),
+                            "player_names": player_names,
+                            "new_players": new_players,
+                            "left_players": left_players,
+                        })
+                        _log(f"[健康监控] {ip}:{port} 状态变化: {'在线' if online_flag else '离线'} ({prev_online}→{online}人)")
+                    elif online != prev_online:
+                        # 保持在线，仅人数变化
+                        event = {
+                            "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            "ip": ip, "port": port,
+                            "from": prev_online, "to": online,
+                            "joined": len(new_players),
+                            "left": len(left_players),
+                            "new_players": new_players,
+                            "left_players": left_players,
+                            "type": "change"
+                        }
+                        health_monitor["events"].insert(0, event)
+                        health_monitor["events"] = health_monitor["events"][:100]
                         changed_servers.append({
                             "ip": ip, "port": port,
                             "prev": prev_online, "curr": online,
@@ -130,7 +172,6 @@ def _health_monitor_loop():
                     }
                 except Exception:
                     pass
-                time.sleep(0.5)
             health_monitor["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             # 一轮检查结束，汇总发送一封邮件（有人数变化就发）
