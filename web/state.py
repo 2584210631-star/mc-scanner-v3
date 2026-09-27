@@ -107,13 +107,22 @@ def capability_enabled(cap: str) -> bool:
 
 
 def safe_db_path(path: str) -> str:
-    if not path:
+    """只允许纯文件名（.db 结尾），拒绝任何路径分隔符、上级目录、盘符和URL编码绕过。"""
+    if not path or not isinstance(path, str):
         return "mcscanner.db"
-    if ".." in path or path.startswith("/") or (len(path) >= 2 and path[1] == ":"):
+    # 归一化反斜杠，封堵 Windows 路径绕过（..\..\x.db）
+    name = path.replace("\\", "/")
+    low = name.lower()
+    # 拒绝：绝对路径、任何层级分隔、上级目录、盘符、URL编码分隔符
+    if name.startswith("/") or "/" in name or name in (".", ".."):
         return "mcscanner.db"
-    if not path.endswith(".db"):
+    if ".." in name or (len(name) >= 2 and name[1] == ":"):
         return "mcscanner.db"
-    return path
+    if "%2f" in low or "%5c" in low or "://" in low:
+        return "mcscanner.db"
+    if not name.endswith(".db"):
+        return "mcscanner.db"
+    return name
 
 
 def parse_ports_spec(ports_spec, max_ports=2000):

@@ -4040,8 +4040,8 @@ async function loadHealthStatus() {
     const eventsEl = document.getElementById('healthEvents');
     if (d.events && d.events.length > 0) {
       eventsEl.innerHTML = d.events.map(e => {
-        const arrow = e.type === 'up' ? '↑' : '↓';
-        const color = e.type === 'up' ? 'var(--green)' : 'var(--red)';
+        const arrow = e.type === 'up' ? '↑' : (e.type === 'down' ? '↓' : '↔');
+        const color = e.type === 'up' ? 'var(--green)' : (e.type === 'down' ? 'var(--red)' : 'var(--mute)');
         return `<div style="padding:3px 0;border-bottom:1px solid var(--hairline-soft);">
           <span style="color:var(--mute)">${e.time.slice(11,16)}</span>
           <span style="color:${color}">${arrow}</span>

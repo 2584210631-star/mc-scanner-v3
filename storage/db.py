@@ -171,12 +171,16 @@ def _record_to_tuple(rec: dict) -> tuple:
     fp = rec.get("fingerprint")
     if fp is not None and not isinstance(fp, str):
         fp = json.dumps(fp, ensure_ascii=False)[:2000]
+    # favicon 是 base64 图片，可能几十KB，限长入库防止数据库膨胀
+    favicon = rec.get('favicon')
+    if favicon is not None and isinstance(favicon, str) and len(favicon) > 20480:
+        favicon = favicon[:20480]
     return (
         rec.get('ip'), rec.get('port'),
         rec.get('version'), rec.get('proto'),
         rec.get('motd'), rec.get('is_modded', 0),
         rec.get('players_online', 0), rec.get('players_max', 0),
-        rec.get('favicon'), rec.get('auth', 'unknown'),
+        favicon, rec.get('auth', 'unknown'),
         rec.get('ping_ms'), rec.get('json'),
         datetime.now(timezone.utc).isoformat(),
         rec.get('core_type', 'unknown'),

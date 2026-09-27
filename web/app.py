@@ -80,23 +80,24 @@ def _rate_limit():
 
 @app.before_request
 def _check_auth():
-    """API鉴权：静态资源放行，API需要X-API-Token"""
+    """API鉴权：静态资源放行，API需要X-API-Token。鉴权判断异常时拒绝访问（fail-closed）。"""
+    path = request.path
+    # 静态资源和页面放行
+    if path in ("/", "/index.html") or path.startswith("/static/") or \
+       path in ("/manifest.json", "/sw.js") or path.startswith("/ui-"):
+        return None
+    if not path.startswith("/api/"):
+        return None
     try:
-        path = request.path
-        # 静态资源和页面放行
-        if path in ("/", "/index.html") or path.startswith("/static/") or \
-           path in ("/manifest.json", "/sw.js") or path.startswith("/ui-"):
-            return None
-        if not path.startswith("/api/"):
-            return None
         token = config.get("web_token", "")
-        if not token:
-            return None  # 未配置token则不鉴权（本地127.0.0.1使用）
-        client_token = request.headers.get("X-API-Token", "")
-        if client_token != token:
-            return jsonify({"error": "未授权访问，请配置正确的API Token"}), 401
     except Exception:
-        pass
+        # 鉴权系统异常时拒绝访问，而不是放行
+        return jsonify({"error": "鉴权系统异常，拒绝访问"}), 500
+    if not token:
+        return None  # 未配置token则不鉴权（本地127.0.0.1使用）
+    client_token = request.headers.get("X-API-Token", "")
+    if client_token != token:
+        return jsonify({"error": "未授权访问，请配置正确的API Token"}), 401
     return None
 
 
