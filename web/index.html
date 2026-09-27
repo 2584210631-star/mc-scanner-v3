@@ -1371,8 +1371,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
           <div class="value" id="healthLastCheck">-</div>
           <div class="label">最后检查</div>
         </div>
-        <div style="display:flex;align-items:center;">
+        <div style="display:flex;align-items:center;gap:8px;">
           <button class="btn" id="healthToggleBtn" onclick="toggleHealthMonitor()">启动监控</button>
+          <button class="btn btn-primary" id="healthRunOnceBtn" onclick="runHealthOnce()">立即检查</button>
         </div>
       </div>
       <div style="max-height:150px;overflow-y:auto;background:var(--canvas-soft);border-radius:8px;padding:8px;font-size:12px;font-family:var(--mono);" id="healthEvents">
@@ -1815,6 +1816,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group"><label>当前账号</label><input type="text" id="setAccountName" readonly value="-"></div>
       <div class="form-group"><label>消息间隔(秒)</label><input type="number" id="setMsgDelay" step="0.1" min="0.1"></div>
       <div class="form-group"><label>机器人超时(秒)</label><input type="number" id="setBotTimeout" min="1"></div>
+      <div class="form-group"><label>监控间隔(秒)</label><input type="number" id="setHealthInterval" min="60" step="10" title="收藏服务器每轮探测间隔，最小60秒"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-primary" onclick="savePanelConfig()">保存面板配置</button>
@@ -3829,6 +3831,7 @@ async function loadSettings() {
     document.getElementById('setAiCooldown').value = cfg.ai_reply_cooldown ?? 2;
     document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
     document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
+    document.getElementById('setHealthInterval').value = cfg.health_interval ?? 300;
     // 当前账号（登录会话）
     try {
       const ar = await fetch('/api/auth/status');
@@ -3882,11 +3885,12 @@ async function savePanelConfig() {
       body: JSON.stringify({
         message_delay: parseFloat(document.getElementById('setMsgDelay').value),
         bot_timeout: parseInt(document.getElementById('setBotTimeout').value),
+        health_interval: Math.max(60, parseInt(document.getElementById('setHealthInterval').value) || 300),
       })
     });
     const data = await res.json();
     if (data.success) {
-      status.textContent = '✓ 已保存（重启面板生效）';
+      status.textContent = '✓ 已保存（监控间隔下一轮生效）';
       status.style.color = '#48bb78';
     } else {
       status.textContent = '保存失败';
@@ -4256,6 +4260,18 @@ async function loadHealthStatus() {
 async function toggleHealthMonitor() {
   await fetch('/api/health/toggle', {method:'POST'});
   loadHealthStatus();
+}
+async function runHealthOnce() {
+  const btn = document.getElementById('healthRunOnceBtn');
+  btn.disabled = true; btn.textContent = '检查中...';
+  try {
+    await fetch('/api/health/run_once', {method:'POST'});
+  } catch(e) {}
+  // 探测需要几秒（温和并发），3秒后刷新状态
+  setTimeout(() => {
+    btn.disabled = false; btn.textContent = '立即检查';
+    loadHealthStatus();
+  }, 3000);
 }
 // 切换到收藏页时加载健康状态
 document.addEventListener('click', e=>{
