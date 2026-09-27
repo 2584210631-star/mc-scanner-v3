@@ -4209,7 +4209,17 @@ async function loadHealthStatus() {
     const d = await res.json();
     document.getElementById('healthMonitored').textContent = d.monitored || 0;
     document.getElementById('healthOnline').textContent = d.online_servers || 0;
-    document.getElementById('healthLastCheck').textContent = (d.last_check || '-').slice(11, 16);
+    // 最后检查：相对时间显示
+    const lcEl = document.getElementById('healthLastCheck');
+    if (d.last_check) {
+      const diff = Math.round((new Date().getTime() - new Date(d.last_check.replace(' ', 'T'))) / 1000);
+      if (diff < 5) lcEl.textContent = '刚刚';
+      else if (diff < 60) lcEl.textContent = diff + '秒前';
+      else if (diff < 3600) lcEl.textContent = Math.floor(diff/60) + '分前';
+      else lcEl.textContent = d.last_check.slice(5, 16);
+    } else {
+      lcEl.textContent = '-';
+    }
     document.getElementById('healthToggleBtn').textContent = d.running ? '停止监控' : '启动监控';
     document.getElementById('healthToggleBtn').className = 'btn ' + (d.running ? 'btn-danger' : 'btn-primary');
     // 回填当前轮询间隔
@@ -4222,8 +4232,11 @@ async function loadHealthStatus() {
       eventsEl.innerHTML = d.events.map(e => {
         const arrow = e.type === 'up' ? '↑' : (e.type === 'down' ? '↓' : '↔');
         const color = e.type === 'up' ? 'var(--green)' : (e.type === 'down' ? 'var(--red)' : 'var(--mute)');
+        const today = new Date().toDateString();
+        const evDate = new Date(e.time.replace(' ', 'T')).toDateString();
+        const timeStr = evDate === today ? e.time.slice(11,16) : e.time.slice(5,16);
         return `<div style="padding:3px 0;border-bottom:1px solid var(--hairline-soft);">
-          <span style="color:var(--mute)">${e.time.slice(11,16)}</span>
+          <span style="color:var(--mute)">${timeStr}</span>
           <span style="color:${color}">${arrow}</span>
           <span>${e.ip}:${e.port}</span>
           <span style="color:var(--mute)">${e.from}→${e.to}人</span>
@@ -4422,6 +4435,7 @@ async function batchDeleteFavorites() {
     body: JSON.stringify({items: selected})
   });
   const data = await res.json();
+  alert(`已删除 ${data.removed || 0} 个收藏`);
   loadFavorites();
 }
 function openFavBatchWarnModal() {
