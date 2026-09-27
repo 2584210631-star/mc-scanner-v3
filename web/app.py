@@ -80,31 +80,7 @@ def _rate_limit():
 
 @app.before_request
 def _check_auth():
-    """API鉴权：静态资源放行；API 需要登录会话（X-API-Token 携带会话token）。
-    首次登录未改密时，除改密/退出/状态接口外一律拒绝（强制先改密）。
-    鉴权判断异常时拒绝访问（fail-closed）。"""
-    path = request.path
-    # 静态资源和页面放行
-    if path in ("/", "/index.html") or path.startswith("/static/") or \
-       path in ("/manifest.json", "/sw.js") or path.startswith("/ui-"):
-        return None
-    if not path.startswith("/api/"):
-        return None
-    # 登录接口本身无需鉴权
-    if path == "/api/auth/login":
-        return None
-    try:
-        from web import auth as web_auth
-    except Exception:
-        return jsonify({"error": "鉴权系统异常，拒绝访问"}), 500
-    token = request.headers.get("X-API-Token", "")
-    username = web_auth.verify_session(token)
-    if not username:
-        return jsonify({"error": "未登录或会话已过期", "code": "not_logged_in"}), 401
-    # 首次登录必须改密：未改密时只放行改密/退出/状态接口
-    if web_auth.load_account().get("must_change") and path not in (
-            "/api/auth/change_password", "/api/auth/logout", "/api/auth/status"):
-        return jsonify({"error": "首次登录必须先修改用户名和密码", "code": "must_change"}), 403
+    """鉴权已移除：本工具绑 127.0.0.1 本地使用，不再要求登录。"""
     return None
 
 

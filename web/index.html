@@ -2226,22 +2226,7 @@ function setAuthToken(t) {
 
 window.fetch = function(url, opts) {
   opts = opts || {};
-  const isApi = typeof url === 'string' && url.startsWith('/api/');
-  try {
-    const token = getAuthToken();
-    if (token && isApi) {
-      opts.headers = Object.assign({}, opts.headers || {}, {'X-API-Token': token});
-    }
-  } catch(e) {}
-  return _origFetch(url, opts).then(r => {
-    if (isApi && r.status === 401 && !url.includes('/api/auth/login')) {
-      setAuthToken('');
-      showAuthOverlay('login');
-    } else if (isApi && r.status === 403) {
-      r.clone().json().then(j => { if (j && j.code === 'must_change') showAuthOverlay('change'); }).catch(() => {});
-    }
-    return r;
-  });
+  return _origFetch(url, opts);
 };
 
 function showAuthOverlay(mode) {
@@ -2322,16 +2307,9 @@ async function logoutAccount() {
   showAuthOverlay('login');
 }
 
-// 启动时检查登录状态
+// 鉴权已移除：本地工具，不再检查登录状态
 (async function bootAuth() {
-  try {
-    const r = await fetch('/api/auth/status');
-    if (r.status === 401) { showAuthOverlay('login'); return; }
-    const j = await r.json();
-    if (j.must_change) { showAuthOverlay('change'); }
-  } catch(e) {
-    showAuthOverlay('login');
-  }
+  hideAuthOverlay();
 })();
 
 // ===== 安全/能力状态：常显徽章 + 未授权禁用按钮 =====
