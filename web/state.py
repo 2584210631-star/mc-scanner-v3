@@ -70,6 +70,7 @@ observer_lock = threading.Lock()
 
 health_monitor = {
     "running": False,
+    "once_running": False,
     "thread": None,
     "stop_event": threading.Event(),
     "interval": max(60, int(config.get("health_interval", 300))),
