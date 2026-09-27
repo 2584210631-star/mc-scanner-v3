@@ -33,7 +33,9 @@ try:
     import simdjson
     _HAS_SIMDJSON = True
     _parser = simdjson.Parser()
-except ImportError:
+except Exception:
+    # simdjson 扩展未编译（libs/simdjson 缺底层 .so 时抛 RuntimeError 而非 ImportError）时回退标准库，
+    # 避免健康监控线程等在无 simdjson 环境下整轮崩溃导致"监控扫不上"
     _HAS_SIMDJSON = False
 
 
