@@ -1818,15 +1818,12 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div class="panel">
     <h2>面板配置</h2>
     <div class="form-row">
-      <div class="form-group"><label>当前账号</label><input type="text" id="setAccountName" readonly value="-"></div>
       <div class="form-group"><label>消息间隔(秒)</label><input type="number" id="setMsgDelay" step="0.1" min="0.1"></div>
       <div class="form-group"><label>机器人超时(秒)</label><input type="number" id="setBotTimeout" min="1"></div>
       <div class="form-group"><label>监控间隔(秒)</label><input type="number" id="setHealthInterval" min="60" step="10" title="收藏服务器每轮探测间隔，最小60秒"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-primary" onclick="savePanelConfig()">保存面板配置</button>
-      <button class="btn" onclick="showAuthOverlay('change')">修改账号/密码</button>
-      <button class="btn btn-danger" onclick="logoutAccount()">退出登录</button>
       <span id="setPanelStatus" style="font-size:13px;"></span>
     </div>
   </div>
@@ -3815,14 +3812,6 @@ async function loadSettings() {
     document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
     document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
     document.getElementById('setHealthInterval').value = cfg.health_interval ?? 300;
-    // 当前账号（登录会话）
-    try {
-      const ar = await fetch('/api/auth/status');
-      if (ar.ok) {
-        const aj = await ar.json();
-        document.getElementById('setAccountName').value = aj.username || '-';
-      }
-    } catch(e) {}
     // 邮件配置
     document.getElementById('setEmailEnabled').checked = !!cfg.email_enabled;
     document.getElementById('setEmailSmtpHost').value = cfg.email_smtp_host || '';
