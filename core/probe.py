@@ -161,14 +161,15 @@ def probe_with_fallback(host: str, port: int, timeout: float = 5.0) -> dict | No
 
 
 def build_login_start_payload(username: str, proto: int) -> bytes:
-    """构造 Login Start 包体。
+    """构造 Login Start 包体。按项目已有协议处理器分档：
     - 764+ (1.20.2+): username + UUID（无 hasPlayerUUID 标志位）
-    - <=763 (1.19-1.20.1): username + hasPlayerUUID(true) + UUID
+    - 760-763 (1.19.1-1.20.1): username + hasPlayerUUID(true) + UUID
+    - <=759 (1.12.2-1.19): 只发 username
     """
     payload = write_string(username)
     if proto >= 764:
         payload += write_uuid(offline_uuid(username))
-    else:
+    elif proto >= 760:
         payload += b'\x01' + write_uuid(offline_uuid(username))
     return payload
 
