@@ -70,3 +70,9 @@ def register(app):
         threading.Thread(target=_run, daemon=True).start()
         return jsonify({"success": True})
 
+    @app.route("/api/shutdown", methods=["POST"])
+    def shutdown():
+        import os, sys
+        threading.Timer(0.5, lambda: os._exit(0)).start()
+        return jsonify({"success": True, "msg": "正在关闭..."})
+
