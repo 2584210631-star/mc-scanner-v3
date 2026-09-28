@@ -99,20 +99,10 @@ class AIBotSession:
             _log.warning(f"[AI Bot {self.username}] 拦截疑似命令的AI回复，未发送: {line[:40]}")
             return False
         self.bot.send_chat(line)
-        # 记录自己发过的消息，防止服务器广播回来后机器人把自己当别人又回复
-        if not hasattr(self, '_sent_messages'):
-            self._sent_messages = deque(maxlen=20)
-        self._sent_messages.append((time.time(), line))
         return True
 
     def _on_chat(self, text, sender="未知"):
         try:
-            # 过滤自己刚发的消息（服务器广播回来时sender可能解析不对）
-            if hasattr(self, '_sent_messages'):
-                now = time.time()
-                for t, msg in self._sent_messages:
-                    if now - t < 10 and text.strip() == msg.strip():
-                        return
             with self.lock:
                 self.chat_log.append((self._next_seq(), self._ts(), sender, text))
             # 更新中期记忆和长期记忆
