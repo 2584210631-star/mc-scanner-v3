@@ -958,12 +958,19 @@ class MCBot:
         except Exception:
             pass
         text = self._extract_chat_text(data, is_system)
-        # 如果解析出的sender是"未知玩家"，检查是否是自己发的（UUID比对）
-        if not is_system and sender in ("未知玩家", ""):
+        # 不管sender解析成什么，都检查UUID是否是自己
+        if not is_system and self.uuid:
             try:
                 import uuid as _uuid
-                if len(data) >= 16:
-                    my_uuid = _uuid.UUID(bytes=data[:16])
+                from .buffer import BytesStream
+                stream = BytesStream(data)
+                # v775+聊天包开头有varint Global Index，先跳过
+                if self.protocol_version >= 775:
+                    from .buffer import read_varint_from_stream
+                    read_varint_from_stream(stream)
+                uuid_bytes = stream.read(16)
+                if len(uuid_bytes) == 16:
+                    my_uuid = _uuid.UUID(bytes=uuid_bytes)
                     if str(my_uuid) == str(self.uuid):
                         sender = self.username
             except Exception:
