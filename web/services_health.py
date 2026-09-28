@@ -185,6 +185,24 @@ def _health_monitor_loop(once=False):
                         "player_names": player_names,
                         "last_check": datetime.now().strftime('%H:%M:%S')
                     }
+                    # 写回favorites.json，重启后保留上次状态
+                    try:
+                        from storage.favorites import load_favorites, save_favorites
+                        favs = load_favorites()
+                        for f in favs:
+                            if f.get("ip") == ip and f.get("port") == port:
+                                f["last_info"] = {
+                                    "version": r.get("version", ""),
+                                    "players_online": online,
+                                    "players_max": r.get("max", 0),
+                                    "motd": r.get("motd", ""),
+                                    "online": online_flag,
+                                }
+                                f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                break
+                        save_favorites(favs)
+                    except Exception:
+                        pass
                 except Exception:
                     pass
 
