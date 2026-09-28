@@ -102,6 +102,7 @@ class MCBot:
         self.msa_token = None
         self.msa_uuid = None
         self._refresh_token = None
+        self.profile_cert = None  # Mojang聊天签名密钥 {privateKey,publicKey,...}
         # 当前位置（用于定期发送位置更新，防止服务器超时断开）
         self._pos_x = 0.0
         self._pos_y = 0.0
@@ -321,6 +322,14 @@ class MCBot:
                                 print(f"[正版] 刷新后joinServer: {'成功' if _join_ok else '失败'}")
                         if not _join_ok:
                             raise BotError(BotErrorCode.TOKEN_EXPIRED, "正版joinServer验证失败（token可能过期，请重新msa-login）")
+                        # 获取聊天签名密钥（enforce-secure-profile服务器需要）
+                        try:
+                            from .microsoft_auth import fetch_certificates
+                            self.profile_cert = fetch_certificates(self.msa_token)
+                            if self.profile_cert:
+                                print("[正版] 已获取聊天签名密钥")
+                        except Exception as e:
+                            _dprint(f"[正版] 获取certificates失败: {e}")
                         # 发送encryption response（注意：长度必须用VarInt，不能用1字节，RSA加密后256字节会溢出）
                         from .buffer import write_varint
                         resp = b""
@@ -652,15 +661,66 @@ class MCBot:
             pass
 
     def send_chat(self, message: str):
-        """发送聊天消息（自动适配版本格式）"""
+        """发送聊天消息（自动适配版本格式，有证书时签名）"""
         if self.state != "play":
             raise RuntimeError("尚未进入 play 阶段")
         pkts = self.play_packets
         chat_id = pkts.get("sb_chat")
         if chat_id is None:
             raise RuntimeError(f"协议 {self.protocol_version} 无 sb_chat 包ID，无法发消息（该版本协议表不完整）")
+
+        # 有签名证书时构造签名聊天包（enforce-secure-profile服务器需要）
+        if self.profile_cert and (self.protocol_version or 0) >= 759:
+            try:
+                payload = self._build_signed_chat(message)
+                self.conn.send_packet(chat_id, payload)
+                return
+            except Exception as e:
+                _dprint(f"[聊天签名] 失败，回退无签名: {e}")
+
         payload = self.protocol_handler.send_chat_payload(message)
         self.conn.send_packet(chat_id, payload)
+
+    def _build_signed_chat(self, message: str) -> bytes:
+        """构造带Ed25519签名的聊天包（759+）"""
+        import base64, os, struct, time as _time
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import load_der_private_key
+
+        # 加载私钥
+        der = base64.b64decode(self.profile_cert["privateKey"])
+        priv = load_der_private_key(der, password=None)
+
+        msg = message[:256].encode("utf-8")
+        timestamp = int(_time.time() * 1000)
+        salt = int.from_bytes(os.urandom(8), "big", signed=False)
+
+        # 签名内容：message + timestamp + sender uuid（16字节）
+        uuid_bytes = self._uuid_bytes()
+        sign_data = msg + struct.pack(">q", timestamp) + uuid_bytes
+        signature = priv.sign(sign_data)
+
+        payload = (write_string(message[:256])
+                   + struct.pack(">q", timestamp)
+                   + struct.pack(">q", salt)
+                   + b"\x01"  # hasSignature=true
+                   + write_varint(len(signature)) + signature
+                   + write_varint(0)   # messageCount
+                   + b"\x00\x00\x00")  # acknowledged BitSet
+        # 1.21.5+ (769+) 多一个 checksum 字节
+        if (self.protocol_version or 0) >= 769:
+            payload += b"\x01"
+        return payload
+
+    def _uuid_bytes(self) -> bytes:
+        """返回自己的UUID 16字节（正版用正版uuid，否则离线uuid）"""
+        import uuid as _uuid
+        try:
+            if self.msa_uuid:
+                return _uuid.UUID(self.msa_uuid).bytes
+        except Exception:
+            pass
+        return offline_uuid(self.username).bytes
 
     def send_command(self, command: str):
         """发送聊天命令（不含前导 /）"""
