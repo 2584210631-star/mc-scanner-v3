@@ -1337,6 +1337,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <input type="text" id="dbFilterSearch" placeholder="搜索..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadDbResults(1)">
         <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
         <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
+        <button class="btn btn-success" onclick="dbFavoriteSelected()">收藏选中</button>
         <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
         <button class="btn btn-violet" onclick="openBatchAiModal('db')">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'dbSelectAll')">全选</button>
@@ -3661,6 +3662,22 @@ async function dbRescanSelected() {
     loadDbResults(dbCurrentPage);
   } catch(e) { alert('请求失败: ' + e.message); }
 }
+
+async function dbFavoriteSelected() {
+  const selected = getDbSelectedServers();
+  if (selected.length === 0) { alert('请先勾选要收藏的服务器'); return; }
+  let ok = 0;
+  for (const s of selected) {
+    try {
+      await fetch('/api/favorites/add', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ip: s.ip, port: s.port})
+      });
+      ok++;
+    } catch(e) {}
+  }
+  alert(`已收藏 ${ok}/${selected.length} 个`);
+}
 function openDbWarnModal() {
   const selected = getDbSelectedServers();
   if (selected.length === 0) { alert('请先勾选要警告的服务器'); return; }
@@ -4397,6 +4414,16 @@ async function loadFavorites() {
     return;
   }
   empty.style.display = 'none';
+  // 排序：白名单 > cracked > online > 其他 > 离线
+  const authOrder = {whitelist: 0, cracked: 1, offline: 2, online: 3, rejected: 4};
+  data.favorites.sort((a, b) => {
+    const aAuth = (a.last_info || {}).auth || '';
+    const bAuth = (b.last_info || {}).auth || '';
+    const aUp = (a.last_info || {}).state === 'up' ? 0 : 1;
+    const bUp = (b.last_info || {}).state === 'up' ? 0 : 1;
+    if (aUp !== bUp) return aUp - bUp;
+    return (authOrder[aAuth] ?? 9) - (authOrder[bAuth] ?? 9);
+  });
   // 渲染上限保护：收藏过多时只渲染前N条，避免一次性DOM过多卡死浏览器（可用标签/搜索缩小范围）
   const FAV_RENDER_MAX = 300;
   let favNoteHtml = '';
