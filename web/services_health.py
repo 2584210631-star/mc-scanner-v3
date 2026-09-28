@@ -198,6 +198,15 @@ def _health_monitor_loop(once=False):
                                 li["players_max"] = r.get("max", li.get("players_max", 0))
                                 li["motd"] = r.get("motd", li.get("motd", ""))
                                 li["online"] = online_flag
+                                # 认证字段空且服务器在线时补一次（之后不重复跑）
+                                if online_flag and not li.get("auth"):
+                                    try:
+                                        from core.probe import auth_probe
+                                        a = auth_probe(ip, port, r.get("proto", 0) or 767, timeout=3.0)
+                                        if a:
+                                            li["auth"] = a.get("state", "unknown")
+                                    except Exception:
+                                        pass
                                 f["last_info"] = li
                                 f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 break
