@@ -108,11 +108,11 @@ def _health_monitor_loop(once=False):
                                     if need_auth:
                                         loop = asyncio.get_event_loop()
                                         from core.probe import auth_probe
-                                        a = await loop.run_in_executor(None, lambda: auth_probe(ip, port, r.get("proto", 0) or 767, 3.0))
+                                        a = await loop.run_in_executor(None, lambda: auth_probe(ip, port, r.get("proto", 0) or 767, timeout=3.0))
                                         if a:
                                             r["auth"] = a.get("state", "unknown")
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    _log(f"[健康监控] {ip}:{port} 认证补全异常: {e}")
                             return (ip, port, r)
                         except Exception:
                             return (ip, port, None)
