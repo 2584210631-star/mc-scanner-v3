@@ -427,3 +427,82 @@ def register(app):
             })
         return jsonify({"servers": result, "last_check": health_monitor.get("last_check")})
 
+    @app.route('/api/db/clear', methods=['POST'])
+    def db_clear():
+        """清空servers表（需二次确认）"""
+        db_path = _safe_db_path(request.json.get("db_path", "mcscanner.db"))
+        confirm = request.json.get("confirm", "")
+        if confirm != "CLEAR":
+            return jsonify({"error": "需传confirm=CLEAR确认"}), 400
+        if not os.path.exists(db_path):
+            return jsonify({"success": True, "deleted": 0})
+        from storage.db import get_conn
+        conn = get_conn(db_path)
+        cur = conn.execute("DELETE FROM servers")
+        deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        _log(f"数据库已清空，删除 {deleted} 条记录")
+        return jsonify({"success": True, "deleted": deleted})
+
+    @app.route('/api/db/import', methods=['POST'])
+    def db_import():
+        """导入txt或JSON格式的服务器数据。
+        txt: 每行一个 ip:port 或 ip
+        JSON: [{ip, port, version, players_online, ...}, ...]
+        """
+        if 'file' not in request.files:
+            return jsonify({"error": "请选择文件"}), 400
+        f = request.files['file']
+        db_path = _safe_db_path(request.form.get("db_path", "mcscanner.db"))
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='db_import_')
+        os.close(fd)
+        f.save(tmp_path)
+        try:
+            records = []
+            fname = f.filename.lower()
+            with open(tmp_path, 'r', encoding='utf-8') as fh:
+                content = fh.read()
+            if fname.endswith('.json'):
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    data = data.get("servers", data.get("results", [data]))
+                for item in data:
+                    if isinstance(item, dict) and item.get("ip"):
+                        rec = {
+                            "ip": item["ip"],
+                            "port": item.get("port", 25565),
+                            "version": item.get("version", ""),
+                            "motd": item.get("motd", ""),
+                            "players_online": item.get("players_online", 0),
+                            "players_max": item.get("players_max", 0),
+                            "auth": item.get("auth", ""),
+                        }
+                        records.append(rec)
+            else:
+                for line in content.strip().splitlines():
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if ':' in line:
+                        ip, port = line.rsplit(':', 1)
+                        try:
+                            port = int(port)
+                        except ValueError:
+                            continue
+                    else:
+                        ip, port = line, 25565
+                    records.append({"ip": ip, "port": port})
+            if not records:
+                return jsonify({"error": "文件中无有效记录"}), 400
+            from storage.db import upsert_many
+            count = upsert_many(db_path, records)
+            _log(f"数据库导入: {count} 条记录")
+            return jsonify({"success": True, "imported": count})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
