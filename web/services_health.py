@@ -93,7 +93,27 @@ def _health_monitor_loop(once=False):
                                     break
                                 await asyncio.sleep(wait)
                         try:
-                            return (ip, port, await async_slp_probe(ip, port, timeout=4.0, fast=True))
+                            r = await async_slp_probe(ip, port, timeout=4.0, fast=True)
+                            # SLP成功且需要补认证时，在线程池跑auth_probe不阻塞事件循环
+                            if r and r.get("state") == "up":
+                                try:
+                                    from storage.favorites import load_favorites
+                                    favs = load_favorites()
+                                    need_auth = True
+                                    for f in favs:
+                                        if f.get("ip") == ip and f.get("port") == port:
+                                            if (f.get("last_info") or {}).get("auth"):
+                                                need_auth = False
+                                            break
+                                    if need_auth:
+                                        loop = asyncio.get_event_loop()
+                                        from core.probe import auth_probe
+                                        a = await loop.run_in_executor(None, lambda: auth_probe(ip, port, r.get("proto", 0) or 767, 3.0))
+                                        if a:
+                                            r["auth"] = a.get("state", "unknown")
+                                except Exception:
+                                    pass
+                            return (ip, port, r)
                         except Exception:
                             return (ip, port, None)
                 for fut in asyncio.as_completed([_one(ip, port) for ip, port in targets]):
@@ -198,15 +218,8 @@ def _health_monitor_loop(once=False):
                                 li["players_max"] = r.get("max", li.get("players_max", 0))
                                 li["motd"] = r.get("motd", li.get("motd", ""))
                                 li["online"] = online_flag
-                                # 认证字段空且服务器在线时补一次（之后不重复跑）
-                                if online_flag and not li.get("auth"):
-                                    try:
-                                        from core.probe import auth_probe
-                                        a = auth_probe(ip, port, r.get("proto", 0) or 767, timeout=3.0)
-                                        if a:
-                                            li["auth"] = a.get("state", "unknown")
-                                    except Exception:
-                                        pass
+                                if r.get("auth"):
+                                    li["auth"] = r["auth"]
                                 f["last_info"] = li
                                 f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 break
