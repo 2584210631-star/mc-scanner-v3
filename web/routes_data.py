@@ -474,10 +474,14 @@ def register(app):
                             "ip": item["ip"],
                             "port": item.get("port", 25565),
                             "version": item.get("version", ""),
+                            "proto": item.get("proto", 0),
                             "motd": item.get("motd", ""),
                             "players_online": item.get("players_online", 0),
                             "players_max": item.get("players_max", 0),
                             "auth": item.get("auth", ""),
+                            "ping_ms": item.get("ping_ms"),
+                            "core_type": item.get("core_type", ""),
+                            "is_modded": item.get("is_modded", 0),
                         }
                         records.append(rec)
             else:
