@@ -1092,6 +1092,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   <div style="display:flex;align-items:center;gap:10px;">
     <div class="cap-badges" id="capBadges"></div>
     <div class="status-pill" id="headerStatus">就绪</div>
+    <button class="topbar-icon-btn" onclick="shutdownServer()" title="关闭服务" style="color:#e94560;">⏻</button>
     <button class="topbar-icon-btn" onclick="switchTab('settings')" title="设置">⚙️</button>
   </div>
 </header>
@@ -2896,6 +2897,12 @@ document.querySelectorAll('.tab').forEach(tab => {
     window.scrollTo(0,0);
   };
 });
+
+async function shutdownServer() {
+  if (!confirm('确定关闭 Web 服务？')) return;
+  await fetch('/api/shutdown', {method:'POST'});
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#888;font-family:sans-serif;">服务已关闭</div>';
+}
 
 function switchTab(name) {
   const tab = document.querySelector('.tab[data-tab="'+name+'"]');
