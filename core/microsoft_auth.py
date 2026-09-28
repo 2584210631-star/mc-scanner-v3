@@ -251,6 +251,29 @@ def join_server(mc_token, uuid, server_id_hash):
         return False
 
 
+def fetch_certificates(mc_token):
+    """从Mojang获取聊天签名用的Ed25519密钥对。
+    返回 {privateKey_b64, publicKey_b64, publicKeySignature_b64, expiresAt} 或 None。
+    """
+    req = urllib.request.Request(
+        "https://api.minecraftservices.com/player/certificates",
+        method="GET"
+    )
+    req.add_header("Authorization", f"Bearer {mc_token}")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            return {
+                "privateKey": data["keyPair"]["privateKey"],
+                "publicKey": data["keyPair"]["publicKey"],
+                "publicKeySignature": data["publicKeySignature"],
+                "expiresAt": data["expiresAt"],
+            }
+    except Exception as e:
+        print(f"[正版] 获取certificates失败: {e}")
+        return None
+
+
 def refresh_msa_token(refresh_token, client_id=None):
     """用refresh_token刷新MSA access_token。返回 {access_token, refresh_token} 或 None"""
     if not refresh_token:
