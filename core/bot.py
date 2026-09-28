@@ -958,6 +958,16 @@ class MCBot:
         except Exception:
             pass
         text = self._extract_chat_text(data, is_system)
+        # 如果解析出的sender是"未知玩家"，检查是否是自己发的（UUID比对）
+        if not is_system and sender in ("未知玩家", ""):
+            try:
+                import uuid as _uuid
+                if len(data) >= 16:
+                    my_uuid = _uuid.UUID(bytes=data[:16])
+                    if str(my_uuid) == str(self.uuid):
+                        sender = self.username
+            except Exception:
+                pass
         # 旧版本（1.12.2等）聊天格式为 "<玩家名> 消息"，sender 嵌在 text 里
         if not is_system and sender == "未知玩家" and text.startswith("<"):
             gt = text.find(">")
