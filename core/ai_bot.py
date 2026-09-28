@@ -313,6 +313,10 @@ class AIBotSession:
                                  use_premium=self.use_premium, premium_uuid=self.premium_uuid)
                 self.bot.chat_callback = self._on_chat
                 self.bot.connect()
+                # 正版登录后bot.username会更新为实际服务器名，同步到AI bot
+                if self.bot.username and self.bot.username != self.username:
+                    _log.info(f"[AI Bot] 用户名同步: {self.username} -> {self.bot.username}")
+                    self.username = self.bot.username
                 with self.lock:
                     self.status = "connected"
                     self.version_name = getattr(self.bot, 'version_name', '') or ""
