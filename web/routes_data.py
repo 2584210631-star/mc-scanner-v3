@@ -481,19 +481,16 @@ def register(app):
                         }
                         records.append(rec)
             else:
+                import re
                 for line in content.strip().splitlines():
                     line = line.strip()
-                    if not line or line.startswith('#'):
+                    if not line or line.startswith('#') or line.startswith('='):
                         continue
-                    if ':' in line:
-                        ip, port = line.rsplit(':', 1)
-                        try:
-                            port = int(port)
-                        except ValueError:
-                            continue
-                    else:
-                        ip, port = line, 25565
-                    records.append({"ip": ip, "port": port})
+                    # 匹配导出格式: "[1] 1.2.3.4:25565" 或纯 "1.2.3.4:25565"
+                    m = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d+)', line)
+                    if not m:
+                        continue
+                    records.append({"ip": m.group(1), "port": int(m.group(2))})
             if not records:
                 return jsonify({"error": "文件中无有效记录"}), 400
             from storage.db import upsert_many
