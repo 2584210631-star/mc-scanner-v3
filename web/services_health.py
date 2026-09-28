@@ -93,7 +93,7 @@ def _health_monitor_loop(once=False):
                                     break
                                 await asyncio.sleep(wait)
                         try:
-                            return (ip, port, await async_slp_probe(ip, port, timeout=4.0))
+                            return (ip, port, await async_slp_probe(ip, port, timeout=4.0, fast=True))
                         except Exception:
                             return (ip, port, None)
                 for fut in asyncio.as_completed([_one(ip, port) for ip, port in targets]):

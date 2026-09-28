@@ -117,17 +117,14 @@ def _build_ping(payload: int) -> bytes:
     return write_varint(len(data)) + data
 
 
-async def async_slp_probe(ip: str, port: int, timeout: float = 4.0) -> dict:
+async def async_slp_probe(ip: str, port: int, timeout: float = 4.0, fast=False) -> dict:
     """
     异步 SLP 探测。
-
-    Returns:
-        dict with state/version/proto/motd/online/max/sample/favicon/ping_ms/
-             core_type/mods/forge_channels
+    fast=True: 只试自动版本，不遍历所有协议（健康监控用，快但可能漏老版本服）
     """
     last_error = ""
-    # 先试 proto=-1（服务器返回真实版本），失败再遍历常见协议
-    for proto in (-1,) + COMMON_PROTOCOLS:
+    protos = (-1,) if fast else (-1,) + COMMON_PROTOCOLS
+    for proto in protos:
         try:
             start = time.time()
             from scanner.async_portscan import _open_connection
