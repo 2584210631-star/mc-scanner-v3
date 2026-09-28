@@ -78,3 +78,11 @@ run_*_bot.py
 monitor_*.py
 debug_*.py
 !tests/
+# 数据文件
+*.zip
+online_servers.json
+all_servers_status.json
+mc_servers_clean.json
+observer_logs/
+mcscanner.db
+favorites.json
