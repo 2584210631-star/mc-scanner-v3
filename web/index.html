@@ -1342,6 +1342,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-secondary" onclick="exportDb('txt')">导出TXT</button>
         <button class="btn btn-secondary" onclick="exportDb('csv')">导出CSV</button>
         <button class="btn btn-secondary" onclick="exportDb('html')">导出HTML</button>
+        <button class="btn btn-warning" onclick="document.getElementById('dbImportFile').click()">导入TXT/JSON</button>
+        <button class="btn btn-danger" onclick="clearDatabase()">清空数据库</button>
+        <input type="file" id="dbImportFile" accept=".txt,.json" style="display:none" onchange="importDb(this)">
         <button class="btn btn-secondary" onclick="exportDb('json')">导出JSON</button>
       </div>
       <div class="table-wrap">
@@ -3591,6 +3594,40 @@ function exportDb(fmt) {
   const search = document.getElementById('dbFilterSearch').value || '';
   const onlyOnline = document.getElementById('dbOnlyOnline') ? (document.getElementById('dbOnlyOnline').checked ? '1' : '0') : '0';
   window.open(`/api/db/export?format=${fmt}&auth=${encodeURIComponent(auth)}&modded=${encodeURIComponent(modded)}&search=${encodeURIComponent(search)}&only_online=${onlyOnline}`);
+}
+
+async function importDb(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/db/import', {method: 'POST', body: fd});
+  const data = await res.json();
+  if (data.success) {
+    alert(`导入成功，共 ${data.imported} 条记录`);
+    loadDbResults(1);
+  } else {
+    alert('导入失败: ' + (data.error || '未知错误'));
+  }
+  input.value = '';
+}
+
+async function clearDatabase() {
+  if (!confirm('确定要清空整个数据库吗？此操作不可恢复！')) return;
+  if (!confirm('再次确认：所有扫描记录都将删除，点确定继续')) return;
+  const res = await fetch('/api/db/clear', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({confirm: 'CLEAR'})
+  });
+  const data = await res.json();
+  if (data.success) {
+    alert(`已清空，删除 ${data.deleted} 条记录`);
+    loadDbResults(1);
+    loadDbStats();
+  } else {
+    alert('清空失败: ' + (data.error || '未知错误'));
+  }
 }
 
 // ===== 数据库批量操作 =====
