@@ -225,6 +225,16 @@ def register(app):
             return jsonify({"error": "IP 不能为空"}), 400
         fav = favorites.add_favorite(ip, port, tags=tags, note=note, info=info)
         _log(f"收藏添加: {ip}:{port}")
+        # 没有带info时后台自动跑一次完整探测（SLP+认证）
+        if not info:
+            import threading
+            def _auto_probe():
+                try:
+                    from storage.favorites import rescan_one
+                    rescan_one(ip, port, timeout=5.0)
+                except Exception:
+                    pass
+            threading.Thread(target=_auto_probe, daemon=True).start()
         return jsonify({"success": True, "favorite": fav})
 
     @app.route('/api/favorites/remove', methods=['POST'])
