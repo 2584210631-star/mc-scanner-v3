@@ -1414,6 +1414,20 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <select id="favFilterTag" onchange="loadFavorites()">
           <option value="">全部标签</option>
         </select>
+        <select id="favFilterAuth" onchange="loadFavorites()">
+          <option value="">全部认证</option>
+          <option value="cracked">盗版</option>
+          <option value="online">正版</option>
+          <option value="whitelist">白名单</option>
+          <option value="rejected">拒绝</option>
+          <option value="offline">离线</option>
+        </select>
+        <select id="favFilterOnline" onchange="loadFavorites()">
+          <option value="">全部状态</option>
+          <option value="online">有人</option>
+          <option value="empty">在线但0人</option>
+          <option value="offline">离线</option>
+        </select>
         <input type="text" id="favSearch" placeholder="搜索 IP/备注/标签..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadFavorites()">
         <button class="btn btn-primary" onclick="loadFavorites()">搜索</button>
         <button class="btn btn-success" onclick="rescanAllFavorites()">全部重查</button>
@@ -4425,6 +4439,19 @@ async function loadFavorites() {
   // 缓存
   favCache = {};
   data.favorites.forEach(f => { favCache[f.ip + ':' + f.port] = f; });
+  // 客户端筛选：认证方式 + 在线状态
+  const authFilter = document.getElementById('favFilterAuth').value;
+  const onlineFilter = document.getElementById('favFilterOnline').value;
+  if (authFilter || onlineFilter) {
+    data.favorites = data.favorites.filter(f => {
+      const li = f.last_info || {};
+      if (authFilter && (li.auth || '') !== authFilter) return false;
+      if (onlineFilter === 'offline' && li.state === 'up') return false;
+      if (onlineFilter === 'online' && (li.state !== 'up' || (li.online || 0) <= 0)) return false;
+      if (onlineFilter === 'empty' && (li.state !== 'up' || (li.online || 0) !== 0)) return false;
+      return true;
+    });
+  }
   // 渲染
   const tbody = document.getElementById('favoritesBody');
   const empty = document.getElementById('favEmpty');
@@ -4500,6 +4527,7 @@ async function loadFavorites() {
       <td data-label="操作"><div class="actions">
         <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
         <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
+        <button class="btn btn-violet" onclick="showPopularity('${ip}',${f.port})" title="人数趋势">📈</button>
         <button class="btn btn-info" data-need="login" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
         <button class="btn btn-violet" data-need="login" onclick="quickAiBot('${ip}',${f.port})" title="AI托管">🤖</button>
         <button class="btn btn-warning" onclick="editFavTags('${ip}',${f.port})" title="标签">🏷</button>
