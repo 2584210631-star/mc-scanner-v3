@@ -200,6 +200,7 @@ def _health_monitor_loop(once=False):
                     health_monitor["last_players"][key] = player_names
                     health_monitor["status"][key] = {
                         "online": online_flag, "players": online,
+                        "max": r.get("max", 0) if r else 0,
                         "prev_players": prev_online,
                         "joined": len(new_players), "left": len(left_players),
                         "player_names": player_names,

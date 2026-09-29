@@ -4451,7 +4451,7 @@ async function loadFavorites() {
     if (rt && rt.online) {
       const delta = rt.players - rt.prev_players;
       const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
-      const maxNum = (disp && (disp.players_max || disp.max)) || 0;
+      const maxNum = rt.max || (disp && (disp.players_max || disp.max)) || 0;
       const maxStr = maxNum ? `/${maxNum}` : '';
       playersHtml = `<div><span style="color:var(--green);">${rt.players}${maxStr}</span>${deltaStr}</div>` +
         (playerNames ? `<div style="font-size:11px;color:var(--mute);margin-top:2px;">${escapeHtml(playerNames)}</div>` : '');
