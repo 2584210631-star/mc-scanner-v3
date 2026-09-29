@@ -377,8 +377,9 @@ class MCBot:
                 self.auth_mode = "offline"
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
-                self._send_chat_session()
                 self._send_play_player()
+                # Chat Session延迟发送（等服务器加载完玩家数据）
+                threading.Timer(1.0, self._send_chat_session).start()
                 # 启动后台线程处理 Play 包
                 self.stop_event.clear()
                 self.play_thread = threading.Thread(target=self._handle_play_packets, daemon=True)
@@ -676,7 +677,7 @@ class MCBot:
             sig = base64.b64decode(self.profile_cert["publicKeySignature"])
             payload += write_varint(len(sig)) + sig
             self.conn.send_packet(chat_session_id, payload)
-            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, key={self.profile_cert['publicKey'][:20]}...)")
+            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, hex={payload[:20].hex()}...)")
         except Exception as e:
             print(f"[聊天] Chat Session发送失败: {e}")
 
