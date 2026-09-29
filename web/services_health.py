@@ -145,11 +145,11 @@ def _health_monitor_loop(once=False):
                             conn = sqlite3.connect(db_path)
                             conn.execute(
                                 'INSERT INTO server_popularity (ip, port, players_online, players_max, recorded_at) VALUES (?,?,?,?,?)',
-                                (ip, port, online, r.get('max', 0), datetime.now(timezone.utc).isoformat())
+                                (ip, port, online, r.get('max', 0), datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'))
                             )
                             conn.commit()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            _dprint(f"[健康监控] 写popularity表失败: {e}")
                         finally:
                             if conn:
                                 conn.close()
