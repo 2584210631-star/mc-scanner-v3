@@ -215,13 +215,17 @@ def _health_monitor_loop(once=False):
                                 li = f.get("last_info") or {}
                                 li["version"] = r.get("version", li.get("version", ""))
                                 li["core_type"] = r.get("core_type", li.get("core_type", ""))
+                                li["online"] = online
+                                li["max"] = r.get("max", li.get("max", 0))
                                 li["players_online"] = online
                                 li["players_max"] = r.get("max", li.get("players_max", 0))
                                 li["motd"] = r.get("motd", li.get("motd", ""))
-                                li["online"] = online_flag
                                 if r.get("auth"):
                                     li["auth"] = r["auth"]
                                 f["last_info"] = li
+                                # 在线时同步更新last_good_info
+                                if online_flag:
+                                    f["last_good_info"] = dict(li)
                                 f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 break
                         save_favorites(favs)
