@@ -102,7 +102,9 @@ def _health_monitor_loop(once=False):
                                     need_auth = True
                                     for f in favs:
                                         if f.get("ip") == ip and f.get("port") == port:
-                                            if (f.get("last_info") or {}).get("auth"):
+                                            li = f.get("last_info") or {}
+                                            lgi = f.get("last_good_info") or {}
+                                            if li.get("auth") or lgi.get("auth"):
                                                 need_auth = False
                                             break
                                     if need_auth:
