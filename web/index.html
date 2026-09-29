@@ -4451,13 +4451,15 @@ async function loadFavorites() {
     if (rt && rt.online) {
       const delta = rt.players - rt.prev_players;
       const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
-      const maxStr = good ? `/${good.max || 0}` : '';
+      const maxNum = (disp && (disp.players_max || disp.max)) || 0;
+      const maxStr = maxNum ? `/${maxNum}` : '';
       playersHtml = `<div><span style="color:var(--green);">${rt.players}${maxStr}</span>${deltaStr}</div>` +
         (playerNames ? `<div style="font-size:11px;color:var(--mute);margin-top:2px;">${escapeHtml(playerNames)}</div>` : '');
     } else if (rt && !rt.online) {
       playersHtml = '<span style="color:var(--red);">离线</span>';
     } else if (good) {
-      playersHtml = `<span style="color:var(--mute);">上次 ${good.online || 0}/${good.max || 0}</span>`;
+      const maxNum = good.players_max || good.max || 0;
+      playersHtml = `<span style="color:var(--mute);">上次 ${good.players_online || good.online || 0}/${maxNum}</span>`;
     } else if (state === 'up') {
       playersHtml = (info.online || 0) + '/' + (info.max || 0);
     } else if (state === 'offline') {
