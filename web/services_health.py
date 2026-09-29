@@ -53,8 +53,8 @@ def _health_monitor_loop(once=False):
                             targets = [(f['ip'], f['port']) for f in favs['servers']]
                     except Exception:
                         pass
-            # 也从数据库取有人过的服务器（health_monitor_db_extra=false 时只监控收藏）
-            if config.get("health_monitor_db_extra", True):
+            # 也从数据库取有人过的服务器（默认关闭，只监控收藏）
+            if config.get("health_monitor_db_extra", False):
                 conn = None
                 try:
                     conn = sqlite3.connect(db_path)
