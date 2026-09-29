@@ -11,14 +11,14 @@
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.0
+# 🛠️ MC Scanner v3.6.2
 
 ### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/协议表-41%20版本%20(340%2B)-10b981.svg)](#协议与版本)
-[![Tests](https://img.shields.io/badge/测试-186%20通过-00d992.svg)](#测试)
+[![Tests](https://img.shields.io/badge/测试-192%20通过-00d992.svg)](#测试)
 [![Platform](https://img.shields.io/badge/平台-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
 
 **端口扫描 · SLP 探测 · 认证检测 · 观察者 · AI 托管 · 安全扫描 · Web 面板**
@@ -105,10 +105,10 @@
 ### 🌐 Web 面板
 
 - 启动后访问 `http://127.0.0.1:8090`
-- **账号登录**：默认账号 `admin` / `admin123`，**首次登录强制修改用户名和密码**；会话 7 天有效，密码以 PBKDF2 加盐哈希存储（`auth.json`，已被 .gitignore 排除）
+- **无登录认证**：本工具默认绑定 `127.0.0.1` 本地使用，不设登录；若绑定 `0.0.0.0` 局域网可访问，**任何人都能操作，请确保网络可信**
 - 深色界面，**桌面端 / 移动端自适应**
 - 扫描任务、观察者、AI 托管、正版账号、数据库、收藏、人数历史一站管理
-- 顶部常显当前能力状态徽章；默认绑定 `127.0.0.1`（本地使用，无需登录）
+- 顶部常显当前能力状态徽章；默认绑定 `127.0.0.1`（本地使用）
 
 ### 🔒 安全与运维
 
@@ -121,7 +121,8 @@
 ### 💓 健康监控（收藏）
 
 - 周期探测收藏服务器，记录在线/离线、人数、玩家进出，变化可汇总邮件
-- **温和探测速率**（避免被限速/拉黑）：并发 ≤ `health_probe_concurrency`（默认 3）；同一 IP 两次探测间隔 ≥ `health_probe_ip_gap` 秒（默认 4.5，Minecraft connection-throttle 默认 4 秒）；每轮间隔 `health_interval` 秒（默认 300）——均在 `config.json` 可调
+- **温和探测速率**（避免被限速/拉黑）：并发 ≤ `health_probe_concurrency`（默认 8）；同一 IP 两次探测间隔 ≥ `health_probe_ip_gap` 秒（默认 1.5）；每轮间隔 `health_interval` 秒（默认 300）——均在 Web 设置页或 `config.json` 可调
+- 监控用 fast 模式只试自动版本不遍历所有协议，55个目标十几秒跑完；发现认证缺失时自动补一次认证检测
 - 默认还会带上数据库里"有人气"的服务器（最多 20 个）；只想监控收藏时设 `health_monitor_db_extra: false`
 
 ---
@@ -135,7 +136,7 @@
 | 端口扫描 / SLP 信息探测 | ✅ 可靠 | 主路径，覆盖各版本 |
 | 离线（offline）服登录 + 发消息 | ✅ 可靠 | 安全提醒的主要场景 |
 | 正版（online）服登录 | ✅ 可用 | 需先完成 Microsoft OAuth |
-| 正版服**发送聊天** | ⚠️ 受限 | 当前不发送真实聊天签名，开启强制签名的服务器可能拒收 |
+| 正版服**发送聊天** | ✅ 可用 | 正版登录后自动获取Ed25519证书，支持签名聊天；签名失败自动回退无签名模式 |
 | Forge / Fabric / NeoForge 模组服 | ⚠️ 部分 | 以原版姿态可通过部分验收；强制模组校验的服无法进入 |
 | 1.12.2 等旧版本 | ⚠️ 尽力 | 协议表已覆盖并重点验证，但边缘情况较多 |
 | 通用 Minecraft 客户端 | ❌ 非目标 | 不做完整游戏操作 / 真实签名 / 模组加载 |
@@ -266,7 +267,7 @@ mc-scanner-v3/
 python3 -m pytest tests/ -q
 ```
 
-当前 **186 个测试全部通过**，覆盖：协议表完整性、版本映射、认证探测、AuthMe 分支、进度存储、AI 安全护栏、失败路径等。
+当前 **192 个测试全部通过**，覆盖：协议表完整性、版本映射、认证探测、Login Start分档、Client Settings分档、AuthMe分支、进度存储、AI安全护栏、失败路径等。
 
 重新生成协议表：
 
@@ -277,6 +278,20 @@ python3 tools/gen_packets.py --download
 ---
 
 ## 📜 更新日志
+
+<details>
+<summary><b>v3.6.2</b>（点击展开）</summary>
+
+**修复与优化**
+- 修复 1.19.3–1.20.4 协议层 bug（Login Start 字节分档、Client Settings 字段分档）
+- 健康监控 fast 模式，不再遍历19个协议版本，速度提升10倍
+- AI Bot 通过 UUID 真正识别自己发的消息，不再自己跟自己说话
+- 正版登录后自动同步服务器实际用户名，支持 Ed25519 签名聊天
+- 数据库页加导入/清空/收藏按钮，收藏列表白名单优先排序
+- 收藏人数显示 online/max 格式并显示玩家名
+- Web 面板加关闭服务按钮
+- 移除登录认证（本地工具），README 诚实描述
+</details>
 
 <details>
 <summary><b>v3.6.1</b>（点击展开）</summary>
