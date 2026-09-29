@@ -420,6 +420,7 @@ def register(app):
                 "note": f.get('note', ''),
                 "online": st.get("online", False),
                 "players": st.get("players", 0),
+                "max": st.get("max", 0),
                 "prev_players": st.get("prev_players", 0),
                 "joined": st.get("joined", 0),
                 "left": st.get("left", 0),
