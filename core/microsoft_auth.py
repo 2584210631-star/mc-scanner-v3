@@ -257,7 +257,9 @@ def fetch_certificates(mc_token):
     """
     req = urllib.request.Request(
         "https://api.minecraftservices.com/player/certificates",
-        method="GET"
+        method="POST",
+        data=b"",
+        headers={"Content-Type": "application/json"}
     )
     req.add_header("Authorization", f"Bearer {mc_token}")
     try:
