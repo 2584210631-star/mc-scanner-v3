@@ -662,9 +662,8 @@ class MCBot:
         chat_session_id = pkts.get("sb_chat_session") or pkts.get("chat_session_update") or 0x09
         try:
             import base64, struct as _struct
-            payload = b"\x00"  # mode=initialize
-            payload += self._uuid_bytes()  # player UUID 16字节
-            payload += write_string(self.profile_cert["publicKey"])
+            # 1.21.6+ (767+) chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
+            payload = self._uuid_bytes()  # player UUID 16字节
             from datetime import datetime, timezone
             exp = self.profile_cert.get("expiresAt", "")
             if exp:
@@ -672,6 +671,8 @@ class MCBot:
             else:
                 exp_ms = 0
             payload += _struct.pack(">q", exp_ms)
+            pub = base64.b64decode(self.profile_cert["publicKey"])
+            payload += write_varint(len(pub)) + pub
             sig = base64.b64decode(self.profile_cert["publicKeySignature"])
             payload += write_varint(len(sig)) + sig
             self.conn.send_packet(chat_session_id, payload)
