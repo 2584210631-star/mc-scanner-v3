@@ -377,6 +377,7 @@ class MCBot:
                 self.auth_mode = "offline"
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
+                self._send_chat_session()
                 self._send_play_player()
                 # 启动后台线程处理 Play 包
                 self.stop_event.clear()
@@ -648,6 +649,38 @@ class MCBot:
             self.conn.send_packet(pkts["sb_player_flying"], b'\x01')  # onGround=True
         except Exception:
             pass
+
+    def _send_chat_session(self):
+        """766+ (1.20.5+) 在Play阶段发送Chat Session包，告诉服务器公钥。
+        没有这个包，enforce-secure-profile服务器会拒绝所有聊天消息(missingProfileKey)。"""
+        if not self.profile_cert:
+            return
+        proto = self.protocol_version or 0
+        if proto < 766:
+            return  # 760-765的Chat Session在配置阶段，但本项目760+都走configuration阶段且未发，先只修766+
+        pkts = self.play_packets
+        # 766+ play阶段Chat Session包ID固定为0x09（自动表未收录此key）
+        chat_session_id = pkts.get("sb_chat_session") or pkts.get("chat_session_update") or (0x09 if proto >= 766 else None)
+        if chat_session_id is None:
+            return
+        try:
+            import base64, struct as _struct
+            payload = b"\x00"  # mode=initialize
+            payload += write_string(self.profile_cert["publicKey"])
+            # expiresAt: 从ISO时间转毫秒
+            from datetime import datetime, timezone
+            exp = self.profile_cert.get("expiresAt", "")
+            if exp:
+                exp_ms = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp() * 1000)
+            else:
+                exp_ms = 0
+            payload += _struct.pack(">q", exp_ms)
+            sig = base64.b64decode(self.profile_cert["publicKeySignature"])
+            payload += write_varint(len(sig)) + sig
+            self.conn.send_packet(chat_session_id, payload)
+            _dprint("[聊天] Chat Session包已发送")
+        except Exception as e:
+            _dprint(f"[聊天] Chat Session发送失败: {e}")
 
     def _send_brand(self):
         """发送客户端品牌（vanilla）。部分服务端（模组服/反作弊）会等待品牌包。"""
