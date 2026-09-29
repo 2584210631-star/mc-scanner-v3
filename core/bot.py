@@ -672,9 +672,16 @@ class MCBot:
             else:
                 exp_ms = 0
             payload += _struct.pack(">q", exp_ms)
-            pub = base64.b64decode(self.profile_cert["publicKey"])
+            # 剥PEM头（-----BEGIN...-----）再base64解码
+            pub_b64 = self.profile_cert["publicKey"]
+            if "-----BEGIN" in pub_b64:
+                pub_b64 = "".join(pub_b64.split("\n")[1:-1])
+            pub = base64.b64decode(pub_b64)
             payload += write_varint(len(pub)) + pub
-            sig = base64.b64decode(self.profile_cert["publicKeySignature"])
+            sig_b64 = self.profile_cert["publicKeySignature"]
+            if "-----BEGIN" in sig_b64:
+                sig_b64 = "".join(sig_b64.split("\n")[1:-1])
+            sig = base64.b64decode(sig_b64)
             payload += write_varint(len(sig)) + sig
             self.conn.send_packet(chat_session_id, payload)
             print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, hex={payload[:20].hex()}...)")
