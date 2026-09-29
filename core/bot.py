@@ -713,9 +713,10 @@ class MCBot:
             try:
                 payload = self._build_signed_chat(message)
                 self.conn.send_packet(chat_id, payload)
+                print(f"[聊天] 已发送签名消息(proto={self.protocol_version}, len={len(payload)})")
                 return
             except Exception as e:
-                _dprint(f"[聊天签名] 失败，回退无签名: {e}")
+                print(f"[聊天签名] 失败，回退无签名: {e}")
 
         payload = self.protocol_handler.send_chat_payload(message)
         self.conn.send_packet(chat_id, payload)
@@ -726,8 +727,11 @@ class MCBot:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import load_der_private_key
 
-        # 加载私钥
-        der = base64.b64decode(self.profile_cert["privateKey"])
+        # 加载私钥（剥PEM头）
+        priv_b64 = self.profile_cert["privateKey"]
+        if "-----BEGIN" in priv_b64:
+            priv_b64 = "".join(priv_b64.split("\n")[1:-1])
+        der = base64.b64decode(priv_b64)
         priv = load_der_private_key(der, password=None)
 
         msg = message[:256].encode("utf-8")
