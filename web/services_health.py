@@ -224,9 +224,14 @@ def _health_monitor_loop(once=False):
                                 if r.get("auth"):
                                     li["auth"] = r["auth"]
                                 f["last_info"] = li
-                                # 在线时同步更新last_good_info
+                                # 在线时同步更新last_good_info（保留之前的auth等字段）
                                 if online_flag:
-                                    f["last_good_info"] = dict(li)
+                                    old_good = f.get("last_good_info") or {}
+                                    new_good = dict(li)
+                                    for k in ("auth", "auth_detail", "proto", "ping_ms", "sample", "player_list", "favicon", "fingerprint", "mods", "forge_channels"):
+                                        if k in old_good and k not in new_good:
+                                            new_good[k] = old_good[k]
+                                    f["last_good_info"] = new_good
                                 f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 break
                         save_favorites(favs)
