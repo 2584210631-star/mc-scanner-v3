@@ -4372,7 +4372,8 @@ async function refreshFavoritesRealtime() {
         if (rt.online) {
           const delta = rt.players - rt.prev_players;
           const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
-          playersTd.innerHTML = `<span style="color:var(--green);">${rt.players}人</span>${deltaStr}`;
+          const maxNum = rt.max || 0;
+          playersTd.innerHTML = `<span style="color:var(--green);">${rt.players}${maxNum?'/'+maxNum:''}</span>${deltaStr}`;
           playersTd.title = `进${rt.joined}人 走${rt.left}人\n当前: ${(rt.player_names||[]).join(', ')}`;
         } else {
           playersTd.innerHTML = '<span style="color:var(--red);">离线</span>';
