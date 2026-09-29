@@ -215,6 +215,7 @@ def _health_monitor_loop(once=False):
                                 li = f.get("last_info") or {}
                                 li["version"] = r.get("version", li.get("version", ""))
                                 li["core_type"] = r.get("core_type", li.get("core_type", ""))
+                                li["state"] = "up" if online_flag else "down"
                                 li["online"] = online
                                 li["max"] = r.get("max", li.get("max", 0))
                                 li["players_online"] = online
@@ -229,8 +230,8 @@ def _health_monitor_loop(once=False):
                                 f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                 break
                         save_favorites(favs)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        _log(f"[健康监控] {ip}:{port} 写回favorites失败: {e}")
                 except Exception:
                     pass
 
