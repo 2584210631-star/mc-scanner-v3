@@ -4443,16 +4443,21 @@ async function loadFavorites() {
     const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
     // 优先用实时监控数据
     const rt = favRealtimeData[ip + ':' + f.port];
+    const disp = good || info;
     let playersHtml;
+    const playerNames = (rt && rt.player_names && rt.player_names.length) ? rt.player_names.join(', ')
+      : (Array.isArray(disp.sample) ? disp.sample.map(p => (p && p.name) || '').filter(Boolean).join(', ')
+      : (disp.player_list || []).join(', '));
     if (rt && rt.online) {
       const delta = rt.players - rt.prev_players;
       const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
-      playersHtml = `<span style="color:var(--green);">${rt.players}人</span>${deltaStr}`;
+      const maxStr = good ? `/${good.max || 0}` : '';
+      playersHtml = `<div><span style="color:var(--green);">${rt.players}${maxStr}</span>${deltaStr}</div>` +
+        (playerNames ? `<div style="font-size:11px;color:var(--mute);margin-top:2px;">${escapeHtml(playerNames)}</div>` : '');
     } else if (rt && !rt.online) {
       playersHtml = '<span style="color:var(--red);">离线</span>';
     } else if (good) {
-      // 无实时数据但保留着上次在线信息：展示上次在线时的状态
-      playersHtml = `<span style="color:var(--mute);">上次在线 ${good.online || 0}/${good.max || 0}人</span>`;
+      playersHtml = `<span style="color:var(--mute);">上次 ${good.online || 0}/${good.max || 0}</span>`;
     } else if (state === 'up') {
       playersHtml = (info.online || 0) + '/' + (info.max || 0);
     } else if (state === 'offline') {
@@ -4460,10 +4465,6 @@ async function loadFavorites() {
     } else {
       playersHtml = '-';
     }
-    const disp = good || info;
-    const playerNames = (rt && rt.player_names && rt.player_names.length) ? rt.player_names.join(', ')
-      : (Array.isArray(disp.sample) ? disp.sample.map(p => (p && p.name) || '').filter(Boolean).join(', ')
-      : (disp.player_list || []).join(', '));
     return `<tr>
       <td><input type="checkbox" class="fav-server-check" data-ip="${ip}" data-port="${f.port}"></td>
       <td data-label="地址">${ip}:${f.port}</td>
