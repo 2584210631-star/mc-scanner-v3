@@ -822,8 +822,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     background: var(--canvas-soft);
     border: 1px solid var(--hairline);
     border-radius: 10px;
-    margin-bottom: 10px;
-    padding: 12px;
+    margin-bottom: 8px;
+    padding: 10px 12px;
     position: relative;
   }
   tbody tr td {
@@ -842,6 +842,25 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     padding: 0;
   }
   tbody tr td:first-child::before { display: none; }
+
+  /* 收藏卡片优化：操作按钮网格排列，地址加粗 */
+  tbody tr td[data-label="地址"] {
+    font-size: 14px; font-weight: 700; color: var(--ink);
+    font-family: var(--mono); padding-right: 30px;
+  }
+  tbody tr td[data-label="操作"] { flex-direction: column; align-items: stretch; }
+  tbody tr td[data-label="操作"]::before { align-self: flex-start; }
+  tbody tr td[data-label="操作"] .actions {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%;
+  }
+  tbody tr td[data-label="操作"] .actions .btn {
+    min-height: 38px; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  /* 隐藏空备注行 */
+  tbody tr td[data-label="备注"]:empty,
+  tbody tr td[data-label="备注"]:contains("-") { display: none; }
+  /* 人数行突出 */
+  tbody tr td[data-label="人数"] { font-size: 15px; font-weight: 700; }
 
   /* 弹窗适配 */
   .modal { max-width: 95vw !important; max-height: 90vh; overflow-y: auto; margin: 5vh auto; }
