@@ -49,11 +49,21 @@ class Handler(ProtocolHandler):
                 stream.pos = saved_pos  # 回退，NBT解析失败时可能消耗了字节
                 json_str = read_string_from_stream(stream)
             else:
-                stream.read(16)
-                read_varint_from_stream(stream)
-                if read_boolean_from_stream(stream):
-                    sig_len = read_varint_from_stream(stream)
-                    stream.read(sig_len)
+                proto = getattr(self.bot, 'protocol_version', 766)
+                if proto >= 767:
+                    # 1.21+ (767+): globalIndex(varint) + senderUuid(16) + index(varint) + signature(option: bool+256固定字节) + plainMessage(string)
+                    read_varint_from_stream(stream)  # globalIndex
+                    stream.read(16)  # senderUuid
+                    read_varint_from_stream(stream)  # index
+                    if read_boolean_from_stream(stream):
+                        stream.read(256)  # 固定256字节签名
+                else:
+                    # 旧格式: senderUuid(16) + index(varint) + signature(option: bool+varint长度)
+                    stream.read(16)
+                    read_varint_from_stream(stream)
+                    if read_boolean_from_stream(stream):
+                        sig_len = read_varint_from_stream(stream)
+                        stream.read(sig_len)
                 json_str = read_string_from_stream(stream)
             return self._parse_json_chat(json_str)
         except Exception:
@@ -62,6 +72,9 @@ class Handler(ProtocolHandler):
     def extract_chat_sender(self, data: bytes) -> str:
         try:
             stream = BytesStream(data)
+            proto = getattr(self.bot, 'protocol_version', 766)
+            if proto >= 767:
+                read_varint_from_stream(stream)  # globalIndex
             uuid_bytes = stream.read(16)
             name = self._sender_from_uuid(uuid_bytes)
             if name:
