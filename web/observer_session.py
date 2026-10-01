@@ -122,8 +122,10 @@ class ObserverSession:
             pass
 
     def _save_final(self):
-        """会话结束时保存完整JSON快照"""
+        """会话结束时保存完整JSON快照（0条聊天消息不存）"""
         try:
+            if not self.chat_log:
+                return  # 空会话不保存
             os.makedirs('observer_logs', exist_ok=True)
             safe_id = self.session_id.replace('/', '_').replace('\\', '_')
             with open(f'observer_logs/{safe_id}.json', 'w', encoding='utf-8') as f:
