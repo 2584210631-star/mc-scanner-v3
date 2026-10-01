@@ -26,7 +26,7 @@ class Handler(ProtocolHandler):
             except Exception:
                 pass
             if not uuid_bytes:
-                from core.conn import offline_uuid
+                from ..buffer import offline_uuid
                 uuid_bytes = offline_uuid(getattr(self.bot, 'username', 'Player')).bytes
             return (write_varint(0)  # globalIndex
                     + uuid_bytes  # senderUuid
