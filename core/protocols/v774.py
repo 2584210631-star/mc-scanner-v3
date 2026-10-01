@@ -117,26 +117,3 @@ class Handler(V766Handler):
                     read_varint_from_stream(stream)
         except Exception:
             pass
-
-    def send_chat_payload(self, message: str) -> bytes:
-        # 1.21+ (767+): globalIndex(varint) + senderUuid(16) + index(varint) + signature(option: bool) + plainMessage(string) + timestamp(i64) + salt(i64) + lastSeenMessages(varint=0)
-        import uuid as _uuid
-        from ..buffer import offline_uuid
-        timestamp = int(time.time() * 1000)
-        uuid_bytes = b""
-        try:
-            msa_uuid = getattr(self.bot, 'msa_uuid', '') or getattr(self.bot, 'uuid', '')
-            if msa_uuid:
-                uuid_bytes = _uuid.UUID(msa_uuid).bytes
-        except Exception:
-            pass
-        if not uuid_bytes:
-            uuid_bytes = offline_uuid(getattr(self.bot, 'username', 'Player')).bytes
-        return (write_varint(0)  # globalIndex
-                + uuid_bytes  # senderUuid
-                + write_varint(0)  # index
-                + b'\x00'  # signature=false
-                + write_string(message[:256])  # plainMessage
-                + struct.pack(">q", timestamp)  # timestamp
-                + struct.pack(">q", 0)  # salt
-                + write_varint(0))  # lastSeenMessages count=0
