@@ -185,6 +185,7 @@ def rescan_one(ip: str, port: int, timeout: float = 5.0, path: str = None) -> Op
             if auth:
                 info["auth"] = auth.get("state", "unknown")
                 info["auth_detail"] = auth.get("detail", "")
+                info["plugin_channels"] = auth.get("plugin_channels", [])
         except Exception:
             pass
     update_from_probe(ip, port, info, path=path, force=True)
@@ -208,6 +209,7 @@ def rescan_all(timeout: float = 5.0, workers: int = 10, path: str = None,
                     if auth:
                         info["auth"] = auth.get("state", "unknown")
                         info["auth_detail"] = auth.get("detail", "")
+                        info["plugin_channels"] = auth.get("plugin_channels", [])
                 except Exception:
                     pass
             return info

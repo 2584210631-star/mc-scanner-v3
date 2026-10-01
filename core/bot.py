@@ -84,6 +84,7 @@ class MCBot:
         self.config_packets = None
         self.login_packets = get_login_packets()
         self.state = None
+        self.auth_mode = "unknown"  # offline / online / whitelist / rejected / unknown
         self.stop_event = threading.Event()
         self.play_thread = None
         self.connected = False  # 是否仍处于 play 阶段（观察者依赖此判断掉线）
@@ -374,10 +375,9 @@ class MCBot:
                     self.conn.state = PROTO_STATE_PLAY
 
                 self.state = "play"
-                # 仅当未走过Encryption（仍是unknown/未设置）时才标offline；
+                # 仅当未走过Encryption（仍是unknown）时才标offline；
                 # 正版服已在EncryptionRequest处设为online，这里保留不覆盖
-                _am = getattr(self, "auth_mode", None)
-                if not _am or _am == "unknown":
+                if self.auth_mode == "unknown":
                     self.auth_mode = "offline"
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
@@ -1160,14 +1160,31 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
                 break
 
         bot.keep_alive(1.0)
+    except BotError as e:
+        result.error = str(e)
+        if e.code == BotErrorCode.WHITELIST:
+            result.auth_mode = "whitelist"
+            result.is_whitelist = True
+        elif e.code == BotErrorCode.ONLINE_MODE_REQUIRED:
+            result.auth_mode = "online"
+        elif e.code in (BotErrorCode.BANNED, BotErrorCode.KICKED, BotErrorCode.INCOMPATIBLE_VERSION):
+            result.auth_mode = "rejected"
+        else:
+            result.auth_mode = getattr(bot, "auth_mode", None) or "rejected"
     except Exception as e:
         result.error = str(e)
-        if "正版验证" in str(e):
+        # 非BotError异常：优先用bot.auth_mode，字符串兜底
+        _am = getattr(bot, "auth_mode", None)
+        if _am and _am != "unknown":
+            result.auth_mode = _am
+        elif "正版验证" in str(e):
             result.auth_mode = "online"
         elif "白名单" in str(e) or "whitelist" in str(e).lower():
             result.auth_mode = "whitelist"
             result.is_whitelist = True
         elif "拒绝" in str(e):
+            result.auth_mode = "rejected"
+        else:
             result.auth_mode = "rejected"
     finally:
         bot.close()
