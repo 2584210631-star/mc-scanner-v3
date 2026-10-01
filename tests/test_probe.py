@@ -61,6 +61,15 @@ class TestProbe(unittest.TestCase):
         result = auth_probe("127.0.0.1", self.whitelist_server.port, 767, timeout=3.0)
         self.assertIn(result["state"], ["whitelist", "rejected"])
 
+    def test_auth_probe_no_reported_proto_fallback(self):
+        """无报告协议时走跨时代回退列表，不抛NameError，返回有效结果"""
+        # reported_proto=0 触发 _FALLBACK 列表（775/767/763/761/754/340）
+        # 关键验证：get_play_packets 已 import，回退路径不炸
+        result = auth_probe("127.0.0.1", self.cracked_server.port, reported_proto=0, timeout=5.0)
+        self.assertEqual(result["state"], "cracked")
+        self.assertIn(result["detected_proto"], (775, 767, 763, 761, 754, 340))
+        self.assertIn("plugin_channels", result)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
