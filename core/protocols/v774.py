@@ -121,7 +121,7 @@ class Handler(V766Handler):
     def send_chat_payload(self, message: str) -> bytes:
         # 1.21+ (767+): globalIndex(varint) + senderUuid(16) + index(varint) + signature(option: bool) + plainMessage(string) + timestamp(i64) + salt(i64) + lastSeenMessages(varint=0)
         import uuid as _uuid
-        from core.conn import offline_uuid
+        from ..buffer import offline_uuid
         timestamp = int(time.time() * 1000)
         uuid_bytes = b""
         try:
