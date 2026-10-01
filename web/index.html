@@ -1574,7 +1574,6 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     <div class="panel">
       <h2>📜 历史记录（断开/被ban后也能导出）</h2>
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
-        <input type="text" id="obsHistorySearch" placeholder="搜索IP..." style="flex:1;min-width:150px;padding:8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);" oninput="loadObserverHistory()">
         <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);white-space:nowrap;"><input type="checkbox" id="obsHistoryByDate" onchange="loadObserverHistory()"> 按日期分组</label>
       </div>
       <div id="obsHistoryList" style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -4804,10 +4803,8 @@ function stopAllObservers() {
 }
 
 function loadObserverHistory() {
-  const q = document.getElementById('obsHistorySearch');
-  const search = q ? encodeURIComponent(q.value) : '';
   const byDate = document.getElementById('obsHistoryByDate')?.checked;
-  fetch('/api/observer/history' + (search ? '?search=' + search : '')).then(r=>r.json()).then(d=>{
+  fetch('/api/observer/history').then(r=>r.json()).then(d=>{
     const box = document.getElementById('obsHistoryList');
     if (!box) return;
     box.innerHTML = '';
