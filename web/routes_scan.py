@@ -368,6 +368,7 @@ def register(app):
                     if auth:
                         r["auth"] = auth.get("state", "unknown")
                         r["auth_detail"] = auth.get("detail", "")
+                        r["plugin_channels"] = auth.get("plugin_channels", [])
                     r["ip"] = ip
                     r["port"] = port
                     r["last_updated"] = int(time.time())

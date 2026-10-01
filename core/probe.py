@@ -182,8 +182,9 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
     """
     protos = try_versions or [reported_proto if reported_proto and reported_proto > 0 else None]
     if protos[0] is None:
-        # 无报告版本时，试最新的5个版本（覆盖1.16-最新），避免老服被误判offline
-        protos = list(reversed(supported_protos()))[:5]
+        # 无报告协议时，跨时代采样6个版本（最新→1.12.2），避免老服被误判offline
+        _FALLBACK = (775, 767, 763, 761, 754, 340)  # 26.1 / 1.21 / 1.20.1 / 1.19.3 / 1.16.5 / 1.12.2
+        protos = [p for p in _FALLBACK if get_play_packets(p) is not None]
 
     seen = set()
     last_detail = ""
@@ -206,27 +207,29 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                     last_detail = "连接被关闭（可能白名单/超时/崩溃）"
                     continue
 
+                channels = list(getattr(conn, "_plugin_channels", []))
+
                 if resp_id == login_pkts["cb_success"]:
                     return {"state": STATE_CRACKED, "detected_proto": proto,
-                            "detail": "login success (离线/破解服)"}
+                            "detail": "login success (离线/破解服)", "plugin_channels": channels}
                 if resp_id == login_pkts["cb_encryption"]:
                     return {"state": STATE_ONLINE, "detected_proto": proto,
-                            "detail": "encryption requested (正版验证)"}
+                            "detail": "encryption requested (正版验证)", "plugin_channels": channels}
                 if resp_id == login_pkts["cb_disconnect"]:
                     msg, _ = read_string(resp_payload, 0)
                     low = msg.lower()
                     if any(kw in low for kw in ["whitelist", "white list", "not white-listed", "not whitelisted", "not on the whitelist", "白名单", "不在白名单"]):
                         return {"state": STATE_WHITELIST, "detected_proto": proto,
-                                "detail": f"whitelist: {msg[:80]}"}
+                                "detail": f"whitelist: {msg[:80]}", "plugin_channels": channels}
                     return {"state": STATE_REJECTED, "detected_proto": proto,
-                            "detail": f"rejected: {msg[:80]}"}
+                            "detail": f"rejected: {msg[:80]}", "plugin_channels": channels}
                 last_detail = f"意外响应 0x{resp_id:02x}"
         except (ConnectionError, OSError, TimeoutError, socket_timeout) as e:
             last_detail = str(e)
     # 连接被直接关闭（无disconnect包）通常是白名单服或代理拒绝，归为rejected而非offline
     if last_detail and "连接被关闭" in last_detail:
-        return {"state": STATE_REJECTED, "detected_proto": None, "detail": last_detail}
-    return {"state": STATE_OFFLINE, "detected_proto": None, "detail": last_detail}
+        return {"state": STATE_REJECTED, "detected_proto": None, "detail": last_detail, "plugin_channels": []}
+    return {"state": STATE_OFFLINE, "detected_proto": None, "detail": last_detail, "plugin_channels": []}
 
 
 def _recv_login_response(conn, login_pkts):

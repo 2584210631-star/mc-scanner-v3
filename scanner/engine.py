@@ -106,6 +106,7 @@ class ScanEngine:
                 auth = auth_probe(ip, port, proto, timeout=self.timeout)
                 result["auth"] = auth["state"]
                 result["auth_detail"] = auth.get("detail", "")
+                result["plugin_channels"] = auth.get("plugin_channels", [])
                 if auth.get("detected_proto"):
                     result["proto"] = auth["detected_proto"]
                 self._bump(result["auth"])
