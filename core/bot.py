@@ -374,9 +374,10 @@ class MCBot:
                     self.conn.state = PROTO_STATE_PLAY
 
                 self.state = "play"
-                # 仅当未走过Encryption（仍是unknown）时才标offline；
+                # 仅当未走过Encryption（仍是unknown/未设置）时才标offline；
                 # 正版服已在EncryptionRequest处设为online，这里保留不覆盖
-                if not self.auth_mode or self.auth_mode == "unknown":
+                _am = getattr(self, "auth_mode", None)
+                if not _am or _am == "unknown":
                     self.auth_mode = "offline"
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
