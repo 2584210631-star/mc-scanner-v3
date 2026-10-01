@@ -378,8 +378,7 @@ class MCBot:
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
                 self._send_play_player()
-                # Chat Session延迟发送（等服务器加载完玩家数据）
-                threading.Timer(1.0, self._send_chat_session).start()
+                self._send_chat_session()
                 # 启动后台线程处理 Play 包
                 self.stop_event.clear()
                 self.play_thread = threading.Thread(target=self._handle_play_packets, daemon=True)
