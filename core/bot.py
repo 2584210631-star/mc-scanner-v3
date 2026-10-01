@@ -233,7 +233,7 @@ class MCBot:
                     if resp_id == self.login_packets["cb_disconnect"]:
                         msg = read_string_from_stream(BytesStream(resp_payload))
                         low = msg.lower()
-                        if "whitelist" in low:
+                        if any(kw in low for kw in ["whitelist", "white list", "not white-listed", "not whitelisted", "白名单", "不在白名单", "not on the whitelist"]):
                             self.auth_mode = "whitelist"
                             raise BotError(BotErrorCode.WHITELIST, f"登录被拒绝(白名单): {msg[:100]}")
                         else:
@@ -1122,8 +1122,9 @@ def join_and_warn(host: str, port: int = 25565, username: str = "SecurityBot",
     try:
         bot.connect()
         result.success = True
-        result.is_offline = True
-        result.auth_mode = "offline"
+        result.auth_mode = bot.auth_mode or "offline"
+        result.is_offline = (result.auth_mode == "offline")
+        result.is_whitelist = (result.auth_mode == "whitelist")
         result.protocol_version = bot.protocol_version
         result.version_name = get_version_name(bot.protocol_version)
         result.modded_channels = set(bot.modded_channels)

@@ -28,10 +28,12 @@ SERVER_TYPE_PATTERNS = {
     "purpur": [
         r"purpur",
     ],
+    "neoforge": [
+        r"neoforge",
+    ],
     "forge": [
         r"forge",
         r"fml",
-        r"neoforge",
         r"modloader",
     ],
     "fabric": [

@@ -118,7 +118,7 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                 players = info.get("players", {})
                 ver_name = version.get("name", "")
                 proto_ver = version.get("protocol", 0)
-                fp = fingerprint_server(info, proto_ver)
+                fp = fingerprint_by_field_order(info, proto_ver)
                 result = {
                     "state": "up",
                     "version": ver_name,
@@ -182,8 +182,8 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
     """
     protos = try_versions or [reported_proto if reported_proto and reported_proto > 0 else None]
     if protos[0] is None:
-        # 无报告版本时，只试最常见的3个版本，避免版本风暴（18个全试要几分钟）
-        protos = list(reversed(supported_protos()))[:3]
+        # 无报告版本时，试最新的5个版本（覆盖1.16-最新），避免老服被误判offline
+        protos = list(reversed(supported_protos()))[:5]
 
     seen = set()
     last_detail = ""
@@ -239,7 +239,12 @@ def _recv_login_response(conn, login_pkts):
         resp_id, resp_payload = conn.recv_packet()
         if resp_id == login_pkts.get("cb_plugin_request"):
             try:
-                msg_id, _ = read_varint(resp_payload, 0)
+                msg_id, off = read_varint(resp_payload, 0)
+                channel, _ = read_string(resp_payload, off)
+                # 记录channel用于Forge/模组识别
+                if not hasattr(conn, '_plugin_channels'):
+                    conn._plugin_channels = []
+                conn._plugin_channels.append(channel)
                 conn.send_packet(login_pkts["sb_plugin_response"],
                                  write_varint(msg_id) + b"\x00")
             except Exception:
@@ -291,6 +296,15 @@ def detect_core_type(version_name: str, raw: dict = None) -> str:
     if raw and isinstance(raw, dict):
         if raw.get("modinfo") or raw.get("forgeData"):
             return "forge"
+        # Fabric SLP默认不暴露modinfo，靠MOTD/description关键词兜底
+        motd = (raw.get("description") or raw.get("motd") or "")
+        if isinstance(motd, dict):
+            motd = motd.get("text", "")
+        motd_low = str(motd).lower()
+        if "fabric" in motd_low:
+            return "fabric"
+        if "neoforge" in motd_low:
+            return "neoforge"
     return "vanilla" if v else "unknown"
 
 def extract_mods(raw: dict = None) -> list:
@@ -319,7 +333,7 @@ def extract_forge_channels(raw: dict = None) -> list:
     return []
 
 
-def fingerprint_server(raw: dict, proto: int = 0) -> dict:
+def fingerprint_by_field_order(raw: dict, proto: int = 0) -> dict:
     """协议指纹识别（参考 matscan passive_fingerprint）。
     通过 SLP JSON 的字段顺序、空 sample、空 favicon 等特征判断服务器软件。
     返回: {field_order, incorrect_order, empty_sample, empty_favicon, likely_software, confidence}
