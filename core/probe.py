@@ -215,7 +215,7 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                 if resp_id == login_pkts["cb_disconnect"]:
                     msg, _ = read_string(resp_payload, 0)
                     low = msg.lower()
-                    if any(kw in low for kw in ["whitelist", "white list", "not white-listed", "not whitelisted", "白名单", "不在白名单"]):
+                    if any(kw in low for kw in ["whitelist", "white list", "not white-listed", "not whitelisted", "not on the whitelist", "白名单", "不在白名单"]):
                         return {"state": STATE_WHITELIST, "detected_proto": proto,
                                 "detail": f"whitelist: {msg[:80]}"}
                     return {"state": STATE_REJECTED, "detected_proto": proto,
