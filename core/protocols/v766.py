@@ -13,7 +13,30 @@ class Handler(ProtocolHandler):
         return write_string(username) + write_uuid(uuid)
 
     def send_chat_payload(self, message: str) -> bytes:
+        proto = getattr(self.bot, 'protocol_version', 766)
         timestamp = int(time.time() * 1000)
+        if proto >= 767:
+            # 1.21+ (767+): globalIndex(varint) + senderUuid(16) + index(varint) + signature(option: bool) + plainMessage(string) + timestamp(i64) + salt(i64) + lastSeenMessages(varint=0)
+            uuid_bytes = b""
+            try:
+                import uuid as _uuid
+                msa_uuid = getattr(self.bot, 'msa_uuid', '') or getattr(self.bot, 'uuid', '')
+                if msa_uuid:
+                    uuid_bytes = _uuid.UUID(msa_uuid).bytes
+            except Exception:
+                pass
+            if not uuid_bytes:
+                from core.conn import offline_uuid
+                uuid_bytes = offline_uuid(getattr(self.bot, 'username', 'Player')).bytes
+            return (write_varint(0)  # globalIndex
+                    + uuid_bytes  # senderUuid
+                    + write_varint(0)  # index
+                    + b'\x00'  # signature=false
+                    + write_string(message[:256])  # plainMessage
+                    + struct.pack(">q", timestamp)  # timestamp
+                    + struct.pack(">q", 0)  # salt
+                    + write_varint(0))  # lastSeenMessages count=0
+        # 旧格式 (759-766)
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", 0)
@@ -21,7 +44,7 @@ class Handler(ProtocolHandler):
                    + write_varint(0)   # messageCount=0
                    + b"\x00\x00\x00")  # acknowledged: FixedBitSet固定3字节（1.20.5+无长度前缀）
         # 1.21.5+ (769+) 增加 checksum 字节，无签名消息=1
-        if getattr(self.bot, 'protocol_version', 766) >= 769:
+        if proto >= 769:
             payload += b'\x01'
         return payload
 

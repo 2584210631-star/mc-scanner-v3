@@ -722,7 +722,9 @@ class MCBot:
         self.conn.send_packet(chat_id, payload)
 
     def _build_signed_chat(self, message: str) -> bytes:
-        """构造带Ed25519签名的聊天包（759+）"""
+        """构造带Ed25519签名的聊天包（759-766，767+格式不同暂不支持）"""
+        if (self.protocol_version or 0) >= 767:
+            raise NotImplementedError("767+签名聊天格式待实现，回退无签名")
         import base64, os, struct, time as _time
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import load_der_private_key
