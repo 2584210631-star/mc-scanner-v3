@@ -1573,8 +1573,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
     </div>
     <div class="panel">
       <h2>📜 历史记录（断开/被ban后也能导出）</h2>
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
         <input type="text" id="obsHistorySearch" placeholder="搜索IP..." style="flex:1;min-width:150px;padding:8px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);" oninput="loadObserverHistory()">
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);white-space:nowrap;"><input type="checkbox" id="obsHistoryByDate" onchange="loadObserverHistory()"> 按日期分组</label>
       </div>
       <div id="obsHistoryList" style="display:flex;gap:8px;flex-wrap:wrap;">
         <p class="hint">暂无历史记录</p>
@@ -4805,6 +4806,7 @@ function stopAllObservers() {
 function loadObserverHistory() {
   const q = document.getElementById('obsHistorySearch');
   const search = q ? encodeURIComponent(q.value) : '';
+  const byDate = document.getElementById('obsHistoryByDate')?.checked;
   fetch('/api/observer/history' + (search ? '?search=' + search : '')).then(r=>r.json()).then(d=>{
     const box = document.getElementById('obsHistoryList');
     if (!box) return;
@@ -4813,7 +4815,7 @@ function loadObserverHistory() {
       box.innerHTML = '<span style="color:#64748b;font-size:12px;">暂无历史记录</span>';
       return;
     }
-    d.sessions.forEach(s=>{
+    const mkCard = (s) => {
       const card = document.createElement('div');
       card.className = 'obs-session-card';
       card.style.opacity = '0.7';
@@ -4824,8 +4826,24 @@ function loadObserverHistory() {
           <button class="obs-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();exportHistoryObserver('${s.session_id}','html')">HTML</button>
           <button class="obs-btn" style="padding:2px 8px;font-size:10px;background:#dc2626;color:#fff;" onclick="event.stopPropagation();deleteObserverHistory('${s.session_id}')">删</button>
         </div>`;
-      box.appendChild(card);
-    });
+      return card;
+    };
+    if (byDate) {
+      const groups = {};
+      d.sessions.forEach(s => {
+        const day = (s.saved_at || '').slice(0,10) || '未知日期';
+        (groups[day] = groups[day] || []).push(s);
+      });
+      Object.keys(groups).sort().reverse().forEach(day => {
+        const header = document.createElement('div');
+        header.style.cssText = 'width:100%;font-weight:600;color:var(--text-primary);font-size:13px;padding:4px 0;border-bottom:1px solid var(--border-color);margin-top:4px;';
+        header.textContent = `${day} (${groups[day].length}条)`;
+        box.appendChild(header);
+        groups[day].forEach(s => box.appendChild(mkCard(s)));
+      });
+    } else {
+      d.sessions.forEach(s => box.appendChild(mkCard(s)));
+    }
   });
 }
 
