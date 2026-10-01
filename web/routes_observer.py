@@ -72,7 +72,8 @@ def register(app):
 
     @app.route('/api/observer/history')
     def observer_history():
-        """列出所有已保存的历史会话（断开/被ban后仍可导出）"""
+        """列出所有已保存的历史会话，支持按IP搜索"""
+        search = (request.args.get("search") or "").strip().lower()
         logs = []
         log_dir = 'observer_logs'
         if os.path.exists(log_dir):
@@ -81,9 +82,12 @@ def register(app):
                     try:
                         with open(os.path.join(log_dir, fname), 'r', encoding='utf-8') as f:
                             data = json.load(f)
+                        host = data.get('host', '?')
+                        if search and search not in str(host).lower():
+                            continue
                         logs.append({
                             'session_id': data.get('session_id', fname.replace('.json','')),
-                            'host': data.get('host', '?'),
+                            'host': host,
                             'port': data.get('port', 0),
                             'username': data.get('username', '?'),
                             'status': data.get('status', 'disconnected'),
@@ -92,7 +96,23 @@ def register(app):
                         })
                     except Exception:
                         pass
-        return jsonify({"total": len(logs), "sessions": logs[:50]})
+        return jsonify({"total": len(logs), "sessions": logs[:200]})
+
+    @app.route('/api/observer/history/delete', methods=['POST'])
+    def observer_history_delete():
+        """删除指定历史会话"""
+        data = request.json or {}
+        sid = data.get("session_id", "")
+        if not sid:
+            return jsonify({"error": "session_id 不能为空"}), 400
+        safe_id = sid.replace('/', '_').replace('\\', '_')
+        deleted = 0
+        for ext in ('.json', '.jsonl'):
+            path = os.path.join('observer_logs', safe_id + ext)
+            if os.path.exists(path):
+                os.remove(path)
+                deleted += 1
+        return jsonify({"success": deleted > 0, "deleted": deleted})
 
     @app.route('/api/observer/status')
     def observer_status():
