@@ -100,18 +100,20 @@ def register(app):
     def config_get():
         """读取当前配置（敏感字段打码）"""
         cfg = config.get_all()
-        # 敏感字段打码
+        # 敏感字段打码（前缀只露2位，降低定向攻击风险）
         for k in ("ai_api_key", "authme_password", "email_password",
-                  "mc_access_token", "msa_access_token"):
+                  "mc_access_token", "msa_access_token", "msa_refresh_token"):
             if cfg.get(k):
                 v = str(cfg[k])
-                cfg[k] = v[:4] + "****" + v[-2:] if len(v) > 8 else "****"
-        # msa_accounts列表里的access_token也打码
+                cfg[k] = v[:2] + "****" + v[-2:] if len(v) > 8 else "****"
+        # msa_accounts列表里的access_token/refresh_token也打码
         if isinstance(cfg.get("msa_accounts"), list):
             for a in cfg["msa_accounts"]:
-                if isinstance(a, dict) and a.get("access_token"):
-                    v = str(a["access_token"])
-                    a["access_token"] = v[:4] + "****" + v[-2:] if len(v) > 8 else "****"
+                if isinstance(a, dict):
+                    for tk in ("access_token", "refresh_token"):
+                        if a.get(tk):
+                            v = str(a[tk])
+                            a[tk] = v[:2] + "****" + v[-2:] if len(v) > 8 else "****"
         return jsonify(cfg)
 
     @app.route('/api/config/save', methods=['POST'])
