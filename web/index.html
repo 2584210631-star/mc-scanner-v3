@@ -3101,7 +3101,7 @@ async function pollStatus() {
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('progressFill').textContent = pct + '%';
   const logBox = document.getElementById('logBox');
-  logBox.innerHTML = data.logs.map(l => `<div><span class="time">${l.time}</span>${l.msg}</div>`).join('');
+  logBox.innerHTML = data.logs.map(l => `<div><span class="time">${escapeHtml(l.time)}</span>${escapeHtml(l.msg)}</div>`).join('');
   logBox.scrollTop = logBox.scrollHeight;
   if (!data.running) {
     clearInterval(statusTimer);
@@ -4816,7 +4816,7 @@ function loadObserverHistory() {
       const card = document.createElement('div');
       card.className = 'obs-session-card';
       card.style.opacity = '0.7';
-      card.innerHTML = `<div class="obs-name">${s.username} @ ${s.host}:${s.port}</div>
+      card.innerHTML = `<div class="obs-name">${escapeHtml(s.username)} @ ${escapeHtml(s.host)}:${s.port}</div>
         <div class="obs-status obs-status-offline">已结束 | ${s.msg_count}条 | ${s.saved_at.slice(5,16)}</div>
         <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
           <button class="obs-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();exportHistoryObserver('${s.session_id}','txt')">TXT</button>
