@@ -675,7 +675,12 @@ class MCBot:
         if not self.profile_cert:
             return
         pkts = self.play_packets
-        chat_session_id = pkts.get("sb_chat_session") or pkts.get("chat_session_update") or 0x09
+        # Chat Session Update包ID按版本分档（自动生成协议表未含此字段）：
+        #   766-767 (1.20.5-1.21.1): 0x07
+        #   768+   (1.21.2+):         0x08
+        chat_session_id = pkts.get("sb_chat_session") or pkts.get("chat_session_update")
+        if chat_session_id is None:
+            chat_session_id = 0x08 if (self.protocol_version or 0) >= 768 else 0x07
         try:
             import base64, struct as _struct
 
