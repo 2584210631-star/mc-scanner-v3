@@ -689,10 +689,12 @@ class MCBot:
             pub_b64 = self.profile_cert["publicKey"]
             if "-----BEGIN" in pub_b64:
                 pub_b64 = "".join(pub_b64.split("\n")[1:-1])
+            pub_b64 = pub_b64.strip() + "=" * (-len(pub_b64.strip()) % 4)
             pub = base64.b64decode(pub_b64)
             sig_b64 = self.profile_cert["publicKeySignature"]
             if "-----BEGIN" in sig_b64:
                 sig_b64 = "".join(sig_b64.split("\n")[1:-1])
+            sig_b64 = sig_b64.strip() + "=" * (-len(sig_b64.strip()) % 4)
             sig = base64.b64decode(sig_b64)
 
             # chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
@@ -744,10 +746,11 @@ class MCBot:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import load_der_private_key
 
-        # 加载私钥（剥PEM头）
+        # 加载私钥（剥PEM头，补base64 padding）
         priv_b64 = self.profile_cert["privateKey"]
         if "-----BEGIN" in priv_b64:
             priv_b64 = "".join(priv_b64.split("\n")[1:-1])
+        priv_b64 = priv_b64.strip() + "=" * (-len(priv_b64.strip()) % 4)
         der = base64.b64decode(priv_b64)
         priv = load_der_private_key(der, password=None)
 
