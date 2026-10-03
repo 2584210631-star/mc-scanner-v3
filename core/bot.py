@@ -655,10 +655,8 @@ class MCBot:
             pass
 
     def _send_chat_session(self):
-        """766+ (1.20.5+) 在Play阶段发送Chat Session包，告诉服务器公钥。"""
-        if not self.profile_cert:
-            print("[聊天] 跳过Chat Session: profile_cert=None（正版证书未获取）")
-            return
+        """766+ (1.20.5+) 在Play阶段发送Chat Session包，告诉服务器公钥。
+        无正版证书时生成自签名Ed25519密钥（离线服也需要Chat Session，否则拒收聊天消息）。"""
         proto = self.protocol_version or 0
         if proto < 766:
             return
@@ -666,28 +664,44 @@ class MCBot:
         chat_session_id = pkts.get("sb_chat_session") or pkts.get("chat_session_update") or 0x09
         try:
             import base64, struct as _struct
-            # 1.21.6+ (767+) chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
-            payload = self._uuid_bytes()  # player UUID 16字节
-            from datetime import datetime, timezone
-            exp = self.profile_cert.get("expiresAt", "")
-            if exp:
-                exp_ms = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp() * 1000)
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+            if self.profile_cert:
+                # 正版证书：用Mojang签发的公钥和签名
+                exp = self.profile_cert.get("expiresAt", "")
+                if exp:
+                    from datetime import datetime, timezone
+                    exp_ms = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp() * 1000)
+                else:
+                    exp_ms = 0
+                pub_b64 = self.profile_cert["publicKey"]
+                if "-----BEGIN" in pub_b64:
+                    pub_b64 = "".join(pub_b64.split("\n")[1:-1])
+                pub = base64.b64decode(pub_b64)
+                sig_b64 = self.profile_cert["publicKeySignature"]
+                if "-----BEGIN" in sig_b64:
+                    sig_b64 = "".join(sig_b64.split("\n")[1:-1])
+                sig = base64.b64decode(sig_b64)
             else:
-                exp_ms = 0
+                # 离线模式：生成自签名Ed25519密钥对（正版客户端连离线服也这么做）
+                if not getattr(self, "_self_signed_key", None):
+                    priv = Ed25519PrivateKey.generate()
+                    pub = priv.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+                    # 自签名：签名数据 = UUID + expireTime + publicKey（离线服不校验签名，格式对即可）
+                    exp_ms = 0  # 永不过期
+                    sign_data = self._uuid_bytes() + _struct.pack(">q", exp_ms) + pub
+                    sig = priv.sign(sign_data)
+                    self._self_signed_key = (pub, sig, exp_ms)
+                pub, sig, exp_ms = self._self_signed_key
+
+            # 1.21.6+ (767+) chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
+            payload = self._uuid_bytes()
             payload += _struct.pack(">q", exp_ms)
-            # 剥PEM头（-----BEGIN...-----）再base64解码
-            pub_b64 = self.profile_cert["publicKey"]
-            if "-----BEGIN" in pub_b64:
-                pub_b64 = "".join(pub_b64.split("\n")[1:-1])
-            pub = base64.b64decode(pub_b64)
             payload += write_varint(len(pub)) + pub
-            sig_b64 = self.profile_cert["publicKeySignature"]
-            if "-----BEGIN" in sig_b64:
-                sig_b64 = "".join(sig_b64.split("\n")[1:-1])
-            sig = base64.b64decode(sig_b64)
             payload += write_varint(len(sig)) + sig
             self.conn.send_packet(chat_session_id, payload)
-            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, hex={payload[:20].hex()}...)")
+            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, {'正版' if self.profile_cert else '自签名'})")
         except Exception as e:
             print(f"[聊天] Chat Session发送失败: {e}")
 
