@@ -50,8 +50,8 @@ class Handler(ProtocolHandler):
                 json_str = read_string_from_stream(stream)
             else:
                 proto = getattr(self.bot, 'protocol_version', 766)
-                if proto >= 767:
-                    # 1.21+ (767+): globalIndex(varint) + senderUuid(16) + index(varint) + signature(option: bool+256固定字节) + plainMessage(string)
+                if proto >= 768:
+                    # 1.21.2+ (768+): globalIndex(varint) + senderUuid(16) + index(varint) + signature(option: bool+256固定字节) + plainMessage(string)
                     read_varint_from_stream(stream)  # globalIndex
                     stream.read(16)  # senderUuid
                     read_varint_from_stream(stream)  # index
@@ -73,8 +73,8 @@ class Handler(ProtocolHandler):
         try:
             stream = BytesStream(data)
             proto = getattr(self.bot, 'protocol_version', 766)
-            if proto >= 767:
-                read_varint_from_stream(stream)  # globalIndex
+            if proto >= 768:
+                read_varint_from_stream(stream)  # globalIndex (1.21.2+)
             uuid_bytes = stream.read(16)
             name = self._sender_from_uuid(uuid_bytes)
             if name:

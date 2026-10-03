@@ -717,27 +717,15 @@ class MCBot:
             pass
 
     def send_chat(self, message: str):
-        """发送聊天消息。
-        正版账号(有profile_cert)用Ed25519签名聊天；
-        离线账号用/me命令（命令包不需要签名，enforce-secure-profile服务器也能广播）。"""
+        """发送聊天消息（有证书时签名，否则无签名）"""
         if self.state != "play":
             raise RuntimeError("尚未进入 play 阶段")
-
-        # 离线账号：用/me命令绕过聊天签名要求（格式: * 用户名 消息）
-        if not self.profile_cert:
-            try:
-                self.send_command("me " + message[:245])
-                print(f"[聊天] 离线账号通过/me命令发送: {message[:30]}")
-                return
-            except Exception as e:
-                print(f"[聊天] /me命令失败，回退普通聊天: {e}")
-
         pkts = self.play_packets
         chat_id = pkts.get("sb_chat")
         if chat_id is None:
             raise RuntimeError(f"协议 {self.protocol_version} 无 sb_chat 包ID，无法发消息（该版本协议表不完整）")
 
-        # 有签名证书时构造签名聊天包（enforce-secure-profile服务器需要）
+        # 有签名证书时构造签名聊天包
         if self.profile_cert and (self.protocol_version or 0) >= 759:
             try:
                 payload = self._build_signed_chat(message)
