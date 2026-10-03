@@ -689,12 +689,14 @@ class MCBot:
             pub_b64 = self.profile_cert["publicKey"]
             if "-----BEGIN" in pub_b64:
                 pub_b64 = "".join(pub_b64.split("\n")[1:-1])
-            pub_b64 = pub_b64.strip() + "=" * (-len(pub_b64.strip()) % 4)
+            pub_b64 = "".join(pub_b64.split())
+            pub_b64 += "=" * (-len(pub_b64) % 4)
             pub = base64.b64decode(pub_b64)
             sig_b64 = self.profile_cert["publicKeySignature"]
             if "-----BEGIN" in sig_b64:
                 sig_b64 = "".join(sig_b64.split("\n")[1:-1])
-            sig_b64 = sig_b64.strip() + "=" * (-len(sig_b64.strip()) % 4)
+            sig_b64 = "".join(sig_b64.split())
+            sig_b64 += "=" * (-len(sig_b64) % 4)
             sig = base64.b64decode(sig_b64)
 
             # chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
@@ -746,11 +748,12 @@ class MCBot:
         import base64, os, struct, time as _time
         from .ed25519 import sign as ed25519_sign, load_private_key_der
 
-        # 加载私钥（剥PEM头，补base64 padding，解析DER得到32字节seed）
+        # 加载私钥（剥PEM头，去空白，补base64 padding，解析DER得到32字节seed）
         priv_b64 = self.profile_cert["privateKey"]
         if "-----BEGIN" in priv_b64:
             priv_b64 = "".join(priv_b64.split("\n")[1:-1])
-        priv_b64 = priv_b64.strip() + "=" * (-len(priv_b64.strip()) % 4)
+        priv_b64 = "".join(priv_b64.split())
+        priv_b64 += "=" * (-len(priv_b64) % 4)
         der = base64.b64decode(priv_b64)
         seed = load_private_key_der(der)
 
@@ -761,6 +764,9 @@ class MCBot:
         # 签名内容：message长度(varint) + message + timestamp(long) + salt(long)
         sign_data = write_varint(len(msg)) + msg + struct.pack(">q", timestamp) + struct.pack(">q", salt)
         signature = ed25519_sign(seed, sign_data)
+        # 766+ MessageSignature固定256字节，Ed25519签名64字节，补零到256
+        if len(signature) < 256:
+            signature = signature + b"\x00" * (256 - len(signature))
 
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
