@@ -741,27 +741,26 @@ class MCBot:
         self.conn.send_packet(chat_id, payload)
 
     def _build_signed_chat(self, message: str) -> bytes:
-        """构造带Ed25519签名的聊天包（759+，enforce-secure-profile服务器需要）"""
+        """构造带Ed25519签名的聊天包（759+，enforce-secure-profile服务器需要）。
+        使用纯Python Ed25519实现，零外部依赖。"""
         import base64, os, struct, time as _time
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        from cryptography.hazmat.primitives.serialization import load_der_private_key
+        from .ed25519 import sign as ed25519_sign, load_private_key_der
 
-        # 加载私钥（剥PEM头，补base64 padding）
+        # 加载私钥（剥PEM头，补base64 padding，解析DER得到32字节seed）
         priv_b64 = self.profile_cert["privateKey"]
         if "-----BEGIN" in priv_b64:
             priv_b64 = "".join(priv_b64.split("\n")[1:-1])
         priv_b64 = priv_b64.strip() + "=" * (-len(priv_b64.strip()) % 4)
         der = base64.b64decode(priv_b64)
-        priv = load_der_private_key(der, password=None)
+        seed = load_private_key_der(der)
 
         msg = message[:256].encode("utf-8")
         timestamp = int(_time.time() * 1000)
-        salt = int.from_bytes(os.urandom(8), "big", signed=False)
+        salt = int.from_bytes(os.urandom(8), "big", signed=True)
 
         # 签名内容：message长度(varint) + message + timestamp(long) + salt(long)
-        # （1.19.1+ 标准格式，sender_uuid由Chat Session建立，不含在每条消息签名里）
         sign_data = write_varint(len(msg)) + msg + struct.pack(">q", timestamp) + struct.pack(">q", salt)
-        signature = priv.sign(sign_data)
+        signature = ed25519_sign(seed, sign_data)
 
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
