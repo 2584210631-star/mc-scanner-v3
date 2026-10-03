@@ -708,6 +708,15 @@ class MCBot:
             sig_b64 += "=" * (-len(sig_b64) % 4)
             sig = base64.b64decode(sig_b64)
 
+            # 证书格式校验：Ed25519公钥DER≈44B，Mojang RSA-2048签名=256B
+            # 过大说明证书算法不对（可能是RSA公钥），发了会被服务器踢，跳过
+            if len(pub) > 128 or len(sig) > 320:
+                _raw_pub = str(self.profile_cert.get("publicKey", ""))[:80]
+                _raw_sig = str(self.profile_cert.get("publicKeySignature", ""))[:80]
+                print(f"[聊天] 证书格式异常(pub={len(pub)}B,sig={len(sig)}B)，跳过Chat Session。"
+                      f" pub_raw={_raw_pub!r} sig_raw={_raw_sig!r}")
+                return
+
             # chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
             payload = self._uuid_bytes()
             payload += _struct.pack(">q", exp_ms)

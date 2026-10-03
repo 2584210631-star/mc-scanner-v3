@@ -252,22 +252,54 @@ def join_server(mc_token, uuid, server_id_hash):
 
 
 def fetch_certificates(mc_token):
-    """从Mojang获取聊天签名用的Ed25519密钥对。
-    返回 {privateKey_b64, publicKey_b64, publicKeySignature_b64, expiresAt} 或 None。
+    """从Mojang获取聊天签名用的Ed25519证书。
+    客户端生成Ed25519密钥对，将公钥(SubjectPublicKeyInfo DER)发给Mojang签名。
+    返回 {privateKey(PEM), publicKey(PEM), publicKeySignature(base64), expiresAt} 或 None。
     """
+    import os, base64 as _b64
+    try:
+        from .ed25519 import seed_to_public
+    except ImportError:
+        seed_to_public = None
+
+    # 1. 客户端生成Ed25519密钥对
+    seed = os.urandom(32)
+    if seed_to_public:
+        pub_raw = seed_to_public(seed)  # 32字节
+    else:
+        # 兜底：用cryptography生成（如果可用）
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption
+        _priv = Ed25519PrivateKey.from_private_bytes(seed)
+        pub_raw = _priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+
+    # 2. 构造SubjectPublicKeyInfo DER (Ed25519, 44字节)
+    #    30 2a 30 05 06 03 2b 65 70 03 21 00 <32B pub>
+    spki_der = bytes.fromhex("302a300506032b6570032100") + pub_raw
+
+    # 3. 构造PKCS#8 DER (Ed25519私钥, 48字节)
+    #    30 2e 02 01 00 30 05 06 03 2b 65 70 04 22 04 20 <32B seed>
+    pkcs8_der = bytes.fromhex("302e020100300506032b657004220420") + seed
+
+    # 4. 公钥base64编码，发给Mojang签名
+    pub_b64 = _b64.b64encode(spki_der).decode()
+
+    req_body = json.dumps({"publicKey": pub_b64}).encode()
     req = urllib.request.Request(
         "https://api.minecraftservices.com/player/certificates",
         method="POST",
-        data=b"",
+        data=req_body,
         headers={"Content-Type": "application/json"}
     )
     req.add_header("Authorization", f"Bearer {mc_token}")
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
+            # 5. Mojang返回签名后的公钥和签名
+            #    用客户端生成的密钥对（Mojang返回的publicKey应和我们发的一致）
             return {
-                "privateKey": data["keyPair"]["privateKey"],
-                "publicKey": data["keyPair"]["publicKey"],
+                "privateKey": _b64.b64encode(pkcs8_der).decode(),
+                "publicKey": data.get("keyPair", {}).get("publicKey", pub_b64),
                 "publicKeySignature": data["publicKeySignature"],
                 "expiresAt": data["expiresAt"],
             }
