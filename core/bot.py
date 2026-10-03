@@ -709,12 +709,14 @@ class MCBot:
             sig = base64.b64decode(sig_b64)
 
             # 证书格式校验：Ed25519公钥DER≈44B，Mojang RSA-2048签名=256B
-            # 过大说明证书算法不对（可能是RSA公钥），发了会被服务器踢，跳过
+            # 过大说明证书算法不对（可能是RSA公钥），发了会被服务器踢。
+            # 置空profile_cert，后续send_chat自动用无签名聊天（enforce-secure-profile=false的服可正常发消息）
             if len(pub) > 128 or len(sig) > 320:
                 _raw_pub = str(self.profile_cert.get("publicKey", ""))[:80]
                 _raw_sig = str(self.profile_cert.get("publicKeySignature", ""))[:80]
-                print(f"[聊天] 证书格式异常(pub={len(pub)}B,sig={len(sig)}B)，跳过Chat Session。"
-                      f" pub_raw={_raw_pub!r} sig_raw={_raw_sig!r}")
+                print(f"[聊天] 证书格式异常(pub={len(pub)}B,sig={len(sig)}B)，"
+                      f"禁用签名聊天改用无签名。 pub_raw={_raw_pub!r} sig_raw={_raw_sig!r}")
+                self.profile_cert = None
                 return
 
             # chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
