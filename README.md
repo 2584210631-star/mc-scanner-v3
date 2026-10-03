@@ -11,14 +11,14 @@
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.2
+# 🛠️ MC Scanner v3.6.3
 
 ### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/协议表-41%20版本%20(340%2B)-10b981.svg)](#协议与版本)
-[![Tests](https://img.shields.io/badge/测试-192%20通过-00d992.svg)](#测试)
+[![Tests](https://img.shields.io/badge/测试-193%20通过-00d992.svg)](#测试)
 [![Platform](https://img.shields.io/badge/平台-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
 
 **端口扫描 · SLP 探测 · 认证检测 · 观察者 · AI 托管 · 安全扫描 · Web 面板**
@@ -136,7 +136,7 @@
 | 端口扫描 / SLP 信息探测 | ✅ 可靠 | 主路径，覆盖各版本 |
 | 离线（offline）服登录 + 发消息 | ✅ 可靠 | 安全提醒的主要场景 |
 | 正版（online）服登录 | ✅ 可用 | 需先完成 Microsoft OAuth |
-| 正版服**发送聊天** | ✅ 可用 | 正版登录后自动获取Ed25519证书，支持签名聊天；签名失败自动回退无签名模式 |
+| 正版服**发送聊天** | ✅ 可用 | 正版登录后自动获取Ed25519证书，内置纯Python签名实现（零外部依赖）；签名失败自动回退无签名模式 |
 | Forge / Fabric / NeoForge 模组服 | ⚠️ 部分 | 以原版姿态可通过部分验收；强制模组校验的服无法进入 |
 | 1.12.2 等旧版本 | ⚠️ 尽力 | 协议表已覆盖并重点验证，但边缘情况较多 |
 | 通用 Minecraft 客户端 | ❌ 非目标 | 不做完整游戏操作 / 真实签名 / 模组加载 |
@@ -151,7 +151,8 @@
 ```bash
 git clone https://github.com/2584210631-star/mc-scanner-v3.git
 cd mc-scanner-v3
-pip install -r requirements.txt
+# 依赖已自带在 libs/，无需 pip install 即可运行
+# 如需额外依赖（如 masscan）可执行：pip install -r requirements.txt
 cp config.example.json config.json   # 可选
 ```
 
@@ -223,6 +224,7 @@ mc-scanner-v3/
 │   ├── packets.py          # 协议表加载与完整性校验
 │   ├── packets_auto.py     # 自动生成协议表（41 版本）
 │   ├── microsoft_auth.py   # Microsoft OAuth 正版登录
+│   ├── ed25519.py          # 纯Python Ed25519签名（零外部依赖）
 │   ├── errors.py           # 统一错误码与映射
 │   ├── nbt.py / chat.py    # NBT / JSON 文本解析
 │   ├── buffer.py           # 字节流工具
@@ -267,7 +269,7 @@ mc-scanner-v3/
 python3 -m pytest tests/ -q
 ```
 
-当前 **192 个测试全部通过**，覆盖：协议表完整性、版本映射、认证探测、Login Start分档、Client Settings分档、AuthMe分支、进度存储、AI安全护栏、失败路径等。
+当前 **193 个测试全部通过**，覆盖：协议表完整性、版本映射、认证探测、Login Start分档、Client Settings分档、AuthMe分支、进度存储、AI安全护栏、失败路径、无报告协议回退等。
 
 重新生成协议表：
 
@@ -278,6 +280,47 @@ python3 tools/gen_packets.py --download
 ---
 
 ## 📜 更新日志
+
+<details>
+<summary><b>v3.6.3</b>（点击展开）</summary>
+
+**聊天功能修复（核心）**
+- 修复 1.21 (proto 767) 观察者收不到聊天消息：`extract_chat_text` 错误跳过 `globalIndex` 字段（该字段 1.21.2/768 才加入），导致解析字节错位、文本为空。消息实际一直在广播，只是观察者解析不出来
+- 撤掉针对错误诊断的 workaround：离线账号 `/me` 兜底、自签名 Chat Session（对离线账号有害，服务器收到无法验证的密钥后会静默丢弃后续无签名消息）
+
+**正版签名聊天零依赖**
+- 新增 `core/ed25519.py`：纯 Python Ed25519 签名实现（seed_to_public / sign / load_private_key_der），零外部依赖，和 cryptography 库结果完全一致（已交叉验证）
+- `_build_signed_chat` 改用纯 Python 实现，去掉 `cryptography` 库依赖，Termux 等装不上 cryptography 的环境也能用正版账号签名聊天
+- 修复 Chat Session / 签名聊天 base64 解码 `Incorrect padding`：Mojang 返回的 publicKey / publicKeySignature / privateKey 可能缺末尾 `=` padding，解码前自动补全
+
+**认证状态机加固**
+- `auth_mode` 在 `__init__` 初始化为 `unknown`，Play 成功时仅 unknown 才标 offline（正版账号走过 Encryption 后保留 online，不再被覆盖）
+- bot 与 probe 白名单关键词对齐（whitelist / white list / not white-listed / not whitelisted / 白名单 / 不在白名单 / not on the whitelist）
+- `join_and_warn` 异常路径改用 `BotError.code`（WHITELIST / ONLINE_MODE_REQUIRED / BANNED / KICKED / INCOMPATIBLE_VERSION），不再扫异常字符串
+- neoforge 从 forge pattern 拆出单独分类
+- plugin_channels 数据流接上：auth_probe 返回并落库，可辅助 Forge/模组识别
+- 无报告协议时跨时代回退（775/767/763/761/754/340），不再只试最新 3 个版本
+- `fingerprint_server` 改名为 `fingerprint_by_field_order`，避免和 `core/fingerprint.py` 同名冲突
+
+**安全加固**
+- `msa_refresh_token` 等敏感令牌掩码，前缀收窄到 2 位
+- 修复两处存储型 XSS（logBox、观察者卡片）
+
+**AI 与观察者**
+- AI Bot 10 秒内收到一模一样的内容直接忽略，不再自己跟自己吵架
+- 观察者聊天记录按日期分类、可搜索 IP、可手动删除 0 消息记录
+
+**收藏与健康监控**
+- 收藏人数显示 `online/max` 格式（如 2/20）并显示玩家名称
+- 收藏页筛选增加认证方式（正版/盗版）和有人/没人
+- 人数趋势图移到收藏页
+- 健康监控发现认证缺失时自动补一次认证检测
+
+**Web 面板**
+- 右上角加关闭服务按钮
+- 移动端界面优化
+
+</details>
 
 <details>
 <summary><b>v3.6.2</b>（点击展开）</summary>
