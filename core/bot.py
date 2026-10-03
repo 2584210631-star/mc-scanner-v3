@@ -379,6 +379,16 @@ class MCBot:
                 # 正版服已在EncryptionRequest处设为online，这里保留不覆盖
                 if self.auth_mode == "unknown":
                     self.auth_mode = "offline"
+                # 离线服不发EncryptionRequest，profile_cert不会在登录阶段获取。
+                # 正版账号连离线服时补取聊天签名密钥（enforce-secure-profile需要）。
+                if not self.profile_cert and getattr(self, "msa_token", None):
+                    try:
+                        from .microsoft_auth import fetch_certificates
+                        self.profile_cert = fetch_certificates(self.msa_token)
+                        if self.profile_cert:
+                            print("[正版] 离线服补取聊天签名密钥成功")
+                    except Exception as e:
+                        _dprint(f"[正版] 离线服补取certificates失败: {e}")
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
                 self._send_play_player()
