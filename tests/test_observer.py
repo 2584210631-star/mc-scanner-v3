@@ -150,6 +150,13 @@ class PushServer:
                             self.received_messages.append(msg)
                         except Exception:
                             pass
+                    elif packet_id in (0x04, 0x05):  # chat_command (离线账号用/me绕过签名)
+                        try:
+                            cmd, _ = _read_string(payload, 0)
+                            if cmd.startswith("me "):
+                                self.received_messages.append(cmd[3:])
+                        except Exception:
+                            pass
                     if time.time() - last_ka > 2:
                         self._send_packet(CB_KEEP_ALIVE, struct.pack(">q", 12345))
                         last_ka = time.time()
