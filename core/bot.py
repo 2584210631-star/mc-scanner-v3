@@ -691,16 +691,20 @@ class MCBot:
                 exp_ms = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp() * 1000)
             else:
                 exp_ms = 0
-            pub_b64 = self.profile_cert["publicKey"]
-            if "-----BEGIN" in pub_b64:
-                pub_b64 = "".join(pub_b64.split("\n")[1:-1])
-            pub_b64 = "".join(pub_b64.split())
+            def _strip_pem(s):
+                """鲁棒剥离PEM头尾，返回纯base64字符串（处理\\n/\\r\\n/无换行等各种情况）"""
+                s = "".join(s.split())  # 去掉所有空白
+                if "-----BEGIN" in s:
+                    start = s.find("KEY-----") + len("KEY-----")
+                    end = s.find("-----END")
+                    if end > start:
+                        s = s[start:end]
+                return s
+
+            pub_b64 = _strip_pem(self.profile_cert["publicKey"])
             pub_b64 += "=" * (-len(pub_b64) % 4)
             pub = base64.b64decode(pub_b64)
-            sig_b64 = self.profile_cert["publicKeySignature"]
-            if "-----BEGIN" in sig_b64:
-                sig_b64 = "".join(sig_b64.split("\n")[1:-1])
-            sig_b64 = "".join(sig_b64.split())
+            sig_b64 = _strip_pem(self.profile_cert["publicKeySignature"])
             sig_b64 += "=" * (-len(sig_b64) % 4)
             sig = base64.b64decode(sig_b64)
 
@@ -710,7 +714,7 @@ class MCBot:
             payload += write_varint(len(pub)) + pub
             payload += write_varint(len(sig)) + sig
             self.conn.send_packet(chat_session_id, payload)
-            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, 正版)")
+            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, pub={len(pub)}B, sig={len(sig)}B, 正版)")
         except Exception as e:
             print(f"[聊天] Chat Session发送失败: {e}")
 
@@ -753,11 +757,14 @@ class MCBot:
         import base64, os, struct, time as _time
         from .ed25519 import sign as ed25519_sign, load_private_key_der
 
-        # 加载私钥（剥PEM头，去空白，补base64 padding，解析DER得到32字节seed）
+        # 加载私钥（鲁棒剥PEM头，补base64 padding，解析DER得到32字节seed）
         priv_b64 = self.profile_cert["privateKey"]
-        if "-----BEGIN" in priv_b64:
-            priv_b64 = "".join(priv_b64.split("\n")[1:-1])
         priv_b64 = "".join(priv_b64.split())
+        if "-----BEGIN" in priv_b64:
+            start = priv_b64.find("KEY-----") + len("KEY-----")
+            end = priv_b64.find("-----END")
+            if end > start:
+                priv_b64 = priv_b64[start:end]
         priv_b64 += "=" * (-len(priv_b64) % 4)
         der = base64.b64decode(priv_b64)
         seed = load_private_key_der(der)
