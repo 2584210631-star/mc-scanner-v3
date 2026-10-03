@@ -739,9 +739,7 @@ class MCBot:
         self.conn.send_packet(chat_id, payload)
 
     def _build_signed_chat(self, message: str) -> bytes:
-        """构造带Ed25519签名的聊天包（759-766，767+格式不同暂不支持）"""
-        if (self.protocol_version or 0) >= 767:
-            raise NotImplementedError("767+签名聊天格式待实现，回退无签名")
+        """构造带Ed25519签名的聊天包（759+，enforce-secure-profile服务器需要）"""
         import base64, os, struct, time as _time
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import load_der_private_key
@@ -757,9 +755,9 @@ class MCBot:
         timestamp = int(_time.time() * 1000)
         salt = int.from_bytes(os.urandom(8), "big", signed=False)
 
-        # 签名内容：message + timestamp + sender uuid（16字节）
-        uuid_bytes = self._uuid_bytes()
-        sign_data = msg + struct.pack(">q", timestamp) + uuid_bytes
+        # 签名内容：message长度(varint) + message + timestamp(long) + salt(long)
+        # （1.19.1+ 标准格式，sender_uuid由Chat Session建立，不含在每条消息签名里）
+        sign_data = write_varint(len(msg)) + msg + struct.pack(">q", timestamp) + struct.pack(">q", salt)
         signature = priv.sign(sign_data)
 
         payload = (write_string(message[:256])
