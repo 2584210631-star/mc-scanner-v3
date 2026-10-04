@@ -1056,8 +1056,8 @@ class MCBot:
                 import uuid as _uuid
                 from .buffer import BytesStream
                 stream = BytesStream(data)
-                # v775+聊天包开头有varint Global Index，先跳过
-                if self.protocol_version >= 775:
+                # v768+ (1.21.2+)聊天包开头有varint Global Index，先跳过
+                if self.protocol_version >= 768:
                     from .buffer import read_varint_from_stream
                     read_varint_from_stream(stream)
                 uuid_bytes = stream.read(16)

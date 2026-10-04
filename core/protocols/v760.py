@@ -2,7 +2,7 @@
 from __future__ import annotations
 import struct, time
 from .v761 import Handler as V761Handler
-from ..buffer import write_string, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
+from ..buffer import write_string, write_varint, write_uuid, BytesStream, read_string_from_stream, read_varint_from_stream, read_boolean_from_stream, read_uuid_from_stream
 
 
 class Handler(V761Handler):
@@ -10,17 +10,20 @@ class Handler(V761Handler):
     version_name = "1.19.1/1.19.2"
 
     def login_start_payload(self, username: str, uuid=None) -> bytes:
+        # 1.19.1/1.19.2: username + hasPlayerUUID(true) + UUID
         payload = write_string(username)
-        payload += b'\x00' + b'\x01' + write_uuid(uuid)
+        payload += b'\x01' + write_uuid(uuid)
         return payload
 
     def send_chat_payload(self, message: str) -> bytes:
+        # 1.19.1: message + timestamp + salt + hasSignature + signedPreview + previousMessages(数组)
         timestamp = int(time.time() * 1000)
         return (write_string(message[:256])
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
                 + b'\x00'  # hasSignature=false
-                + b'\x00') # signedPreview=false
+                + b'\x00'  # signedPreview=false
+                + write_varint(0))  # previousMessages=空数组
 
     def send_command_payload(self, command: str) -> bytes:
         timestamp = int(time.time() * 1000)
@@ -28,7 +31,8 @@ class Handler(V761Handler):
                 + struct.pack(">q", timestamp)
                 + struct.pack(">q", 0)
                 + b'\x00'  # hasSignature=false
-                + b'\x00') # signedPreview=false
+                + b'\x00'  # signedPreview=false
+                + write_varint(0))  # previousMessages=空数组
 
     def extract_chat_text(self, data: bytes, is_system: bool) -> str:
         try:
@@ -36,8 +40,8 @@ class Handler(V761Handler):
             if is_system:
                 json_str = read_string_from_stream(stream)
             else:
-                stream.read(16)
-                stream.read(1)
+                stream.read(16)  # sender UUID
+                read_varint_from_stream(stream)  # index (varint, 不是1字节)
                 if read_boolean_from_stream(stream):
                     slen = read_varint_from_stream(stream)
                     stream.read(slen)
