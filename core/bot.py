@@ -788,10 +788,15 @@ class MCBot:
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
                    + struct.pack(">q", salt)
-                   + b"\x01"  # hasSignature=true
-                   + write_varint(len(signature)) + signature
-                   + write_varint(0)   # messageCount
-                   + b"\x00\x00\x00")  # acknowledged BitSet(20 bits)
+                   + b"\x01")  # hasSignature=true
+        # 766+ (1.20.5+) 签名是固定256字节buffer，无varint长度前缀（minecraft-data确认）
+        # 旧版本是byte array（varint长度 + 字节）
+        if (self.protocol_version or 0) >= 766:
+            payload += signature
+        else:
+            payload += write_varint(len(signature)) + signature
+        payload += (write_varint(0)   # offset (原messageCount)
+                   + b"\x00\x00\x00")  # acknowledged BitSet(20 bits, 3字节固定)
         # 1.21.5+ (769+) 多一个 checksum 字节
         if (self.protocol_version or 0) >= 769:
             payload += b"\x01"
