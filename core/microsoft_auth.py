@@ -294,12 +294,41 @@ def fetch_certificates(mc_token):
     req.add_header("Authorization", f"Bearer {mc_token}")
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            # 5. Mojang返回签名后的公钥和签名
-            #    用客户端生成的密钥对（Mojang返回的publicKey应和我们发的一致）
+            raw = resp.read()
+            data = json.loads(raw)
+            # 调试：打印响应结构（脱敏，只看key和类型/前80字符）
+            _dbg = {k: (type(v).__name__, (str(v)[:80] + "...") if len(str(v)) > 80 else str(v))
+                    for k, v in data.items()}
+            if "keyPair" in data and isinstance(data["keyPair"], dict):
+                _dbg["keyPair"] = {k: (type(v).__name__, (str(v)[:80] + "...") if len(str(v)) > 80 else str(v))
+                                   for k, v in data["keyPair"].items()}
+            print(f"[正版] certificates响应: {json.dumps(_dbg, ensure_ascii=False)}")
+            print(f"[正版] 发送的公钥base64前40: {pub_b64[:40]}... (spki_der={len(spki_der)}B)")
+
+            # 5. 优先用客户端生成的Ed25519密钥对（Mojang返回的publicKey应和我们发的一致）
+            #    如果Mojang返回的keyPair.publicKey是RSA(>128B解码后)，说明Mojang忽略了我们的公钥，
+            #    此时用我们自己的公钥，但signature可能无效——需要后续验证
+            mojang_pub = data.get("keyPair", {}).get("publicKey")
+            if mojang_pub:
+                # 检查Mojang返回的公钥是不是Ed25519（base64解码后SPKI DER应为44B）
+                try:
+                    _mpub_decoded = _b64.b64decode("".join(mojang_pub.split()))
+                    _is_ed25519 = len(_mpub_decoded) == 44 and _mpub_decoded[:12] == bytes.fromhex("302a300506032b6570032100")
+                except Exception:
+                    _is_ed25519 = False
+                if _is_ed25519:
+                    final_pub = mojang_pub
+                    print(f"[正版] 使用Mojang返回的Ed25519公钥 ({len(_mpub_decoded)}B)")
+                else:
+                    final_pub = pub_b64
+                    print(f"[正版] Mojang返回的公钥非Ed25519({len(_mpub_decoded)}B)，使用客户端生成的公钥")
+            else:
+                final_pub = pub_b64
+                print(f"[正版] Mojang未返回keyPair.publicKey，使用客户端生成的公钥")
+
             return {
                 "privateKey": _b64.b64encode(pkcs8_der).decode(),
-                "publicKey": data.get("keyPair", {}).get("publicKey", pub_b64),
+                "publicKey": final_pub,
                 "publicKeySignature": data["publicKeySignature"],
                 "expiresAt": data["expiresAt"],
             }
