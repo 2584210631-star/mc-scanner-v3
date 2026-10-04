@@ -379,16 +379,16 @@ class MCBot:
                 # 正版服已在EncryptionRequest处设为online，这里保留不覆盖
                 if self.auth_mode == "unknown":
                     self.auth_mode = "offline"
-                # 离线服不发EncryptionRequest，profile_cert不会在登录阶段获取。
-                # 正版账号连离线服时补取聊天签名密钥（enforce-secure-profile需要）。
-                if not self.profile_cert and getattr(self, "msa_token", None):
+                # 仅正版服(auth_mode=online)才获取聊天签名证书和发送Chat Session
+                # 离线服用离线UUID，和正版证书的UUID不匹配，发了会被invalid_public_key_signature踢
+                if self.auth_mode == "online" and not self.profile_cert and getattr(self, "msa_token", None):
                     try:
                         from .microsoft_auth import fetch_certificates
                         self.profile_cert = fetch_certificates(self.msa_token)
                         if self.profile_cert:
-                            print("[正版] 离线服补取聊天签名密钥成功")
+                            print("[正版] 获取聊天签名密钥成功")
                     except Exception as e:
-                        _dprint(f"[正版] 离线服补取certificates失败: {e}")
+                        _dprint(f"[正版] 获取certificates失败: {e}")
                 # Play阶段初始化：发送Client Settings和Player Position（旧版本服务器需要，否则可能超时断开）
                 self._send_play_client_settings()
                 self._send_play_player()
@@ -667,11 +667,13 @@ class MCBot:
     def _send_chat_session(self):
         """760+ (1.19+) 在Play阶段发送Chat Session包，告诉服务器RSA公钥。
         Minecraft聊天签名用RSA-2048+SHA256，公钥294B，Mojang签名256B。
-        只有正版账号（有Mojang签发的profile_cert）才发送。"""
+        只有正版服(auth_mode=online)才发送——离线服用离线UUID，和证书UUID不匹配。"""
         proto = self.protocol_version or 0
         if proto < 760:
             return
         if not self.profile_cert:
+            return
+        if getattr(self, "auth_mode", None) != "online":
             return
         pkts = self.play_packets
         # Chat Session Update包ID按版本分档：
