@@ -665,35 +665,43 @@ class MCBot:
             pass
 
     def _send_chat_session(self):
-        """766+ (1.20.5+) 在Play阶段发送Chat Session包，告诉服务器公钥。
-        只有正版账号（有Mojang签发的profile_cert）才发送。
-        离线账号不发——服务器会认为客户端不支持安全聊天，enforce-secure-profile=false的服直接接受无签名消息。
-        自签名Chat Session反而有害：服务器收到无法验证的密钥后会静默丢弃后续无签名消息。"""
+        """760+ (1.19+) 在Play阶段发送Chat Session包，告诉服务器RSA公钥。
+        Minecraft聊天签名用RSA-2048+SHA256，公钥294B，Mojang签名256B。
+        只有正版账号（有Mojang签发的profile_cert）才发送。"""
         proto = self.protocol_version or 0
-        if proto < 766:
+        if proto < 760:
             return
         if not self.profile_cert:
             return
         pkts = self.play_packets
-        # Chat Session Update包ID按版本分档（自动生成协议表未含此字段）：
+        # Chat Session Update包ID按版本分档：
+        #   760-765 (1.19-1.20.4):  0x06
         #   766-767 (1.20.5-1.21.1): 0x07
         #   768+   (1.21.2+):         0x08
         chat_session_id = pkts.get("sb_chat_session") or pkts.get("chat_session_update")
         if chat_session_id is None:
-            chat_session_id = 0x08 if (self.protocol_version or 0) >= 768 else 0x07
+            if proto >= 768:
+                chat_session_id = 0x08
+            elif proto >= 766:
+                chat_session_id = 0x07
+            else:
+                chat_session_id = 0x06
         try:
-            import base64, struct as _struct
+            import base64, struct as _struct, uuid as _uuid, os as _os
 
-            # 正版证书：用Mojang签发的公钥和签名
+            # 生成随机会话UUID（Chat Session的第一个字段，不是玩家UUID）
+            self._chat_session_uuid = _uuid.uuid4()
+            session_uuid_bytes = self._chat_session_uuid.bytes
+
             exp = self.profile_cert.get("expiresAt", "")
             if exp:
                 from datetime import datetime, timezone
                 exp_ms = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp() * 1000)
             else:
                 exp_ms = 0
+
             def _strip_pem(s):
-                """鲁棒剥离PEM头尾，返回纯base64字符串（处理\\n/\\r\\n/无换行等各种情况）"""
-                s = "".join(s.split())  # 去掉所有空白
+                s = "".join(s.split())
                 if "-----BEGIN" in s:
                     start = s.find("KEY-----") + len("KEY-----")
                     end = s.find("-----END")
@@ -701,31 +709,25 @@ class MCBot:
                         s = s[start:end]
                 return s
 
+            # publicKey: Mojang返回的RSA公钥(PEM标签写错成"RSA PUBLIC KEY"但内容是PKIX/SPKI DER, 294B)
             pub_b64 = _strip_pem(self.profile_cert["publicKey"])
             pub_b64 += "=" * (-len(pub_b64) % 4)
             pub = base64.b64decode(pub_b64)
-            sig_b64 = _strip_pem(self.profile_cert["publicKeySignature"])
+
+            # signature: 优先用V2(包含玩家UUID的新版签名)，兜底用legacy
+            sig_field = self.profile_cert.get("publicKeySignatureV2") or self.profile_cert.get("publicKeySignature", "")
+            sig_b64 = _strip_pem(sig_field)
             sig_b64 += "=" * (-len(sig_b64) % 4)
             sig = base64.b64decode(sig_b64)
 
-            # 证书格式校验：Ed25519公钥DER≈44B，Mojang RSA-2048签名=256B
-            # 过大说明证书算法不对（可能是RSA公钥），发了会被服务器踢。
-            # 置空profile_cert，后续send_chat自动用无签名聊天（enforce-secure-profile=false的服可正常发消息）
-            if len(pub) > 128 or len(sig) > 320:
-                _raw_pub = str(self.profile_cert.get("publicKey", ""))[:80]
-                _raw_sig = str(self.profile_cert.get("publicKeySignature", ""))[:80]
-                print(f"[聊天] 证书格式异常(pub={len(pub)}B,sig={len(sig)}B)，"
-                      f"禁用签名聊天改用无签名。 pub_raw={_raw_pub!r} sig_raw={_raw_sig!r}")
-                self.profile_cert = None
-                return
-
-            # chat_session_update格式: UUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
-            payload = self._uuid_bytes()
+            # chat_session_update格式: sessionUUID + expireTime(i64) + publicKey(bytes) + signature(bytes)
+            payload = session_uuid_bytes
             payload += _struct.pack(">q", exp_ms)
             payload += write_varint(len(pub)) + pub
             payload += write_varint(len(sig)) + sig
             self.conn.send_packet(chat_session_id, payload)
-            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, len={len(payload)}, pub={len(pub)}B, sig={len(sig)}B, 正版)")
+            print(f"[聊天] Chat Session已发送(proto={proto}, pkt=0x{chat_session_id:02x}, "
+                  f"len={len(payload)}, pub={len(pub)}B, sig={len(sig)}B, RSA)")
         except Exception as e:
             print(f"[聊天] Chat Session发送失败: {e}")
 
@@ -763,33 +765,25 @@ class MCBot:
         self.conn.send_packet(chat_id, payload)
 
     def _build_signed_chat(self, message: str) -> bytes:
-        """构造带Ed25519签名的聊天包（759+，enforce-secure-profile服务器需要）。
-        使用纯Python Ed25519实现，零外部依赖。"""
-        import base64, os, struct, time as _time
-        from .ed25519 import sign as ed25519_sign, load_private_key_der
+        """构造带RSA签名的聊天包（759+，enforce-secure-profile服务器需要）。
+        Minecraft聊天签名用RSA-2048+SHA256 PKCS#1 v1.5，签名256字节。
+        使用pycryptodome（项目已依赖，CFB8加密也用它）。"""
+        import os, struct, time as _time
+        from Crypto.PublicKey import RSA
+        from Crypto.Signature import pkcs1_15
+        from Crypto.Hash import SHA256
 
-        # 加载私钥（鲁棒剥PEM头，补base64 padding，解析DER得到32字节seed）
-        priv_b64 = self.profile_cert["privateKey"]
-        priv_b64 = "".join(priv_b64.split())
-        if "-----BEGIN" in priv_b64:
-            start = priv_b64.find("KEY-----") + len("KEY-----")
-            end = priv_b64.find("-----END")
-            if end > start:
-                priv_b64 = priv_b64[start:end]
-        priv_b64 += "=" * (-len(priv_b64) % 4)
-        der = base64.b64decode(priv_b64)
-        seed = load_private_key_der(der)
+        # 加载RSA私钥（Mojang返回PKCS#1 PEM格式"-----BEGIN RSA PRIVATE KEY-----"）
+        rsa_key = RSA.import_key(self.profile_cert["privateKey"])
 
         msg = message[:256].encode("utf-8")
         timestamp = int(_time.time() * 1000)
         salt = int.from_bytes(os.urandom(8), "big", signed=True)
 
-        # 签名内容：message长度(varint) + message + timestamp(long) + salt(long)
-        sign_data = write_varint(len(msg)) + msg + struct.pack(">q", timestamp) + struct.pack(">q", salt)
-        signature = ed25519_sign(seed, sign_data)
-        # 766+ MessageSignature固定256字节，Ed25519签名64字节，补零到256
-        if len(signature) < 256:
-            signature = signature + b"\x00" * (256 - len(signature))
+        # 签名数据：sender UUID(16) + timestamp(8 BE) + salt(8 BE) + message(raw UTF-8)
+        sign_data = self._uuid_bytes() + struct.pack(">q", timestamp) + struct.pack(">q", salt) + msg
+        h = SHA256.new(sign_data)
+        signature = pkcs1_15.new(rsa_key).sign(h)  # RSA-2048签名固定256字节
 
         payload = (write_string(message[:256])
                    + struct.pack(">q", timestamp)
@@ -797,7 +791,7 @@ class MCBot:
                    + b"\x01"  # hasSignature=true
                    + write_varint(len(signature)) + signature
                    + write_varint(0)   # messageCount
-                   + b"\x00\x00\x00")  # acknowledged BitSet
+                   + b"\x00\x00\x00")  # acknowledged BitSet(20 bits)
         # 1.21.5+ (769+) 多一个 checksum 字节
         if (self.protocol_version or 0) >= 769:
             payload += b"\x01"
