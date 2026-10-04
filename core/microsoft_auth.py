@@ -252,84 +252,25 @@ def join_server(mc_token, uuid, server_id_hash):
 
 
 def fetch_certificates(mc_token):
-    """从Mojang获取聊天签名用的Ed25519证书。
-    客户端生成Ed25519密钥对，将公钥(SubjectPublicKeyInfo DER)发给Mojang签名。
-    返回 {privateKey(PEM), publicKey(PEM), publicKeySignature(base64), expiresAt} 或 None。
+    """从Mojang获取聊天签名用的RSA密钥对（Minecraft 1.19+聊天签名用RSA-2048+SHA256）。
+    返回 {privateKey(PEM), publicKey(PEM), publicKeySignature(base64), publicKeySignatureV2(base64), expiresAt} 或 None。
     """
-    import os, base64 as _b64
-    try:
-        from .ed25519 import seed_to_public
-    except ImportError:
-        seed_to_public = None
-
-    # 1. 客户端生成Ed25519密钥对
-    seed = os.urandom(32)
-    if seed_to_public:
-        pub_raw = seed_to_public(seed)  # 32字节
-    else:
-        # 兜底：用cryptography生成（如果可用）
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption
-        _priv = Ed25519PrivateKey.from_private_bytes(seed)
-        pub_raw = _priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
-
-    # 2. 构造SubjectPublicKeyInfo DER (Ed25519, 44字节)
-    #    30 2a 30 05 06 03 2b 65 70 03 21 00 <32B pub>
-    spki_der = bytes.fromhex("302a300506032b6570032100") + pub_raw
-
-    # 3. 构造PKCS#8 DER (Ed25519私钥, 48字节)
-    #    30 2e 02 01 00 30 05 06 03 2b 65 70 04 22 04 20 <32B seed>
-    pkcs8_der = bytes.fromhex("302e020100300506032b657004220420") + seed
-
-    # 4. 公钥base64编码，发给Mojang签名
-    pub_b64 = _b64.b64encode(spki_der).decode()
-
-    req_body = json.dumps({"publicKey": pub_b64}).encode()
     req = urllib.request.Request(
         "https://api.minecraftservices.com/player/certificates",
         method="POST",
-        data=req_body,
+        data=b"{}",
         headers={"Content-Type": "application/json"}
     )
     req.add_header("Authorization", f"Bearer {mc_token}")
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            raw = resp.read()
-            data = json.loads(raw)
-            # 调试：打印响应结构（脱敏，只看key和类型/前80字符）
-            _dbg = {k: (type(v).__name__, (str(v)[:80] + "...") if len(str(v)) > 80 else str(v))
-                    for k, v in data.items()}
-            if "keyPair" in data and isinstance(data["keyPair"], dict):
-                _dbg["keyPair"] = {k: (type(v).__name__, (str(v)[:80] + "...") if len(str(v)) > 80 else str(v))
-                                   for k, v in data["keyPair"].items()}
-            print(f"[正版] certificates响应: {json.dumps(_dbg, ensure_ascii=False)}")
-            print(f"[正版] 发送的公钥base64前40: {pub_b64[:40]}... (spki_der={len(spki_der)}B)")
-
-            # 5. 优先用客户端生成的Ed25519密钥对（Mojang返回的publicKey应和我们发的一致）
-            #    如果Mojang返回的keyPair.publicKey是RSA(>128B解码后)，说明Mojang忽略了我们的公钥，
-            #    此时用我们自己的公钥，但signature可能无效——需要后续验证
-            mojang_pub = data.get("keyPair", {}).get("publicKey")
-            if mojang_pub:
-                # 检查Mojang返回的公钥是不是Ed25519（base64解码后SPKI DER应为44B）
-                try:
-                    _mpub_decoded = _b64.b64decode("".join(mojang_pub.split()))
-                    _is_ed25519 = len(_mpub_decoded) == 44 and _mpub_decoded[:12] == bytes.fromhex("302a300506032b6570032100")
-                except Exception:
-                    _is_ed25519 = False
-                if _is_ed25519:
-                    final_pub = mojang_pub
-                    print(f"[正版] 使用Mojang返回的Ed25519公钥 ({len(_mpub_decoded)}B)")
-                else:
-                    final_pub = pub_b64
-                    print(f"[正版] Mojang返回的公钥非Ed25519({len(_mpub_decoded)}B)，使用客户端生成的公钥")
-            else:
-                final_pub = pub_b64
-                print(f"[正版] Mojang未返回keyPair.publicKey，使用客户端生成的公钥")
-
+            data = json.loads(resp.read())
+            kp = data["keyPair"]
             return {
-                "privateKey": _b64.b64encode(pkcs8_der).decode(),
-                "publicKey": final_pub,
-                "publicKeySignature": data["publicKeySignature"],
+                "privateKey": kp["privateKey"],
+                "publicKey": kp["publicKey"],
+                "publicKeySignature": data.get("publicKeySignature", ""),
+                "publicKeySignatureV2": data.get("publicKeySignatureV2", data.get("publicKeySignature", "")),
                 "expiresAt": data["expiresAt"],
             }
     except Exception as e:
