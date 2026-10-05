@@ -1,8 +1,8 @@
 @echo off
 cd /d "%~dp0"
-title MC Scanner v3-3.1
+title MC Scanner v3.6.3
 
-echo Starting MC Scanner v3-3.1...
+echo Starting MC Scanner v3.6.3...
 echo.
 
 python --version >nul 2>&1

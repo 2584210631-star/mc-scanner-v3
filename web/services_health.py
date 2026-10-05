@@ -152,7 +152,7 @@ def _health_monitor_loop(once=False):
                             )
                             conn.commit()
                         except Exception as e:
-                            _dprint(f"[健康监控] 写popularity表失败: {e}")
+                            _log(f"[健康监控] 写popularity表失败: {e}")
                         finally:
                             if conn:
                                 conn.close()
@@ -240,8 +240,9 @@ def _health_monitor_loop(once=False):
                         save_favorites(favs)
                     except Exception as e:
                         _log(f"[健康监控] {ip}:{port} 写回favorites失败: {e}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    # 不能静默吞掉：否则单台服务器出错会让后续状态记录被整段跳过
+                    _log(f"[健康监控] {ip}:{port} 处理异常: {e}")
 
             if targets:
                 asyncio.run(_probe_stream())

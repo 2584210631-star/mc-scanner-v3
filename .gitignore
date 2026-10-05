@@ -54,6 +54,8 @@ rescan*.py
 *.json
 !config.example.json
 !package.json
+# PWA 清单是前端资源，不是运行期配置，必须入库（否则 /manifest.json 永远 404）
+!web/static/manifest.json
 *.txt
 !requirements.txt
 !targets.txt
