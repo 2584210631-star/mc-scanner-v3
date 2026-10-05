@@ -91,6 +91,8 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
     done = 0
     open_count = 0
     lock = threading.Lock()
+    # 进度更新步长：约每1%更新一次，小目标逐个更，大目标封顶500（避免打印/回调过频）
+    _progress_step = max(1, min(500, total // 100)) if total else 1
 
     controller = None
     if adaptive and profile.adaptive and rate > 0:
@@ -169,10 +171,10 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
                     # 断点续扫
                     if progress_store is not None:
                         progress_store.done((result.ip, result.port))
-                    if show_progress and (done % 500 == 0 or done == total):
+                    if show_progress and (done % _progress_step == 0 or done == total):
                         pct = done * 100 // total if total else 0
                         print(f"[*] 进度: {done}/{total} ({pct}%) 开放: {open_count}")
-                    if progress_callback and (done % 500 == 0 or done == total):
+                    if progress_callback and (done % _progress_step == 0 or done == total):
                         try:
                             progress_callback(done, total, open_count)
                         except Exception:
