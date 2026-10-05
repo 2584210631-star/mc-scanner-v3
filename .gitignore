@@ -49,6 +49,10 @@ stay_*.py
 verified_*.json
 cracked_*.json
 rescan*.py
+# 以下源文件被上面的通配命中但必须入库（删了再加会静默消失）
+!service/warn_service.py
+!scanner/rescanner.py
+!storage/rescan.py
 
 # 通用忽略，白名单必要配置
 *.json

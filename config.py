@@ -106,6 +106,11 @@ def load_config(path: str = None) -> dict:
         except (json.JSONDecodeError, OSError) as e:
             print(f"[!] 配置文件读取失败，使用默认配置: {e}")  # bootstrap, logger may not ready
     cfg = _apply_env_overrides(cfg)
+    # 统一路径基准：相对 db_path 锚定到 config.json 所在目录（与 favorites.json 一致），
+    # 避免从别的目录运行时 DB 落在 CWD 而收藏在仓库目录。
+    _db = cfg.get("db_path") or "mcscanner.db"
+    if not os.path.isabs(_db):
+        cfg["db_path"] = os.path.join(os.path.dirname(config_path), _db)
     _GLOBAL_CFG = cfg
     _CONFIG_PATH = config_path
     return cfg
@@ -140,6 +145,16 @@ def save_config(cfg: dict = None, path: str = None) -> bool:
         # 合并到完整配置，避免部分保存覆盖其他字段
         _GLOBAL_CFG.update(cfg)
     data = dict(_GLOBAL_CFG)
+    # 保存时把仓库目录下的绝对 db_path 转回相对路径，避免烤进 config.json
+    _db = data.get("db_path", "")
+    if _db and os.path.isabs(_db):
+        _repo_dir = os.path.dirname(os.path.abspath(__file__))
+        try:
+            _rel = os.path.relpath(_db, _repo_dir)
+            if not _rel.startswith(".."):
+                data["db_path"] = _rel
+        except ValueError:
+            pass
     target = path or _CONFIG_PATH or "config.json"
     try:
         with open(target, "w", encoding="utf-8") as f:

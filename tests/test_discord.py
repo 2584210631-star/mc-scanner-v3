@@ -6,7 +6,6 @@ v3.2.1 新增：Discord Webhook 通知测试。
 """
 import sys
 import os
-import time
 import unittest
 from unittest.mock import patch, MagicMock
 

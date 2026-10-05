@@ -1,12 +1,17 @@
+# === 必需依赖 ===
+# flask 已 vendor 在 libs/，此处仅作声明（从零部署时可用）
 flask>=2.0.0
 
-# 正版进服加密（AES/CFB8 + RSA，与 Minecraft Java 版一致）
-# 不装则正版路径走 pycryptodome 兜底，可能不兼容
+# === 正版账号进服（二选一，推荐 pycryptodome） ===
+# 纯 Python 实现，Termux/手机等环境可用；项目默认走此后端
+pycryptodome>=3.19.0
+# 原生实现，性能更好；部分环境装不上时用上面的 pycryptodome 兜底
 cryptography>=41.0.0
 
-# 兜底加密后端（纯 Python；Termux/手机等装不了 cryptography 时的可用方案）
-pycryptodome>=3.19.0
-
-# 性能加速（可选，安装后自动启用）
+# === 可选性能加速（不装自动降级，不影响功能） ===
 uvloop>=0.19.0; sys_platform != 'win32'   # Linux/Mac 异步事件循环加速
 pysimdjson>=5.0.0                          # SIMD JSON 解析加速（SLP 响应解析）
+
+# === 开发/测试（可选） ===
+# pytest>=7.0.0   # 运行测试
+# ruff>=0.1.0     # 静态检查

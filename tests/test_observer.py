@@ -17,9 +17,7 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'libs'))
 
-from core.buffer import (read_varint_from_stream, read_string_from_stream,
-                         write_string, write_uuid, write_varint)
-from core.bot import MCBot
+from core.buffer import (read_varint_from_stream, write_string, write_uuid, write_varint)
 from tests.mock_server import SocketStream
 from web.observer_session import ObserverSession
 from web.state import observer_sessions, observer_lock

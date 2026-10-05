@@ -10,7 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.rcon import RCONClient, RCONError, RCON_TYPE_LOGIN, RCON_TYPE_COMMAND
+from core.rcon import RCONClient, RCONError, RCON_TYPE_COMMAND
 
 
 class TestRCONClient(unittest.TestCase):

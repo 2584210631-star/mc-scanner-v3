@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Health monitor loop."""
-import os, json, time, sqlite3
+import os, json, sqlite3
 from datetime import datetime, timezone
 import config
 from core.notifier import _html_escape

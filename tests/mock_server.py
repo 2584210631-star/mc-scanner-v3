@@ -17,7 +17,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.buffer import write_varint, write_string, read_varint_from_stream, read_string_from_stream
+from core.buffer import write_varint, write_string, read_varint_from_stream
 from core.conn import PROTO_STATE_STATUS, PROTO_STATE_LOGIN
 
 

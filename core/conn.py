@@ -348,9 +348,9 @@ class MCConnection:
                     if len(decompressed) > 8 * 1024 * 1024:
                         self.close()
                         raise ValueError("解压后数据过大")
-                except zlib.error:
+                except zlib.error as e:
                     self.close()
-                    raise ValueError("压缩包解压超限或损坏")
+                    raise ValueError("压缩包解压超限或损坏") from e
         else:
             decompressed = raw
         buf = io.BytesIO(decompressed)
