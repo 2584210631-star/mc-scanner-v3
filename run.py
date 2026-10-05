@@ -22,13 +22,6 @@ if __name__ == "__main__":
         print("[!] 缺少 flask，正在安装...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "flask", "--quiet"])
 
-    # 可选加速依赖（uvloop/pysimdjson）：用户自行 pip install，代码自动降级
-    for _pkg in ("uvloop", "simdjson"):
-        try:
-            __import__(_pkg)
-        except Exception:
-            pass
-
     from web.app import run
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
     run(port=port)

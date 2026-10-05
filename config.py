@@ -145,17 +145,18 @@ def save_config(cfg: dict = None, path: str = None) -> bool:
         # 合并到完整配置，避免部分保存覆盖其他字段
         _GLOBAL_CFG.update(cfg)
     data = dict(_GLOBAL_CFG)
-    # 保存时把仓库目录下的绝对 db_path 转回相对路径，避免烤进 config.json
+    target = path or _CONFIG_PATH or "config.json"
+    # 保存时把配置文件所在目录下的绝对 db_path 转回相对路径，避免烤进 config.json
+    # 基准必须与 load_config 一致（都用配置文件自己的目录），否则子目录配置会叠层
     _db = data.get("db_path", "")
     if _db and os.path.isabs(_db):
-        _repo_dir = os.path.dirname(os.path.abspath(__file__))
+        _base = os.path.dirname(os.path.abspath(target))
         try:
-            _rel = os.path.relpath(_db, _repo_dir)
+            _rel = os.path.relpath(_db, _base)
             if not _rel.startswith(".."):
                 data["db_path"] = _rel
         except ValueError:
             pass
-    target = path or _CONFIG_PATH or "config.json"
     try:
         with open(target, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
