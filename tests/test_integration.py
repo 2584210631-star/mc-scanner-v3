@@ -5,7 +5,6 @@
 """
 import sys
 import os
-import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,7 +13,7 @@ from scanner.targets import parse_targets, count_targets, parse_port_spec, dedup
 from scanner.exclude import Excluder
 from scanner.portscan import check_port
 from core.buffer import write_varint, read_varint, write_string, read_string, offline_uuid
-from core.protocol import get_version_name, get_chat_format, PROTOCOL_TO_VERSION
+from core.protocol import get_version_name, get_chat_format
 
 
 class TestIntegration(unittest.TestCase):

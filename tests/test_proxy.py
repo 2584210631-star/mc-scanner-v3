@@ -88,7 +88,8 @@ class TestProxyManager(unittest.TestCase):
         p = self.manager.get_proxy()
         before = p.fail_count
         self.manager.mark_failed()
-        # 当前代理的失败计数应增加
+        # mark_failed 会自增当前代理的 fail_count（p 即当前代理对象，不受轮换影响）
+        self.assertEqual(p.fail_count, before + 1)
         current = self.manager.get_proxy()
         self.assertIsNotNone(current)
 

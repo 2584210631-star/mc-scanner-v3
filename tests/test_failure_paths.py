@@ -6,7 +6,6 @@
 """
 import sys
 import os
-import time
 import tempfile
 import threading
 import unittest

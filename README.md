@@ -136,7 +136,7 @@
 | 端口扫描 / SLP 信息探测 | ✅ 可靠 | 主路径，覆盖各版本 |
 | 离线（offline）服登录 + 发消息 | ✅ 可靠 | 安全提醒的主要场景 |
 | 正版（online）服登录 | ✅ 可用 | 需先完成 Microsoft OAuth |
-| 正版服**发送聊天** | ✅ 可用 | 正版登录后自动获取Ed25519证书，内置纯Python签名实现（零外部依赖）；签名失败自动回退无签名模式 |
+| 正版服**发送聊天** | ✅ 可用 | 正版登录后自动获取Mojang签发的RSA证书，用 pycryptodome 做 RSA-2048+SHA256 签名；签名失败自动回退无签名模式 |
 | Forge / Fabric / NeoForge 模组服 | ⚠️ 部分 | 以原版姿态可通过部分验收；强制模组校验的服无法进入 |
 | 1.12.2 等旧版本 | ⚠️ 尽力 | 协议表已覆盖并重点验证，但边缘情况较多 |
 | 通用 Minecraft 客户端 | ❌ 非目标 | 不做完整游戏操作 / 真实签名 / 模组加载 |
@@ -151,8 +151,10 @@
 ```bash
 git clone https://github.com/2584210631-star/mc-scanner-v3.git
 cd mc-scanner-v3
-# 依赖已自带在 libs/，无需 pip install 即可运行
-# 如需额外依赖（如 masscan）可执行：pip install -r requirements.txt
+# 扫描/SLP探测/离线服警告：依赖已自带在 libs/，无需 pip install
+# 以正版账号登录进服（可选）：需额外安装 pycryptodome
+#   pip install pycryptodome
+# 如需其他额外依赖（如 masscan）可执行：pip install -r requirements.txt
 cp config.example.json config.json   # 可选
 ```
 
@@ -288,10 +290,12 @@ python3 tools/gen_packets.py --download
 - 修复 1.21 (proto 767) 观察者收不到聊天消息：`extract_chat_text` 错误跳过 `globalIndex` 字段（该字段 1.21.2/768 才加入），导致解析字节错位、文本为空。消息实际一直在广播，只是观察者解析不出来
 - 撤掉针对错误诊断的 workaround：离线账号 `/me` 兜底、自签名 Chat Session（对离线账号有害，服务器收到无法验证的密钥后会静默丢弃后续无签名消息）
 
-**正版签名聊天零依赖**
-- 新增 `core/ed25519.py`：纯 Python Ed25519 签名实现（seed_to_public / sign / load_private_key_der），零外部依赖，和 cryptography 库结果完全一致（已交叉验证）
-- `_build_signed_chat` 改用纯 Python 实现，去掉 `cryptography` 库依赖，Termux 等装不上 cryptography 的环境也能用正版账号签名聊天
-- 修复 Chat Session / 签名聊天 base64 解码 `Incorrect padding`：Mojang 返回的 publicKey / publicKeySignature / privateKey 可能缺末尾 `=` padding，解码前自动补全
+**正版签名聊天（RSA-2048+SHA256）**
+- Minecraft 1.19+ 聊天签名实际用 **RSA-2048 + SHA256 PKCS#1 v1.5**（非 Ed25519），Mojang `/player/certificates` 返回 RSA 密钥对
+- `_build_signed_chat` 用 pycryptodome 做 RSA-SHA256 签名，签名数据 = sender UUID(16) + timestamp(8) + salt(8) + message(UTF-8)
+- 766+ (1.20.5+) 签名字段是固定 256 字节 buffer，无 varint 长度前缀
+- 离线服不获取证书、不发 Chat Session（离线 UUID 与正版证书 UUID 不匹配，发了会被 invalid_public_key_signature 踢）
+- 修复 Chat Session / 签名聊天 base64 解码 `Incorrect padding`：Mojang 返回的密钥可能缺末尾 `=` padding，解码前自动补全
 
 **认证状态机加固**
 - `auth_mode` 在 `__init__` 初始化为 `unknown`，Play 成功时仅 unknown 才标 offline（正版账号走过 Encryption 后保留 online，不再被覆盖）

@@ -4,10 +4,8 @@
 - PLAYER_CHAT 包开头新增 Global Index (VarInt)，然后才是 Sender UUID
 （实现与 v775 一致，因继承关系不能 import v775，这里内联）"""
 from __future__ import annotations
-import struct, time
 from .v766 import Handler as V766Handler
-from ..buffer import (BytesStream, write_string, write_varint,
-                      read_varint_from_stream, read_string_from_stream,
+from ..buffer import (BytesStream, read_varint_from_stream, read_string_from_stream,
                       read_boolean_from_stream, read_uuid_from_stream)
 
 

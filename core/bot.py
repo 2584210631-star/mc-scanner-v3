@@ -285,8 +285,8 @@ class MCBot:
                                 enc_secret = bytes(cipher.doFinal(shared_secret))
                                 enc_vtoken = bytes(cipher.doFinal(vtoken))
                                 _dprint(f"[正版调试] RSA加密成功(pyjnius): enc_secret_len={len(enc_secret)}, enc_vtoken_len={len(enc_vtoken)}")
-                            except ImportError:
-                                raise BotError(BotErrorCode.MISSING_CRYPTO, "当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK")
+                            except ImportError as e:
+                                raise BotError(BotErrorCode.MISSING_CRYPTO, "当前环境不支持正版服加密，请安装pycryptodome（pip install pycryptodome）或使用APK") from e
                         # 计算server ID hash（Java风格有符号十六进制，和Minecraft服务器一致）
                         import hashlib as _hl
                         _hash_bytes = _hl.sha1(server_id.encode() + shared_secret + pubkey_bytes).digest()
@@ -317,8 +317,8 @@ class MCBot:
                                     _cfg.set("msa_accounts", _accounts)
                                     _cfg.set("mc_access_token", self.msa_token)
                                     _cfg.save_config()
-                                except Exception:
-                                    pass
+                                except Exception as _e:
+                                    _dprint(f"[正版] 刷新token后保存配置失败: {_e}")
                                 _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
                                 print(f"[正版] 刷新后joinServer: {'成功' if _join_ok else '失败'}")
                         if not _join_ok:
@@ -689,7 +689,7 @@ class MCBot:
             else:
                 chat_session_id = 0x06
         try:
-            import base64, struct as _struct, uuid as _uuid, os as _os
+            import base64, struct as _struct, uuid as _uuid
 
             # 生成随机会话UUID（Chat Session的第一个字段，不是玩家UUID）
             self._chat_session_uuid = _uuid.uuid4()
@@ -697,7 +697,7 @@ class MCBot:
 
             exp = self.profile_cert.get("expiresAt", "")
             if exp:
-                from datetime import datetime, timezone
+                from datetime import datetime
                 exp_ms = int(datetime.fromisoformat(exp.replace("Z", "+00:00")).timestamp() * 1000)
             else:
                 exp_ms = 0

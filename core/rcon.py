@@ -46,7 +46,7 @@ class RCONClient:
         except Exception as e:
             self.sock.close()
             self.sock = None
-            raise RCONError(f"连接失败: {e}")
+            raise RCONError(f"连接失败: {e}") from e
 
         # 发送认证包并读取应答。
         # 注意：这里必须把超时/断连一并包成 RCONError——TCP 连得上但不说话的
@@ -60,7 +60,7 @@ class RCONClient:
             raise
         except OSError as e:   # 含 socket.timeout / TimeoutError / ConnectionError
             self.close()
-            raise RCONError(f"RCON 握手失败: {e}")
+            raise RCONError(f"RCON 握手失败: {e}") from e
         if resp_type != RCON_TYPE_AUTH_RESPONSE or resp_id == -1:
             self.close()
             raise RCONError("RCON 认证失败（密码错误）")

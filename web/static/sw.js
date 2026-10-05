@@ -1,5 +1,6 @@
 // MC Scanner PWA Service Worker
-const CACHE_NAME = 'mcscanner-v3';
+// 发版时更新版本号，activate 阶段会清理旧缓存（cache-first 否则用户长时间拿旧页面）
+const CACHE_NAME = 'mcscanner-v3-v3.6.3';
 const ASSETS = ['/', '/static/icon-192.png', '/static/icon-512.png'];
 
 self.addEventListener('install', e => {

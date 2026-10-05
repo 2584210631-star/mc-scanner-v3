@@ -6,14 +6,13 @@ v3.2.1 新增：分布式任务分片测试。
 """
 import sys
 import os
-import json
 import tempfile
 import shutil
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from distributed.shard import shard_cidr, shard_target_file, ShardManager
+from distributed.shard import shard_cidr, ShardManager
 
 
 class TestShardCidr(unittest.TestCase):

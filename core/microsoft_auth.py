@@ -185,10 +185,10 @@ def xsts_auth(xbox_token):
     except urllib.error.HTTPError as e:
         r = json.loads(e.read().decode())
         if r.get("XErr") == 2148916233:
-            raise Exception("该微软账号没有Xbox账号，需要先登录一次Xbox")
+            raise Exception("该微软账号没有Xbox账号，需要先登录一次Xbox") from e
         if r.get("XErr") == 2148916235:
-            raise Exception("账号被封禁或需要验证年龄")
-        raise Exception(f"XSTS认证失败: {r}")
+            raise Exception("账号被封禁或需要验证年龄") from e
+        raise Exception(f"XSTS认证失败: {r}") from e
     return r["Token"]
 
 
@@ -216,8 +216,8 @@ def mc_profile(mc_token):
         with urllib.request.urlopen(req, timeout=15) as resp:
             r = json.loads(resp.read().decode())
         return {"uuid": r["id"], "name": r["name"]}
-    except urllib.error.HTTPError:
-        raise Exception("该账号未购买Minecraft")
+    except urllib.error.HTTPError as e:
+        raise Exception("该账号未购买Minecraft") from e
 
 
 def full_login_flow(msa_token):
