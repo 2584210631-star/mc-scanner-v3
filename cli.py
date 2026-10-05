@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-MC Scanner v3.3 - 综合 Minecraft 服务器扫描器
+MC Scanner - 综合 Minecraft 服务器扫描器（版本号见 config.__version__）
 整合 V1 功能完整性与 V2 架构优势的超越版。
 
 子命令:
@@ -26,7 +26,16 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _base_dir)
+
+# 加载本地依赖（vendored libs，离线可用），与 run.py 保持一致。
+# 少了这一步，`python3 cli.py web` 会直接 ModuleNotFoundError: flask，
+# 且 libs 里的 uvloop / simdjson 加速会被静默跳过。
+_libs_dir = os.path.join(_base_dir, 'libs')
+if os.path.isdir(_libs_dir):
+    sys.path.insert(0, _libs_dir)
+
 import config
 import logger
 
@@ -760,7 +769,10 @@ def cmd_commands(args, cfg):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MC Scanner v3.3 - 综合 Minecraft 服务器扫描器")
+    parser = argparse.ArgumentParser(
+        description=f"MC Scanner v{config.__version__} - 综合 Minecraft 服务器扫描器")
+    parser.add_argument("--version", action="version",
+                        version=f"MC Scanner v{config.__version__}")
     parser.add_argument("-c", "--config", help="配置文件路径")
     parser.add_argument("--db", help="数据库路径")
     sub = parser.add_subparsers(dest="cmd")

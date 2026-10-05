@@ -6,6 +6,9 @@
 import json
 import os
 
+# 版本号单一来源：CLI、Web 面板、启动脚本都从这里取，避免各处写死导致不一致。
+__version__ = "3.6.3"
+
 DEFAULT_CONFIG = {
     "username": "SecurityBot",
     "messages": None,
@@ -87,6 +90,14 @@ def load_config(path: str = None) -> dict:
 
     cfg = DEFAULT_CONFIG.copy()
     config_path = path or "config.json"
+    # 默认配置在「当前目录」找不到时，回退到脚本所在目录。
+    # 否则 `python3 /path/to/cli.py` 从别的目录执行会静默用默认值，
+    # 用户以为自己写的 config.json 生效了，实际全被忽略。
+    # 显式 -c 传入的路径不回退；当前目录优先级不变。
+    if path is None and not os.path.exists(config_path):
+        _repo_cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        if os.path.exists(_repo_cfg):
+            config_path = _repo_cfg
     if os.path.exists(config_path):
         try:
             with open(config_path, 'r', encoding='utf-8') as f:

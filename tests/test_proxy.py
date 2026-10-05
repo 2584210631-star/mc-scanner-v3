@@ -93,10 +93,15 @@ class TestProxyManager(unittest.TestCase):
         self.assertIsNotNone(current)
 
     def test_empty_manager(self):
-        empty = ProxyManager(proxy_file="/tmp/nonexistent_proxies.txt")
-        count = empty.load_from_file()
-        self.assertEqual(count, 0)
-        self.assertIsNone(empty.get_proxy())
+        # 用一次性临时目录，避免硬编码路径被上一次运行的残留文件污染。
+        # auto_fetch=False：构造函数默认会从 ProxyScrape 拉代理并写进 proxy_file，
+        # 有网环境下会把“不存在的文件”直接创建出几百条代理，断言必然失败。
+        with tempfile.TemporaryDirectory() as d:
+            missing = os.path.join(d, "proxies.txt")
+            empty = ProxyManager(proxy_file=missing, auto_fetch=False)
+            count = empty.load_from_file()
+            self.assertEqual(count, 0)
+            self.assertIsNone(empty.get_proxy())
 
 
 if __name__ == "__main__":
