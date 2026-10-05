@@ -97,11 +97,16 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
     controller = None
     if adaptive and profile.adaptive and rate > 0:
         controller = AdaptiveRateController(profile, event_cb=event_cb)
+        # 从用户配置的速率开始（不超过profile上限），而不是profile.rate
+        # 否则小扫描窗口未满100条时控制器永远不提速，用户配的速率被完全忽略
+        controller._current_rate = min(rate, profile.effective_max_rate())
 
     if show_progress:
+        _eff_rate = controller.rate if controller is not None else rate
         print(f"[*] 开始扫描 {total} 个目标，并发数 {max_workers}，"
               f"模式 {profile.mode}"
-              + (f"，限速 {rate}/s" if rate > 0 else ""))
+              + (f"，限速 {_eff_rate}/s" if _eff_rate > 0 else "")
+              + ("（自适应）" if controller is not None else ""))
         if do_shuffle:
             print("[*] 已随机化扫描顺序（防顺序扫描特征）")
 
@@ -132,12 +137,14 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
                 last_submit = time.time()
             futures[executor.submit(check_port, ip, port, timeout)] = (ip, port)
 
-        # 初始填充一批
+        # 初始填充一批（用较小批次让主循环尽早开始处理已完成的任务，
+        # 避免限速下提交全部目标要等很久才看到进度）
+        _initial_batch = min(BATCH_SIZE, max_workers * 2)
         for ip, port in target_iter:
             if stop_event and stop_event.is_set():
                 break
             _submit_one(ip, port)
-            if len(futures) >= BATCH_SIZE:
+            if len(futures) >= _initial_batch:
                 break
 
         while futures:
