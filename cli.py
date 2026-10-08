@@ -66,12 +66,21 @@ def save_results(results, output_file: str, fmt: str = "json"):
             rows.append({'data': str(r)})
     if fmt == 'csv' or output_file.endswith('.csv'):
         import csv
-        if rows:
-            keys = list(rows[0].keys())
-            with open(output_file, 'w', newline='', encoding='utf-8-sig') as f:
-                w = csv.DictWriter(f, fieldnames=keys)
-                w.writeheader()
-                w.writerows(rows)
+        if not rows:
+            # 原来 rows 为空时也会打印"已保存"，但实际没写文件，误导用户
+            logger.warning(f"[!] 无结果，未写入: {output_file}")
+            return
+        # 各行键可能不一致（不同协议/状态返回的字段有差异），取并集，
+        # 否则 DictWriter 遇到首行没有的键会抛 ValueError
+        keys = []
+        for row in rows:
+            for k in row.keys():
+                if k not in keys:
+                    keys.append(k)
+        with open(output_file, 'w', newline='', encoding='utf-8-sig') as f:
+            w = csv.DictWriter(f, fieldnames=keys, extrasaction='ignore')
+            w.writeheader()
+            w.writerows(rows)
         logger.info(f"[*] 结果已保存: {output_file} (CSV)")
     else:
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -85,6 +94,32 @@ def _resolve_ports(args, cfg):
     if getattr(args, 'port', None):
         return parse_port_spec(args.port)
     return cfg.get('ports', [25565])
+
+
+def _resolve_progress_file(cfg):
+    """断点续扫进度文件：读配置项，未配置时才用默认名（原来硬编码忽略配置）"""
+    return cfg.get('progress_file') or "scan_progress.json"
+
+
+def _split_target(spec: str, default_port: int = 25565):
+    """解析 host[:port]。缺端口时用 default_port，端口非法抛 ValueError 交由调用方给用法提示。"""
+    if ":" in spec:
+        host, port = spec.rsplit(":", 1)
+        return host, int(port)
+    return spec, default_port
+
+
+def _filtered_targets(args, cfg, ports):
+    """异步扫描路径的排除表过滤。
+
+    异步引擎（scan_ports_async / AsyncScanEngine）自身不做 --exclude 过滤，
+    所以这里统一走 service.parse_and_filter_targets，避免私网/保留段被静默扫描。
+    返回 (targets, exclude_file)。
+    """
+    from service import parse_and_filter_targets
+    exclude_file = getattr(args, 'exclude', None) or cfg.get('exclude_file')
+    targets, _ = parse_and_filter_targets(args.targets, ports=ports, exclude_file=exclude_file)
+    return targets, exclude_file
 
 
 def cmd_portscan(args, cfg):
@@ -101,11 +136,12 @@ def cmd_portscan(args, cfg):
         return 2
     if not getattr(args, 'sync_mode', False):
         from scanner.async_portscan import scan_ports_async, get_open_ports_async, has_uvloop
-        from scanner.targets import parse_targets
         print(f"[*] 异步端口扫描（uvloop: {'启用' if has_uvloop() else '未安装'}）")
-        targets = list(parse_targets(
-            [t.strip() for t in args.targets.split(',') if t.strip()],
-            default_ports=_resolve_ports(args, cfg)))
+        # 异步路径原来直接用 parse_targets，绕过了排除表；统一走 service 过滤
+        targets, _ = _filtered_targets(args, cfg, _resolve_ports(args, cfg))
+        if not targets:
+            logger.warning("[!] 没有有效目标（可能全部被排除表过滤）")
+            return 1
         results = scan_ports_async(
             targets,
             concurrency=args.workers,
@@ -114,7 +150,7 @@ def cmd_portscan(args, cfg):
             mode=mode,
             shuffle=not args.no_shuffle,
             batch_cooldown=args.batch_cooldown,
-            progress_file=args.resume and "scan_progress.json",
+            progress_file=args.resume and _resolve_progress_file(cfg),
         )
         open_ports = get_open_ports_async(results)
         print(f"\n[*] 开放端口 ({len(open_ports)} 个):")
@@ -124,7 +160,8 @@ def cmd_portscan(args, cfg):
             save_results([{'ip': r.ip, 'port': r.port, 'open': r.is_open,
                            'latency_ms': round(r.latency_ms, 1)} for r in results],
                          args.output, cfg['output_format'])
-        return
+        # 与 README 退出码表对齐：1 = 无结果
+        return 0 if open_ports else 1
     results = run_portscan_only(
         args.targets,
         scan_threads=args.workers,
@@ -134,7 +171,7 @@ def cmd_portscan(args, cfg):
         mode=mode,
         shuffle=not args.no_shuffle,
         batch_cooldown=args.batch_cooldown,
-        progress_file=args.resume and "scan_progress.json",
+        progress_file=args.resume and _resolve_progress_file(cfg),
         respect_mode=bool(args.mode or cfg.get('scan_mode')),
     )
     open_ports = get_open_ports(results)
@@ -145,6 +182,10 @@ def cmd_portscan(args, cfg):
         save_results([{'ip': r.ip, 'port': r.port, 'open': r.is_open,
                        'latency_ms': round(r.latency_ms, 1)} for r in results],
                      args.output, cfg['output_format'])
+    # 与 README 退出码表对齐：1 = 无结果
+    return 0 if open_ports else 1
+
+
 def cmd_scan(args, cfg):
     from service import run_full_scan
     if args.workers:
@@ -161,16 +202,18 @@ def cmd_scan(args, cfg):
         from scanner.async_engine import AsyncScanEngine
         from scanner.async_portscan import has_uvloop
         from scanner.async_probe import has_simdjson
-        from scanner.targets import parse_targets
         print(f"[*] 异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
               f"simdjson: {'启用' if has_simdjson() else '未安装'}）")
-        targets = parse_targets(
-            [t.strip() for t in args.targets.split(',') if t.strip()],
-            default_ports=_resolve_ports(args, cfg))
-        engine = AsyncScanEngine(
+        # 异步路径原来直接用 parse_targets，绕过 --exclude；统一走 service 过滤
+        targets, exclude_file = _filtered_targets(args, cfg, _resolve_ports(args, cfg))
+        if not targets:
+            logger.warning("[!] 没有有效目标（可能全部被排除表过滤）")
+            return 1
+        engine_kwargs = dict(
             db_path=args.db or cfg['db_path'],
             concurrency=args.workers,
-            slp_concurrency=400,
+            # 不再写死 slp_concurrency=400：async_engine 的 safe 降级依赖默认值 200，
+            # 写死 400 会让降级条件永假，safe 模式的温和承诺失效
             timeout=args.timeout or cfg['timeout'],
             auth_check=not args.no_auth,
             rate_limit=args.rate,
@@ -178,8 +221,14 @@ def cmd_scan(args, cfg):
             mode=mode,
             shuffle=not args.no_shuffle,
             batch_cooldown=args.batch_cooldown,
-            progress_file=args.resume and "scan_progress.json",
+            progress_file=args.resume and _resolve_progress_file(cfg),
         )
+        try:
+            # 新版 AsyncScanEngine 支持 exclude_file；旧签名没有该参数，回退即可
+            # （无论哪版，targets 都已在上面的 _filtered_targets 里过滤过）
+            engine = AsyncScanEngine(exclude_file=exclude_file, **engine_kwargs)
+        except TypeError:
+            engine = AsyncScanEngine(**engine_kwargs)
         results = engine.scan_with_portscan(targets)
         up_results = [r for r in results if r.get('state') == 'up']
         print(f"\n[*] 发现 {len(up_results)} 个 Minecraft 服务器:")
@@ -204,7 +253,7 @@ def cmd_scan(args, cfg):
         mode=mode,
         shuffle=not args.no_shuffle,
         batch_cooldown=args.batch_cooldown,
-        progress_file=args.resume and "scan_progress.json",
+        progress_file=args.resume and _resolve_progress_file(cfg),
         respect_mode=bool(args.mode or cfg.get('scan_mode')),
     )
     print(f"\n[*] 发现 {len(results)} 个 Minecraft 服务器:")
@@ -290,7 +339,7 @@ def cmd_warn_db(args, cfg):
     except FileNotFoundError as e:
         logger.error(f"[!] {e}")
         logger.error("[!] 请先运行 scan 命令扫描并保存结果到数据库")
-        return
+        return 1
     success = sum(1 for r in results if r.success)
     msg_sent = sum(r.messages_sent for r in results)
     print(f"\n{'='*50}")
@@ -301,9 +350,15 @@ def cmd_warn_db(args, cfg):
     print(f"{'='*50}")
 def cmd_masscan(args, cfg):
     from service import run_masscan_scan
+    mode = args.mode or cfg.get('scan_mode') or 'balanced'
+    # aggressive 模式门槛：与 cmd_portscan/cmd_scan 对齐，必须显式 --yes 确认
+    if mode == 'aggressive' and not getattr(args, 'yes', False):
+        print("[!] aggressive模式：5000pps、无限速，仅适用于内网/信任网络")
+        print("[!] 公网使用极易触发IDS封禁和运营商限流。如确认请加 --yes 参数")
+        return 2
     if not has_masscan():
         logger.warning("[!] masscan 未安装，请先安装: sudo apt install masscan")
-        return
+        return 1
     result_path = run_masscan_scan(
         targets=args.targets or "0.0.0.0/0",
         port=args.port or "25565",
@@ -314,9 +369,10 @@ def cmd_masscan(args, cfg):
         workers=args.workers or 32,
         auth_check=not args.no_auth,
         db_path=args.db or cfg['db_path'],
-        mode=args.mode or cfg.get('scan_mode') or 'balanced',
+        mode=mode,
     )
     logger.info(f"[*] masscan 结果: {result_path}")
+    return 0
 def cmd_import(args, cfg):
     from service import import_masscan_results
     try:
@@ -328,14 +384,15 @@ def cmd_import(args, cfg):
         )
     except FileNotFoundError as e:
         logger.error(f"[!] {e}")
-        return
+        return 1
     logger.info(f"[*] 导入完成，共 {len(results)} 条记录")
+    return 0
 def cmd_query(args, cfg):
     from service import query_database, get_db_stats
     db_path = args.db or cfg['db_path']
     if not os.path.exists(db_path):
         logger.error(f"[!] 数据库不存在: {db_path}")
-        return
+        return 1
     if args.stats:
         s = get_db_stats(db_path)
         print("\n数据库统计:")
@@ -344,20 +401,25 @@ def cmd_query(args, cfg):
         print("  认证模式分布:")
         for auth, count in s['by_auth'].items():
             print(f"    {auth}: {count}")
-        return
+        return 0
     rows = query_database(db_path, auth=args.auth, modded=args.modded,
                           search=args.search, limit=args.limit)
     print(f"{len(rows)} 条结果:")
     for r in rows:
         print(f"  {r['ip']}:{r['port']} [{r['auth']}] {r['version']} "
               f"在线 {r['players_online']}/{r['players_max']} · {r['motd'][:40]}")
+    # 与 README 退出码表对齐：1 = 无结果
+    return 0 if rows else 1
+
+
 def cmd_bot(args, cfg):
-    # 与 cmd_fav/cmd_rcon 一致：目标无端口时默认 25565（原为直接 rsplit 解包，会 traceback）
-    if ":" in args.target:
-        host, port = args.target.rsplit(":", 1)
-    else:
-        host, port = args.target, "25565"
-    bot = MCBot(host, int(port), protocol_version=args.proto,
+    # 端口解析放进 try：原来 int() 在 try 之外，bot 1.2.3.4:abc 会直接抛 ValueError traceback
+    try:
+        host, port = _split_target(args.target)
+    except ValueError:
+        logger.error(f"[!] 目标格式错误: {args.target}（应为 host 或 host:port）")
+        return 3
+    bot = MCBot(host, port, protocol_version=args.proto,
                 username=args.username or cfg['username'], timeout=args.timeout or 15.0)
     try:
         bot.connect()
@@ -374,8 +436,10 @@ def cmd_bot(args, cfg):
                 print(f"[+] 已发送: {msg}")
         bot.keep_alive(args.hold or 4.0)
         print("[+] 保持连接结束")
+        return 0
     except Exception as e:
         logger.error(f"[!] 失败: {e}")
+        return 1
     finally:
         bot.close()
 
@@ -413,7 +477,8 @@ def cmd_random(args, cfg=None):
             asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         open_ports = asyncio.run(async_random_scan(
             target_count=args.count,
-            concurrency=max(args.workers, 500),
+            # 尊重用户 --workers：原来 max(args.workers, 500) 会把保守设置强行抬到 500
+            concurrency=args.workers,
             timeout=args.timeout,
             port_ranges=port_ranges,
             progress_callback=progress,
@@ -430,13 +495,14 @@ def cmd_random(args, cfg=None):
         )
     elapsed = time.time() - start
     print()
-    logger.info(f"[*] 扫描完成! 耗时: {elapsed:.1f}s ({args.count/elapsed:.0f} 目标/秒)")
+    # elapsed 理论上可能为 0（极快返回），除法前兜底避免 ZeroDivisionError
+    logger.info(f"[*] 扫描完成! 耗时: {elapsed:.1f}s ({args.count/max(elapsed, 1e-9):.0f} 目标/秒)")
     logger.info(f"[*] 发现 {len(open_ports)} 个开放端口")
     print()
 
     if not open_ports:
         logger.warning("[!] 没有发现开放端口，试试增加目标数量或扩大端口范围")
-        return
+        return 1
 
     # SLP 探测（并发，不再串行）
     if args.probe:
@@ -456,7 +522,8 @@ def cmd_random(args, cfg=None):
         logger.info(f"[*] 发现 {len(servers)} 个 Minecraft 服务器")
         if args.output:
             import json
-            with open(args.output, 'w') as f:
+            # 显式 utf-8：Windows 默认 gbk，写含中文 MOTD 的结果会 UnicodeEncodeError
+            with open(args.output, 'w', encoding='utf-8') as f:
                 json.dump(servers, f, indent=2, ensure_ascii=False)
             logger.info(f"[*] 结果已保存到 {args.output}")
     else:
@@ -464,15 +531,28 @@ def cmd_random(args, cfg=None):
             print(f"  {ip}:{port}")
         if args.output:
             import json
-            with open(args.output, 'w') as f:
+            with open(args.output, 'w', encoding='utf-8') as f:
                 json.dump([{"ip": ip, "port": port} for ip, port in open_ports], f, indent=2)
             logger.info(f"[*] 结果已保存到 {args.output}")
+    return 0
 
 
 def cmd_fav(args, cfg):
     """收藏管理：list/add/remove/rescan/tags/import"""
     from storage import favorites
     action = args.action
+    # add/remove/tags 必须带 target；rescan 带 target 时也解析。
+    # 原来缺 target 会 AttributeError/TypeError，端口非数字会抛 ValueError 堆栈
+    parsed = None
+    if action in ("add", "remove", "tags") or (action == "rescan" and args.target):
+        if not args.target:
+            print(f"用法: python cli.py fav {action} <host[:port]>")
+            return 3
+        try:
+            parsed = _split_target(args.target)
+        except ValueError:
+            print(f"[!] 目标格式错误: {args.target}（应为 host 或 host:port）")
+            return 3
     if action == "list":
         tag = getattr(args, 'tag', None)
         search = getattr(args, 'search', None)
@@ -491,18 +571,18 @@ def cmd_fav(args, cfg):
             last = f.get("last_check", "-")[:19] if f.get("last_check") else "-"
             print(f"{f['ip']}:{f['port']:<17} {info.get('version','-'):<20} {info.get('core_type','-'):<10} {players:<10} {tags:<20} {last}")
     elif action == "add":
-        ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
+        ip, port = parsed
         tags = args.tags.split(",") if args.tags else []
-        fav = favorites.add_favorite(ip, int(port), tags=tags, note=args.note or "")
+        fav = favorites.add_favorite(ip, port, tags=tags, note=args.note or "")
         print(f"[+] 已收藏: {fav['ip']}:{fav['port']}")
     elif action == "remove":
-        ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
-        ok = favorites.remove_favorite(ip, int(port))
+        ip, port = parsed
+        ok = favorites.remove_favorite(ip, port)
         print(f"[{'+' if ok else '!'}] {'已移除' if ok else '未找到'}: {ip}:{port}")
     elif action == "rescan":
-        if args.target:
-            ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
-            info = favorites.rescan_one(ip, int(port), timeout=args.timeout)
+        if parsed:
+            ip, port = parsed
+            info = favorites.rescan_one(ip, port, timeout=args.timeout)
             if info and info.get("state") == "up":
                 print(f"[+] {ip}:{port} | {info.get('version','?')} | {info.get('online',0)}/{info.get('max',0)}人 | {info.get('core_type','?')}")
             else:
@@ -516,9 +596,9 @@ def cmd_fav(args, cfg):
             up = sum(1 for f in favs if (f.get("last_info") or {}).get("state") == "up")
             print(f"    在线: {up}, 离线: {len(favs) - up}")
     elif action == "tags":
-        ip, port = args.target.rsplit(":", 1) if ":" in args.target else (args.target, 25565)
+        ip, port = parsed
         tags = args.tags.split(",") if args.tags else []
-        fav = favorites.update_tags(ip, int(port), tags)
+        fav = favorites.update_tags(ip, port, tags)
         if fav:
             print(f"[+] 标签已更新: {fav['tags']}")
         else:
@@ -580,10 +660,18 @@ def cmd_rescan(args, cfg):
         return
 
     if args.remove:
-        ip, port = args.remove.rsplit(":", 1)
-        scheduler.remove(ip, int(port))
+        # 缺冒号/端口非数字时给用法提示，不再抛 ValueError
+        if ":" not in args.remove:
+            print(f"[!] 目标格式错误: {args.remove}（应为 ip:port）")
+            return 3
+        try:
+            ip, port = _split_target(args.remove)
+        except ValueError:
+            print(f"[!] 目标格式错误: {args.remove}（应为 ip:port）")
+            return 3
+        scheduler.remove(ip, port)
         print(f"[*] 已移除: {ip}:{port}")
-        return
+        return 0
 
     print("用法: python cli.py rescan --list / --run / --clear / --remove ip:port")
 
@@ -685,12 +773,16 @@ def cmd_rcon(args, cfg):
         print("[!] 警告：RCON可执行服务器管理命令（op/ban/stop等），仅限授权服务器使用")
         print("[!] 确认执行请加 --yes 参数")
         return 3
-    if ":" in args.host:
-        host, port = args.host.rsplit(":", 1)
-        port = int(port)
-    else:
-        host, port = args.host, 25575
-    password = args.password or ""
+    try:
+        host, port = _split_target(args.host, default_port=25575)
+    except ValueError:
+        print(f"[!] 目标格式错误: {args.host}（应为 host 或 host:port）")
+        return 3
+    # 密码优先取环境变量，避免 -p 明文进入 ps / shell history；空密码直接拒绝
+    password = args.password or os.environ.get("MC_RCON_PASSWORD") or ""
+    if not password:
+        print("[!] RCON 密码为空：请用 -p 传入，或设置环境变量 MC_RCON_PASSWORD")
+        return 3
     if args.command:
         result = rcon_execute(host, port, password, args.command, timeout=args.timeout or 10.0)
         print(f"[RCON] {host}:{port}")
@@ -733,11 +825,11 @@ def cmd_commands(args, cfg):
         print("[!] 警告：命令执行可对服务器运行任意指令，仅限授权服务器使用")
         print("[!] 确认执行请加 --yes 参数")
         return 3
-    if ":" in args.target:
-        host, port = args.target.rsplit(":", 1)
-        port = int(port)
-    else:
-        host, port = args.target, 25565
+    try:
+        host, port = _split_target(args.target)
+    except ValueError:
+        print(f"[!] 目标格式错误: {args.target}（应为 host 或 host:port）")
+        return 3
     username = args.username or "CommandBot"
     if args.script:
         script = CommandScript.from_file(args.script, delay=args.delay or 1.0)
@@ -824,8 +916,8 @@ def main():
     w.add_argument("--workers", type=int)
     w.add_argument("--bot-workers", type=int)
     w.add_argument("--timeout", type=float)
-    w.add_argument("--no-auth", action="store_true")
-    w.add_argument("--rate", type=int, default=30)
+    # --rate 默认值必须是 None：argparse 默认值恒真会覆盖 config 里的 rate，让配置失效
+    w.add_argument("--rate", type=int, default=None)
     w.add_argument("--exclude")
     w.add_argument("-u", "--username")
     w.add_argument("-m", "--message", action="append", help="警告消息（可多次）")
@@ -840,7 +932,7 @@ def main():
     wd.add_argument("--modded", type=int, help="模组服过滤（1=模组，0=原版）")
     wd.add_argument("--search", help="关键词搜索（IP/MOTD/版本）")
     wd.add_argument("--limit", type=int, default=0, help="限制数量（0=全部）")
-    wd.add_argument("--workers", type=int, default=5, help="并发数")
+    wd.add_argument("--workers", type=int, default=None, help="并发数（默认取配置 bot_threads）")
     wd.add_argument("-u", "--username", help="机器人用户名")
     wd.add_argument("-m", "--message", action="append", help="警告消息（可多次）")
     wd.add_argument("-f", "--message-file", help="从文件读取消息")
@@ -860,15 +952,15 @@ def main():
     m.add_argument("--no-auth", action="store_true")
     m.add_argument("--mode", choices=["safe", "balanced", "aggressive"],
                    help="扫描模式: safe=100pps / balanced=1000pps(默认) / aggressive=5000pps仅内网")
+    m.add_argument("--yes", action="store_true", help="确认aggressive模式（高吞吐无保护，仅内网使用）")
     m.set_defaults(func=cmd_masscan)
 
     # import
     i = sub.add_parser("import", help="导入 masscan 结果")
     i.add_argument("ndjson")
     i.add_argument("--workers", type=int, default=16)
-    i.add_argument("--timeout", type=float, default=5.0)
     i.add_argument("--no-auth", action="store_true")
-    i.add_argument("--rate", type=int, default=30)
+    # 原 --timeout / --rate 解析后从未传给 import_masscan_results（死参数），已移除
     i.set_defaults(func=cmd_import)
 
     # query
@@ -955,7 +1047,8 @@ def main():
     # rcon - RCON 客户端（v3.3 新增）
     rc = sub.add_parser("rcon", help="RCON 连接和命令执行")
     rc.add_argument("host", nargs="?", help="主机:端口")
-    rc.add_argument("-p", "--password", help="RCON 密码")
+    rc.add_argument("-p", "--password",
+                    help="RCON 密码（明文传参会进 shell history/ps，建议用环境变量 MC_RCON_PASSWORD）")
     rc.add_argument("-c", "--command", help="执行单条命令")
     rc.add_argument("-f", "--commands-file", help="从文件加载命令列表")
     rc.add_argument("--delay", type=float, help="命令间延迟(秒)")

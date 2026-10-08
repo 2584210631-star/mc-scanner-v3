@@ -54,15 +54,25 @@ rescan*.py
 !scanner/rescanner.py
 !storage/rescan.py
 
-# 通用忽略，白名单必要配置
+# 通用忽略，白名单必要配置。
+# 这里刻意保留 *.json / *.txt 的「全忽略 + 白名单」，而不是改成目录白名单：
+# auth.json 等凭据文件没有独立规则，只靠 *.json 兜住，删掉通配会直接把凭据
+# 变成可提交状态。代价是新增的 json/txt 资源会被静默忽略，所以：
+# 新增源码/文档资源时请在本段显式登记，或放进下面已放开的源码目录。
 *.json
 !config.example.json
 !package.json
 # PWA 清单是前端资源，不是运行期配置，必须入库（否则 /manifest.json 永远 404）
 !web/static/manifest.json
+# 源码/文档目录下的资源默认入库，降低「新增资源被静默忽略」的影响
+!docs/**/*.json
+!tools/**/*.json
+!tests/**/*.json
 *.txt
 !requirements.txt
 !targets.txt
+!docs/**/*.txt
+!tools/**/*.txt
 
 # 聊天记录 / 观察者导出（勿提交）
 chat_log_*.html

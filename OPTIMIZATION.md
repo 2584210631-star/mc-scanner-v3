@@ -1,5 +1,9 @@
 # MC Scanner v3-3.1 优化说明
 
+> **文档状态 / Status**：本文记录 v3.3.1 时期的优化设计，不是当前版本的功能说明。
+> 其中「Web Token 认证」已在 v3.6.2 整体移除，`libs/` vendor 目录也已在后续版本清理。
+> 相关段落已就地标注，请以代码与 README 为准。
+
 ## 优化日期
 2026-09-03
 
@@ -61,7 +65,10 @@
 
 13. **web/app.py 无访问认证**
     - 问题：Web 面板暴露公网后任何人都能控制扫描器
-    - 修复：新增 token 认证中间件（见下方架构优化）
+    - 当时的修复：新增 token 认证中间件（见下方架构优化）
+    - **后续变更（v3.6.2）**：该中间件已整体移除，`_check_auth` 现在是空钩子，
+      Token 鉴权不再生效。当前版本只靠「默认绑定 127.0.0.1」限制访问，
+      绑到 `0.0.0.0` 即等于任何人可操作，请自行确保网络可信。
 
 ---
 
@@ -89,10 +96,12 @@
 - 三个实现：`TCPPortScanner` / `MasscanScanner` / `RandomScanner`
 - `get_scanner(type)` 工厂方法，由 `service.run_scanner()` 统一调用，上层不需要写多套 if 判断
 
-### 5. web/app.py Token认证
-- `@app.before_request` 中间件，所有 `/api/*` 请求需要 `X-API-Token` header 或 `?token=` 参数
-- 配置 `web_token` 为空时不启用认证（向后兼容）
-- 首页和静态文件不需要认证
+### 5. web/app.py Token认证（已移除 / Removed）
+- 曾用 `@app.before_request` 中间件要求所有 `/api/*` 请求带 `X-API-Token` header 或 `?token=` 参数
+- **现状（v3.6.2 起）**：中间件整体移除，`web/app.py` 的 `_check_auth` 是显式空钩子，
+  所有 `/api/*` **不需要任何 token**；`config.web_token` / `MC_WEB_TOKEN` 成为无效果配置
+- 当前的安全边界只有「默认绑定 127.0.0.1」一条；绑 `0.0.0.0` 时任何人都能操作
+- `web/auth.py`（账号/会话）目前没有被任何鉴权钩子调用
 
 ---
 
@@ -131,7 +140,7 @@
 
 ### 未修改
 - `core/bot.py`、`core/buffer.py`、`core/packets.py`、`core/protocol.py` — 协议层无bug，保持原样
-- `libs/` — vendor依赖，保持原样
+- `libs/` — 当时的 vendor 依赖目录（后续版本已删除，改为 `pip install -r requirements.txt`）
 - `web/index.html` — 前端，保持原样
 - `tests/` — 测试全部通过，保持原样
 
@@ -157,18 +166,10 @@
 
 ## 六、使用新功能
 
-### 启用Web Token认证
-在 `config.json` 中添加：
-```json
-{
-  "web_token": "your-secret-token-here"
-}
-```
-然后所有API请求需要带 header：
-```
-X-API-Token: your-secret-token-here
-```
-或URL参数：`?token=your-secret-token-here`
+### Web Token 认证（已移除，勿再照做）
+v3.6.2 起不再提供 Token 认证：`web_token` / `X-API-Token` / `?token=` 均不生效。
+当前版本请通过**只绑定 127.0.0.1**（默认行为）来限制访问；确实需要对外暴露时，
+请自行在反向代理层加认证与访问控制。
 
 ### 使用统一配置
 ```python

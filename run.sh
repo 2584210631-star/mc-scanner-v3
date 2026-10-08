@@ -1,8 +1,11 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
+# 版本号单一来源：config.__version__（脚本写死会和代码打架）
+MCVER=$(python3 -c "import config; print(config.__version__)" 2>/dev/null || echo "unknown")
+
 echo "========================================"
-echo "  MC Scanner v3.6.4 - Web 控制面板"
+echo "  MC Scanner v${MCVER} - Web 控制面板"
 echo "========================================"
 echo ""
 

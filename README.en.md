@@ -13,7 +13,9 @@ English | [中文](README.md)
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.4
+# 🛠️ MC Scanner v3.6.3
+
+> The single source of truth for the version is `config.__version__` (currently `3.6.3`): CLI `--version`, the Web panel and the launcher scripts all read it. Bump it there only.
 
 ### Minecraft Server Scanner · Probe · Observer · Security Alert
 
@@ -91,6 +93,14 @@ It can: scan network ranges for open ports, query server info via SLP (version /
 | Layered memory | Short-term raw + mid-term summary + long-term player profile (clearable anytime) |
 | Safety guardrail | AI replies starting with `/` are blocked; API failures trigger automatic backoff |
 
+> ⚠️ **Persona compliance**: the preset personas include taunting / passive-aggressive / PUA-style wording
+> (see [docs/AI_PERSONAS_DETAILED.md](docs/AI_PERSONAS_DETAILED.md)). They may **only** be used on servers you
+> own or are explicitly authorised to test; messaging strangers' servers is harassment under
+> [Prohibited](#-legal--ethics). The existing "guardrail" only blocks `/` commands — it is **not content moderation**.
+> Implementation-wise, all persona text ends up in `core/ai_bot.py::_safe_send_chat`, which applies the
+> single outbound filter (control-character stripping + `/` command-prefix blocking + per-line length splitting);
+> persona injection **must not bypass** that filter.
+
 ### 🛡️ Scan Modes
 
 | Mode | Concurrency | Rate | Use Case |
@@ -141,7 +151,7 @@ To avoid overpromising, here's what this version can and cannot do:
 | Premium server **chat** | ✅ Works | Auto-fetches Mojang-issued RSA cert after login, signs with RSA-2048+SHA256 via pycryptodome; falls back to unsigned on signature failure |
 | Forge / Fabric / NeoForge modded servers | ⚠️ Partial | Can pass some acceptance tests as vanilla client; forced-mod-validation servers cannot be entered |
 | Old versions (1.12.2 etc.) | ⚠️ Best effort | Protocol table covers and is tested, but edge cases remain |
-| General Minecraft client | ❌ Not a goal | No full game controls / real signing / mod loading |
+| General Minecraft client | ❌ Not a goal | No full game controls / mod loading (chat signing is covered by the premium row above) |
 | Unauthorized internet-wide scanning | 🚫 Forbidden | See [Legal & Ethics](#️-legal--ethics) |
 
 ---
@@ -161,16 +171,20 @@ pip install -r requirements.txt
 cp config.example.json config.json
 ```
 
-> **Dependencies**: As of v3.6.4, no third-party libraries are vendored. Install all via pip. `flask` is required for Web panel, `pycryptodome` for premium account login. `uvloop` / `pysimdjson` are optional speedups — auto-fallback if missing.
+> **Dependencies**: No third-party libraries are vendored (the `libs/` directory has been removed). Install all via pip. `flask` is required for Web panel, `pycryptodome` for premium account login. `uvloop` / `pysimdjson` are optional speedups — auto-fallback if missing.
 
-### Pre-built Bundles (no pip install needed)
+### Pre-built Bundles
 
-| Platform | Download | Size |
-|----------|----------|------|
-| Windows x64 (Python 3.12) | [mc-scanner-v3.6.4-windows-x64.zip](https://github.com/2584210631-star/mc-scanner-v3/releases/download/v3.6.4/mc-scanner-v3.6.4-windows-x64.zip) | 20 MB |
-| Linux x86_64 (Python 3.12) | [mc-scanner-v3.6.4-linux-x86_64.zip](https://github.com/2584210631-star/mc-scanner-v3/releases/download/v3.6.4/mc-scanner-v3.6.4-linux-x86_64.zip) | 33 MB |
+This source repository ships **no** bundled dependencies — the former `libs/` directory has
+been removed — and there is no build script for pre-built archives, so no verified download
+link exists. Install from source instead:
 
-Extract and run — all dependencies bundled in `libs/`. Windows: double-click `run.bat`. Linux: `python3 cli.py web --port 8090`.
+```bash
+pip install -r requirements.txt
+python3 cli.py web --port 8090
+```
+
+Windows users can double-click `run.bat`; it installs dependencies from `requirements.txt`.
 
 ### Start Web Panel
 
@@ -194,8 +208,9 @@ python3 cli.py scan 1.2.3.4 --port 1-65535 --mode safe --resume
 # Port scan only (no MC protocol probe)
 python3 cli.py portscan 192.168.1.0/24 --port 1-65535
 
-# masscan large-range scan (auto two-stage)
-python3 cli.py scan 10.0.0.0/8 --port 25565 --use-masscan auto
+# masscan large-range port discovery (the CLI "scan" subcommand has no --use-masscan;
+# that option only exists in the Web panel)
+python3 cli.py masscan --targets 10.0.0.0/8 --port 25565 --rate 1000 --exclude exclude.conf
 ```
 
 ### Premium Account Login (Device Code)
@@ -335,19 +350,32 @@ Servers with AuthMe: use `--authme password` for auto register/login.
 
 `config.json` (auto-generated on first run) key fields:
 
+The table below matches `config.py`'s `DEFAULT_CONFIG` (and `config.example.json`):
+
 | Field | Default | Description |
 |-------|---------|-------------|
-| `username` | `Herobrine` | Default bot username |
-| `messages` | `[]` | Default warning message list |
+| `username` | `SecurityBot` | Default bot username |
+| `messages` | `null` | Default warning messages; built-in text used when empty |
 | `ports` | `[25565]` | Default scan ports |
-| `scan_threads` | `200` | Scan concurrency |
-| `scan_timeout` | `2.5` | Per-target timeout (seconds) |
-| `bot_threads` | `10` | Bot concurrency |
+| `scan_threads` | `50` | Port scan threads |
+| `scan_timeout` | `3.0` | Per-target timeout (seconds) |
+| `workers` | `16` | SLP probe threads |
+| `timeout` | `5.0` | SLP probe timeout (seconds) |
+| `bot_threads` | `5` | Bot concurrency |
+| `bot_timeout` | `15` | Bot timeout (seconds) |
+| `message_delay` | `1.2` | Delay between messages (seconds) |
+| `rate` | `30` | Global rate (requests per second) |
 | `authme_password` | `""` | AuthMe auto-login password |
+| `exclude_file` | `exclude.conf` | Exclude list file |
 | `db_path` | `mcscanner.db` | SQLite database path |
+| `web_host` / `web_port` | `127.0.0.1` / `8080` | Web panel bind address / port |
+| `log_level` | `INFO` | Log level |
+| `warn_bot_max` | `20` | Hard cap on warning bots |
 | `health_interval` | `300` | Health monitor poll interval (seconds) |
+| `health_probe_concurrency` | `8` | Health monitor parallel probes |
+| `health_probe_ip_gap` | `1.5` | Min gap between probes of the same IP (seconds) |
 
-Sensitive config can also be overridden via environment variables: `MC_AI_API_KEY`, `MC_DISCORD_WEBHOOK`, etc.
+The full set of defaults lives in `config.py`'s `DEFAULT_CONFIG`. Sensitive config can also be overridden via environment variables: `MC_AI_API_KEY`, `MC_DISCORD_WEBHOOK`, etc.
 
 ### 10. FAQ
 
@@ -425,7 +453,7 @@ mc-scanner-v3/
 │   ├── get_mc_token.py     # Premium device code tool
 │   └── send_command.py     # Command sender (authorized, use with care)
 ├── distributed/            # ⚠️ Experimental: distributed sharding
-├── android_patches/        # ⚠️ Experimental: Termux adaptation
+├── android_patches/        # ⚠️ Experimental: Android/Kivy packaging patch (PythonActivity.java)
 ├── tests/                  # Unit / integration tests
 ├── config.example.json     # Config template
 ├── requirements.txt        # Dependencies
@@ -454,7 +482,7 @@ python3 tools/gen_packets.py --download
 ## 📜 Changelog
 
 <details>
-<summary><b>v3.6.4</b></summary>
+<summary><b>v3.6.4 (Unreleased)</b></summary>
 
 This release is mostly bug fixes and cleanup, no new features.
 

@@ -1,3 +1,15 @@
+/*
+ * Derived from the SDL2 / python-for-android bootstrap.
+ *
+ * Upstream sources and licenses (original notices must be retained):
+ *   - python-for-android (https://github.com/kivy/python-for-android)
+ *     MIT License, Copyright (c) 2012-2015 Kivy Team and other contributors
+ *   - SDL2 / SDLActivity (https://github.com/libsdl-org/SDL)
+ *     zlib License, Copyright (c) 1997-2024 Sam Lantinga <slouken@libsdl.org>
+ *
+ * Modifications for MC Scanner: Microsoft (MSA) login callback interception and
+ * external-link handling. See NOTICE for the full attribution list.
+ */
 package org.kivy.android;
 
 import android.app.Activity;
@@ -56,6 +68,26 @@ public class PythonActivity extends Activity {
     protected static ViewGroup mLayout;
     protected static WebView mWebView;
 
+    /**
+     * 判断是否是微软登录回调 URL。
+     * 只做子串匹配会被任意站点伪造，这里额外校验 scheme / host / path。
+     */
+    private static boolean isMsaCallback(String url) {
+        if (url == null) return false;
+        Uri u = Uri.parse(url);
+        String scheme = u.getScheme();
+        String host = u.getHost();
+        String path = u.getPath();
+        if (!"https".equals(scheme) || host == null || path == null) return false;
+        if (!(host.endsWith("live.com")
+                || host.endsWith("microsoft.com")
+                || host.endsWith("microsoftonline.com"))) {
+            return false;
+        }
+        if (!path.contains("oauth20_desktop.srf")) return false;
+        return url.contains("access_token=") || url.contains("code=");
+    }
+
     /** MSA正版登录：拦截到token后提交给本地后端 */
     private static void handleMsaCode(final WebView view, final String url) {
         try {
@@ -76,9 +108,13 @@ public class PythonActivity extends Activity {
                         int amp = token.indexOf("&");
                         if (amp >= 0) token = token.substring(0, amp);
                     }
-                    Log.i(TAG, "[MSA] 捕获到token: " + token.substring(0, Math.min(20, token.length())) + "...");
                     // 根据token类型选择接口
                     boolean isAccessToken = url.contains("access_token=");
+                    // 不记录凭据内容（连前缀也不记）：logcat 可被 adb/root 读取。
+                    // 只记录类型与长度，足以排查问题。
+                    Log.i(TAG, "[MSA] 捕获到凭据 类型="
+                            + (isAccessToken ? "access_token" : "code")
+                            + " 长度=" + token.length());
                     String apiUrl = isAccessToken ? "http://127.0.0.1:8090/api/msa/token" : "http://127.0.0.1:8090/api/msa/exchange";
                     String paramName = isAccessToken ? "access_token" : "code";
                     String postData = paramName + "=" + java.net.URLEncoder.encode(token, "UTF-8");
@@ -95,7 +131,8 @@ public class PythonActivity extends Activity {
                     String line;
                     while ((line = br.readLine()) != null) resp.append(line);
                     br.close();
-                    Log.i(TAG, "[MSA] 响应: " + respCode + " " + resp.toString().substring(0, Math.min(200, resp.length())));
+                    // 后端响应可能带 token/错误细节，只记录状态码与长度
+                    Log.i(TAG, "[MSA] 响应状态: " + respCode + " 长度=" + resp.length());
                     view.post(new Runnable() {
                         @Override
                         public void run() {
@@ -229,15 +266,21 @@ public class PythonActivity extends Activity {
                     new WebViewClient() {
                         @Override
                         public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                            // MSA正版登录拦截
-                            if (url.contains("oauth20_desktop.srf") && (url.contains("access_token=") || url.contains("code="))) {
+                            // MSA正版登录拦截（严格校验 scheme/host/path）
+                            if (isMsaCallback(url)) {
                                 handleMsaCode(view, url);
                                 return true;
                             }
                             Uri u = Uri.parse(url);
                             if (mOpenExternalLinksInBrowser) {
-                                if (!(u.getScheme().equals("file")
-                                        || u.getHost().equals("127.0.0.1"))) {
+                                String scheme = u.getScheme();
+                                String host = u.getHost();
+                                // getScheme()/getHost() 对 javascript:/data:/about:blank 可能返回 null，
+                                // 原来的 .equals() 会直接 NPE，外链逻辑整条崩掉
+                                boolean isLocal = "file".equals(scheme)
+                                        || "127.0.0.1".equals(host)
+                                        || "localhost".equals(host);
+                                if (!isLocal) {
                                     Intent i = new Intent(Intent.ACTION_VIEW, u);
                                     startActivity(i);
                                     return true;
@@ -250,7 +293,7 @@ public class PythonActivity extends Activity {
                         public void onPageFinished(WebView view, String url) {
                             CookieManager.getInstance().flush();
                             // MSA正版登录拦截（双重保险）
-                            if (url.contains("oauth20_desktop.srf") && (url.contains("access_token=") || url.contains("code="))) {
+                            if (isMsaCallback(url)) {
                                 handleMsaCode(view, url);
                             }
                         }
@@ -269,8 +312,9 @@ public class PythonActivity extends Activity {
                     if (msaDone) return;
                     if (mWebView != null) {
                         String url = mWebView.getUrl();
-                        if (url != null && url.contains("oauth20_desktop.srf") && (url.contains("access_token=") || url.contains("code="))) {
-                            Log.i(TAG, "[MSA] 轮询捕获到code URL: " + url.substring(0, Math.min(100, url.length())));
+                        if (isMsaCallback(url)) {
+                            // 不打印 URL：回调 URL 内含 access_token/code 凭据
+                            Log.i(TAG, "[MSA] 轮询捕获到登录回调");
                             msaDone = true;
                             handleMsaCode(mWebView, url);
                             return;

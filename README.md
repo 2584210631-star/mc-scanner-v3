@@ -13,7 +13,9 @@
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.4
+# 🛠️ MC Scanner v3.6.3
+
+> 版本号唯一来源是 `config.__version__`（当前 `3.6.3`）：CLI `--version`、Web 面板和启动脚本都从这里取。升级版本只改这一处，不要再手写进文档/脚本。
 
 ### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒 / Minecraft Server Scanner · Probe · Observer · Security Alert
 
@@ -34,8 +36,9 @@
 | | | |
 |:---:|:---:|:---:|
 | [🧭 简介](#-简介) | [✨ 功能一览](#-功能一览) | [🚦 能力边界](#-能力边界诚实对照) |
-| [🚀 快速开始](#-快速开始) | [🧩 项目结构](#-项目结构) | [🧪 测试](#-测试) |
-| [📜 更新日志](#-更新日志) | [⚖️ 法律与伦理](#️-法律与伦理) | [📄 许可证](#-许可证) |
+| [🚀 快速开始](#-快速开始) | [📖 从零开始教程](#-从零开始教程--beginners-guide) | [🧩 项目结构](#-项目结构) |
+| [🧪 测试](#-测试) | [📜 更新日志](#-更新日志) | [⚖️ 法律与伦理](#️-法律与伦理) |
+| [📄 许可证](#-许可证) | | |
 
 ---
 
@@ -91,6 +94,12 @@
 | 分层记忆 | 短期原文 + 中期摘要 + 长期玩家档案（可随时清除） |
 | 安全护栏 | AI 回复以 `/` 开头会被拦截，API 连续失败自动退避 |
 
+> ⚠️ **人格合规**：预设人格中包含拱火 / 阴阳 / PUA 类话术（详见 [docs/AI_PERSONAS_DETAILED.md](docs/AI_PERSONAS_DETAILED.md)）。
+> 这类人格**只能用于自己拥有或已获书面授权的服务器**；向陌生人服务器发消息属于[禁止行为](#️-法律与伦理)中的骚扰。
+> 现有「安全护栏」只拦 `/` 开头的命令，**不是内容审核**。
+> 实现层面：所有人格文本最终都汇入 `core/ai_bot.py` 的 `_safe_send_chat` 做统一出站过滤
+> （控制字符清理 + `/` 命令前缀拦截 + 单条长度分段），人格注入**不得绕过**该过滤。
+
 ### 🛡️ 扫描模式
 
 | 模式 | 并发 | 速率 | 适用场景 |
@@ -141,7 +150,7 @@
 | 正版服**发送聊天** | ✅ 可用 | 正版登录后自动获取Mojang签发的RSA证书，用 pycryptodome 做 RSA-2048+SHA256 签名；签名失败自动回退无签名模式 |
 | Forge / Fabric / NeoForge 模组服 | ⚠️ 部分 | 以原版姿态可通过部分验收；强制模组校验的服无法进入 |
 | 1.12.2 等旧版本 | ⚠️ 尽力 | 协议表已覆盖并重点验证，但边缘情况较多 |
-| 通用 Minecraft 客户端 | ❌ 非目标 | 不做完整游戏操作 / 真实签名 / 模组加载 |
+| 通用 Minecraft 客户端 | ❌ 非目标 | 不做完整游戏操作 / 模组加载（聊天签名见上一行的正版说明） |
 | 未授权全网扫描 | 🚫 禁止 | 见[法律与伦理](#️-法律与伦理) |
 
 ---
@@ -161,7 +170,7 @@ pip install -r requirements.txt
 cp config.example.json config.json
 ```
 
-> **依赖说明**：v3.6.4 起不再 vendor 第三方库，全部通过 pip 安装。`flask` 是 Web 面板必需，`pycryptodome` 是正版账号登录必需。`uvloop` / `pysimdjson` 是可选加速，不装自动降级不影响功能。
+> **依赖说明**：本项目不再 vendor 第三方库（`libs/` 目录已删除），全部通过 pip 安装。`flask` 是 Web 面板必需，`pycryptodome` 是正版账号登录必需。`uvloop` / `pysimdjson` 是可选加速，不装自动降级不影响功能。
 
 ### 启动 Web 面板
 
@@ -185,8 +194,8 @@ python3 cli.py scan 1.2.3.4 --port 1-65535 --mode safe --resume
 # 只扫端口（不探测 MC 协议）
 python3 cli.py portscan 192.168.1.0/24 --port 1-65535
 
-# masscan 大范围扫描（自动两阶段）
-python3 cli.py scan 10.0.0.0/8 --port 25565 --use-masscan auto
+# masscan 大范围端口发现（CLI 的 scan 子命令没有 --use-masscan，该选项只在 Web 面板可用）
+python3 cli.py masscan --targets 10.0.0.0/8 --port 25565 --rate 1000 --exclude exclude.conf
 ```
 
 ### 正版账号登录（设备码）
@@ -331,19 +340,32 @@ python3 cli.py warn-db --auth cracked --limit 10
 
 `config.json`（首次运行自动生成）主要字段：
 
+下表与 `config.py` 的 `DEFAULT_CONFIG` 一致（`config.example.json` 也同源）：
+
 | 字段 | 默认 | 说明 |
 |------|------|------|
-| `username` | `Herobrine` | 机器人默认用户名 |
-| `messages` | `[]` | 默认警告消息列表 |
+| `username` | `SecurityBot` | 机器人默认用户名 |
+| `messages` | `null` | 默认警告消息，为空时用内置提示语 |
 | `ports` | `[25565]` | 默认扫描端口 |
-| `scan_threads` | `200` | 扫描并发线程数 |
-| `scan_timeout` | `2.5` | 单目标超时（秒） |
-| `bot_threads` | `10` | 机器人并发数 |
+| `scan_threads` | `50` | 端口扫描线程数 |
+| `scan_timeout` | `3.0` | 单目标超时（秒） |
+| `workers` | `16` | SLP 探测线程数 |
+| `timeout` | `5.0` | SLP 探测超时（秒） |
+| `bot_threads` | `5` | 机器人并发数 |
+| `bot_timeout` | `15` | 机器人超时（秒） |
+| `message_delay` | `1.2` | 消息发送间隔（秒） |
+| `rate` | `30` | 全局速率（每秒请求数） |
 | `authme_password` | `""` | AuthMe 自动登录密码 |
+| `exclude_file` | `exclude.conf` | 排除列表文件 |
 | `db_path` | `mcscanner.db` | SQLite 数据库路径 |
+| `web_host` / `web_port` | `127.0.0.1` / `8080` | Web 面板绑定地址 / 端口 |
+| `log_level` | `INFO` | 日志级别 |
+| `warn_bot_max` | `20` | 多机器人警告硬上限 |
 | `health_interval` | `300` | 健康监控轮询间隔（秒） |
+| `health_probe_concurrency` | `8` | 健康监控同时探测数 |
+| `health_probe_ip_gap` | `1.5` | 同 IP 两次探测最小间隔（秒） |
 
-也可用环境变量覆盖敏感配置：`MC_AI_API_KEY`、`MC_DISCORD_WEBHOOK` 等。
+完整默认值以 `config.py` 的 `DEFAULT_CONFIG` 为准。也可用环境变量覆盖敏感配置：`MC_AI_API_KEY`、`MC_DISCORD_WEBHOOK` 等。
 
 ### 10. 常见问题 / FAQ
 
@@ -421,7 +443,7 @@ mc-scanner-v3/
 │   ├── get_mc_token.py     # 正版设备码工具
 │   └── send_command.py     # 命令发送工具（需授权，谨慎使用）
 ├── distributed/            # ⚠️ 实验性：分布式分片
-├── android_patches/        # ⚠️ 实验性：Termux 适配
+├── android_patches/        # ⚠️ 实验性：Android/Kivy 打包补丁（PythonActivity.java）
 ├── tests/                  # 单元 / 集成测试
 ├── config.example.json     # 配置模板
 ├── requirements.txt        # 依赖
@@ -450,7 +472,7 @@ python3 tools/gen_packets.py --download
 ## 📜 更新日志 / Changelog
 
 <details>
-<summary><b>v3.6.4</b>（点击展开 / Click to expand）</summary>
+<summary><b>v3.6.4（未发布 / Unreleased）</b>（点击展开 / Click to expand）</summary>
 
 这版主要是修 bug 和清理，没有新功能。/ Mostly bug fixes and cleanup, no new features.
 

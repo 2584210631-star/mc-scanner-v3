@@ -18,8 +18,12 @@ os.environ["MCSCANNER_DB_PATH"] = os.path.join(DATA_DIR, "mcscanner.db")
 # 启动状态文件，WebView轮询读取
 STATUS_FILE = os.path.join(DATA_DIR, "startup_status.txt")
 
+# 端口可用环境变量覆盖（Android 打包默认 8090；仓库 Web 面板默认 8080）
+PORT = int(os.environ.get("MCSCANNER_PORT", "8090"))
+
+
 def set_status(msg):
-    with open(STATUS_FILE, "w") as f:
+    with open(STATUS_FILE, "w", encoding="utf-8") as f:
         f.write(msg)
     print(f"[MC Scanner] {msg}")
 
@@ -29,21 +33,23 @@ def start_flask():
         set_status("正在导入模块...")
         from web.app import app as real_app
 
-        # 500错误处理器，显示完整traceback
-        @real_app.errorhandler(500)
-        def show_traceback(e):
-            import traceback
-            tb = traceback.format_exc()
-            return f"<h2>500错误</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
+        # 仅在显式 debug（MCSCANNER_DEBUG=1）时才把 traceback 回吐给 HTTP 客户端：
+        # 默认处理器会暴露绝对路径和内部实现，且覆盖 web/app.py 刻意做的脱敏 500 响应。
+        if os.environ.get("MCSCANNER_DEBUG", "") == "1":
+            @real_app.errorhandler(500)
+            def show_traceback(e):
+                import traceback
+                tb = traceback.format_exc()
+                return f"<h2>500错误</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
 
-        @real_app.errorhandler(Exception)
-        def show_all_errors(e):
-            import traceback
-            tb = traceback.format_exc()
-            return f"<h2>错误</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
+            @real_app.errorhandler(Exception)
+            def show_all_errors(e):
+                import traceback
+                tb = traceback.format_exc()
+                return f"<h2>错误</h2><pre style='white-space:pre-wrap;font-size:12px;color:red'>{tb}</pre>", 500
 
         set_status("正在启动Web服务...")
-        real_app.run(host="127.0.0.1", port=8090, debug=False, use_reloader=False, threaded=True)
+        real_app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False, threaded=True)
     except Exception as e:
         err = traceback.format_exc()
         set_status(f"启动失败: {err}")
@@ -61,7 +67,7 @@ if __name__ == "__main__":
     flask_ready = False
     for i in range(180):  # 180 * 0.5 = 90秒
         try:
-            urllib.request.urlopen("http://127.0.0.1:8090/", timeout=1)
+            urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=1)
             flask_ready = True
             set_status("启动成功！")
             break
@@ -75,11 +81,11 @@ if __name__ == "__main__":
 
         if flask_ready:
             # Flask就绪，直接加载
-            PythonActivity.loadUrl("http://127.0.0.1:8090")
+            PythonActivity.loadUrl(f"http://127.0.0.1:{PORT}")
             set_status("WebView加载中...")
         else:
             # Flask没就绪，加载错误页面显示状态
-            with open(STATUS_FILE, "r") as f:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
                 status = f.read()
             error_html = f"""<html><body style='font-family:sans-serif;padding:20px;background:#1a1a2e;color:#fff;'>
             <h2 style='color:#ff6b6b;'>启动超时</h2>
@@ -89,7 +95,7 @@ if __name__ == "__main__":
             <p style='color:#888;margin-top:20px;'>请尝试：1. 杀掉APP重新打开 2. 检查手机存储空间 3. 联系开发者</p>
             </body></html>"""
             error_file = os.path.join(DATA_DIR, "startup_error.html")
-            with open(error_file, "w") as f:
+            with open(error_file, "w", encoding="utf-8") as f:
                 f.write(error_html)
             PythonActivity.loadUrl(f"file://{error_file}")
     except Exception as e:
