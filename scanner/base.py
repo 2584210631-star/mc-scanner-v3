@@ -4,6 +4,7 @@
 统一 portscan / masscan / random_scan 三种扫描方式的接口，
 上层 engine 不需要写多套 if 判断适配不同扫描器。
 """
+import os
 from abc import ABC, abstractmethod
 from typing import Iterator, Optional, Tuple
 import threading
@@ -63,8 +64,16 @@ class MasscanScanner(BaseScanner):
         ports_str = ",".join(str(p) for p in ports) if ports else "25565"
         result_path = run_masscan(targets=targets_str, ports=ports_str,
                                    rate=rate or self.rate, exclude_file=self.exclude_file)
-        for ip, port, _banner in parse_masscan_json(result_path):
-            yield ip, port
+        try:
+            for ip, port, _banner in parse_masscan_json(result_path):
+                yield ip, port
+        finally:
+            # run_masscan 未指定 output_file 时会自建临时 NDJSON，
+            # 本生成器消费完/被关闭后这个文件不再需要，立即删除避免堆积
+            try:
+                os.remove(result_path)
+            except OSError:
+                pass
 
 
 class RandomScanner(BaseScanner):

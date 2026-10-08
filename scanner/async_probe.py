@@ -10,6 +10,7 @@ import json
 import time
 import atexit
 import concurrent.futures
+import threading
 
 from core.buffer import write_varint, read_varint
 from core.protocol import COMMON_PROTOCOLS
@@ -32,18 +33,31 @@ atexit.register(_shutdown_executor)
 try:
     import simdjson
     _HAS_SIMDJSON = True
-    _parser = simdjson.Parser()
+    _parser_local = threading.local()
 except Exception:
     # simdjson 未安装或加载失败时回退标准库，
     # 避免健康监控线程等在无 simdjson 环境下整轮崩溃导致"监控扫不上"
     _HAS_SIMDJSON = False
 
 
+def _get_parser():
+    """每线程一个 simdjson.Parser。
+
+    旧实现是模块级共享 Parser，而 web 每个扫描线程各自 asyncio.run，
+    pysimdjson 的 Parser 并非线程安全，共享会解析错乱/崩溃。
+    """
+    parser = getattr(_parser_local, "parser", None)
+    if parser is None:
+        parser = simdjson.Parser()
+        _parser_local.parser = parser
+    return parser
+
+
 def _parse_json(data: bytes):
     """解析 JSON，优先用 simdjson，回退标准库。"""
     if _HAS_SIMDJSON:
         try:
-            return _parser.parse(data).as_dict()
+            return _get_parser().parse(data).as_dict()
         except Exception:
             pass
     try:
@@ -117,34 +131,44 @@ def _build_ping(payload: int) -> bytes:
     return write_varint(len(data)) + data
 
 
+# 单主机整体探测预算倍数（见 async_slp_probe 说明）
+_PROBE_BUDGET_FACTOR = 3.0
+
+
 async def async_slp_probe(ip: str, port: int, timeout: float = 4.0, fast=False) -> dict:
     """
     异步 SLP 探测。
     fast=True: 只试自动版本，不遍历所有协议（健康监控用，快但可能漏老版本服）
+
+    整机预算：非 fast 模式最多 _PROBE_BUDGET_FACTOR 个 timeout，
+    避免旧实现"每个协议各吃满 timeout（20 个协议 = 20×timeout）"拖垮整轮扫描。
     """
     last_error = ""
     protos = (-1,) if fast else (-1,) + COMMON_PROTOCOLS
+    deadline = time.monotonic() + timeout * (1.0 if fast else _PROBE_BUDGET_FACTOR)
     for proto in protos:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            last_error = last_error or "probe budget exhausted"
+            break
+        attempt_timeout = min(timeout, remaining)
+        writer = None
         try:
             start = time.time()
             from scanner.async_portscan import _open_connection
-            reader, writer = await _open_connection(ip, port, timeout)
+            reader, writer = await _open_connection(ip, port, attempt_timeout)
 
             # 发送 Handshake + Status Request
             writer.write(_build_handshake(ip, port, proto))
             writer.write(_build_status_request())
-            await writer.drain()
+            # drain 必须限时：恶意端不读数据填满发送窗口时会永久挂起
+            await asyncio.wait_for(writer.drain(), timeout=attempt_timeout)
 
             # 接收 Status Response
             packet_id, payload = await asyncio.wait_for(
-                _recv_packet(reader), timeout=timeout)
+                _recv_packet(reader), timeout=attempt_timeout)
 
             if packet_id != 0x00 or not payload:
-                writer.close()
-                try:
-                    await writer.wait_closed()
-                except Exception:
-                    pass
                 last_error = f"bad packet id={packet_id}"
                 continue
 
@@ -168,11 +192,6 @@ async def async_slp_probe(ip: str, port: int, timeout: float = 4.0, fast=False) 
                     pass
 
             if not info:
-                writer.close()
-                try:
-                    await writer.wait_closed()
-                except Exception:
-                    pass
                 last_error = "json parse failed"
                 continue
 
@@ -181,32 +200,41 @@ async def async_slp_probe(ip: str, port: int, timeout: float = 4.0, fast=False) 
             try:
                 ping_payload = int(time.time() * 1000) & 0xFFFFFFFFFFFFFFFF
                 writer.write(_build_ping(ping_payload))
-                await writer.drain()
+                await asyncio.wait_for(writer.drain(), timeout=attempt_timeout)
                 pong_id, _ = await asyncio.wait_for(
-                    _recv_packet(reader), timeout=2.0)
+                    _recv_packet(reader), timeout=min(2.0, attempt_timeout))
                 if pong_id == 0x01:
                     ping_ms = int((time.time() - start) * 1000)
             except Exception:
                 ping_ms = int((time.time() - start) * 1000)
 
-            writer.close()
-            try:
-                await writer.wait_closed()
-            except Exception:
-                pass
-
+            # 远端字段类型不可信（见 banner.py 同类问题），逐层 isinstance 兜底
             version = info.get("version", {})
+            if isinstance(version, dict):
+                ver_name = version.get("name", "")
+                proto = version.get("protocol", 0)
+            else:
+                # 少数服务端把 version 直接写成字符串/数字，当作版本名保留
+                ver_name, proto = version, 0
             players = info.get("players", {})
-            ver_name = version.get("name", "")
+            if not isinstance(players, dict):
+                players = {}
+            sample = players.get("sample", [])
+            if not isinstance(sample, list):
+                sample = []
+            if ver_name is None:
+                ver_name = ""
+            if not isinstance(ver_name, str):
+                ver_name = str(ver_name)
 
             return {
                 "state": "up",
                 "version": ver_name,
-                "proto": version.get("protocol", 0),
+                "proto": proto,
                 "motd": _motd_text(info.get("description", "")),
                 "online": players.get("online", 0),
                 "max": players.get("max", 0),
-                "sample": players.get("sample", []),
+                "sample": sample,
                 "favicon": info.get("favicon", ""),
                 "ping_ms": ping_ms,
                 "core_type": detect_core_type(ver_name, info),
@@ -224,6 +252,15 @@ async def async_slp_probe(ip: str, port: int, timeout: float = 4.0, fast=False) 
         except Exception as e:
             last_error = str(e)[:80]
             continue
+        finally:
+            # 超时/异常分支也必须关闭 writer：transport 被 selector 引用，
+            # StreamWriter 出作用域不会释放 fd（实测单主机 20 次协议尝试泄漏 20 个 fd）
+            if writer is not None:
+                try:
+                    writer.close()
+                    await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
+                except Exception:
+                    pass
 
     return {"state": "offline", "error": last_error}
 
