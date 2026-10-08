@@ -5,11 +5,17 @@
 支持 SMTP SSL/TLS，兼容 QQ邮箱、163邮箱、Gmail等。
 """
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
 from email.utils import formataddr
 from datetime import datetime
+
+
+def _clean_header(v):
+    """邮件头字段过滤 CR/LF：email_to/from 可被面板写入，防头注入（Bcc 注入等）。"""
+    return str(v or "").replace("\r", " ").replace("\n", " ").strip()
 
 
 def _html_escape(s):
@@ -36,26 +42,33 @@ def send_email(subject, body, html=False, cfg=None):
             "to": config.get("email_to", ""),
         }
 
-    if not cfg.get("smtp_host") or not cfg.get("username") or not cfg.get("password") or not cfg.get("to"):
+    host = _clean_header(cfg.get("smtp_host"))
+    if not host or not cfg.get("username") or not cfg.get("password") or not cfg.get("to"):
         return False, "邮件配置不完整（需要SMTP服务器、账号、密码、收件人）"
 
+    # 显式传入会校验证书与主机名的 SSL 上下文。
+    # 注意：smtplib 在 context=None 时会回落到 ssl._create_stdlib_context()，
+    # 实测 verify_mode=CERT_NONE、check_hostname=False —— 等于完全不校验证书，
+    # 中间人可窃取邮箱密码/授权码与邮件内容。必须显式用 create_default_context()。
+    ssl_ctx = ssl.create_default_context()
+    server = None
     try:
         msg = MIMEMultipart()
         # 发件人格式：显示名 <邮箱地址>，163/QQ等要求From必须包含真实邮箱
-        from_name = cfg.get("from") or cfg["username"]
-        from_addr = cfg["username"]
+        from_name = _clean_header(cfg.get("from") or cfg["username"])
+        from_addr = _clean_header(cfg["username"])
         msg["From"] = formataddr((from_name, from_addr))
-        msg["To"] = Header(cfg["to"], "utf-8")
-        msg["Subject"] = Header(subject, "utf-8")
+        msg["To"] = Header(_clean_header(cfg["to"]), "utf-8")
+        msg["Subject"] = Header(_clean_header(subject), "utf-8")
 
         mime_type = "html" if html else "plain"
         msg.attach(MIMEText(body, mime_type, "utf-8"))
 
         if cfg.get("smtp_ssl", True):
-            server = smtplib.SMTP_SSL(cfg["smtp_host"], int(cfg["smtp_port"]), timeout=30)
+            server = smtplib.SMTP_SSL(host, int(cfg["smtp_port"]), timeout=30, context=ssl_ctx)
         else:
-            server = smtplib.SMTP(cfg["smtp_host"], int(cfg["smtp_port"]), timeout=30)
-            server.starttls()
+            server = smtplib.SMTP(host, int(cfg["smtp_port"]), timeout=30)
+            server.starttls(context=ssl_ctx)
 
         server.login(cfg["username"], cfg["password"])
         recipients = [r.strip() for r in cfg["to"].split(",") if r.strip()]
@@ -64,6 +77,14 @@ def send_email(subject, body, html=False, cfg=None):
         return True, ""
     except Exception as e:
         return False, str(e)
+    finally:
+        # login/sendmail 抛异常时原先不会 quit()，连接与本地端口会泄漏；
+        # 这里兜底 close（quit 之后 close 是幂等的）。
+        if server is not None:
+            try:
+                server.close()
+            except Exception:
+                pass
 
 
 def build_scan_report(results, targets_count, duration_sec, task_id=None):

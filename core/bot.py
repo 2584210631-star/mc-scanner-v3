@@ -19,6 +19,10 @@ from .errors import BotError, BotErrorCode
 # 正版调试开关：默认关闭，设环境变量 MC_DEBUG=1 开启
 _DEBUG = os.environ.get("MC_DEBUG", "") == "1"
 
+# bot 线程内刷新 token 后会重写 config.json，与 Web 端 /api/config/save 并发写同一文件。
+# 这里至少保证本模块内的多次 save_config 串行（跨进程/跨模块的原子写需 config.py 层配合）。
+_CONFIG_SAVE_LOCK = threading.Lock()
+
 def _dprint(msg):
     """正版调试输出，默认关闭"""
     if _DEBUG:
@@ -97,6 +101,10 @@ class MCBot:
         self.chat_messages: list[str] = []
         self.MAX_CHAT_MESSAGES = 2000
         self._chat_lock = threading.Lock()
+        # 与 chat_messages 一一对应的单调序号：长度基准的 [before:] 切片在头部截断后
+        # 会错位/丢消息，改用单调序号做增量读取（chat_since）
+        self._chat_seqs: list[int] = []
+        self._chat_seq = 0
         self.chat_callback = None  # callable(text: str, sender: str) -> None
         self.protocol_handler = None  # 版本协议处理器，按版本模块化
         # 正版认证
@@ -255,7 +263,8 @@ class MCBot:
                         # 生成shared secret
                         import os as _os
                         shared_secret = _os.urandom(16)
-                        _dprint(f"[正版调试] 生成shared_secret: {shared_secret.hex()[:16]}...")
+                        # 不打印密钥材料（哪怕前缀），只打印长度
+                        _dprint(f"[正版调试] 生成shared_secret: 长度={len(shared_secret)}字节")
                         # RSA加密（优先pycryptodome，备选pyjnius/APK）
                         enc_secret = None
                         enc_vtoken = None
@@ -316,7 +325,9 @@ class MCBot:
                                             break
                                     _cfg.set("msa_accounts", _accounts)
                                     _cfg.set("mc_access_token", self.msa_token)
-                                    _cfg.save_config()
+                                    # 串行化本模块内的配置写入，避免与其它线程的保存互相覆盖
+                                    with _CONFIG_SAVE_LOCK:
+                                        _cfg.save_config()
                                 except Exception as _e:
                                     _dprint(f"[正版] 刷新token后保存配置失败: {_e}")
                                 _join_ok = join_server(self.msa_token, _uuid_no_dash, sid_hash)
@@ -764,10 +775,10 @@ class MCBot:
                 print(f"[聊天签名] 失败，回退无签名: {e}")
 
         payload = self.protocol_handler.send_chat_payload(message)
-        print(f"[聊天调试] 无签名消息 proto={self.protocol_version} "
-              f"handler={type(self.protocol_handler).__name__} "
-              f"pkt=0x{chat_id:02x} len={len(payload)} "
-              f"hex={payload[:64].hex()}")
+        # 原先无条件打印 payload 十六进制（含聊天内容），改为调试开关下只打印长度
+        _dprint(f"[聊天调试] 无签名消息 proto={self.protocol_version} "
+                f"handler={type(self.protocol_handler).__name__} "
+                f"pkt=0x{chat_id:02x} len={len(payload)}")
         self.conn.send_packet(chat_id, payload)
 
     def _build_signed_chat(self, message: str) -> bytes:
@@ -1028,11 +1039,14 @@ class MCBot:
                             text, sender = self._extract_chat_with_sender(data, is_system)
                         if text:
                             with self._chat_lock:
+                                self._chat_seq += 1
                                 self.chat_messages.append(text)
-                                # 截断而非 deque：保持 routes_tools/plugins/command_runner 的
-                                # [before:] 切片用法兼容，同时防止长时运行内存无界增长
+                                self._chat_seqs.append(self._chat_seq)
+                                # 截断而非 deque：保持 routes_tools 的 [before:] 切片用法兼容，
+                                # 同时防止长时运行内存无界增长
                                 if len(self.chat_messages) > self.MAX_CHAT_MESSAGES:
                                     del self.chat_messages[: len(self.chat_messages) - self.MAX_CHAT_MESSAGES]
+                                    del self._chat_seqs[: len(self._chat_seqs) - self.MAX_CHAT_MESSAGES]
                             if self.chat_callback:
                                 try:
                                     self.chat_callback(text, sender)
@@ -1044,6 +1058,24 @@ class MCBot:
             # 循环退出（掉线/被断开/停止）即视为连接结束，观察者据此判断
             _dprint(f"[Play调试] Play线程退出, 共收到{_packet_count}个包")
             self.connected = False
+
+    def chat_seq(self) -> int:
+        """返回当前聊天消息的单调序号（增量读取的基准，不受头部截断影响）。"""
+        with self._chat_lock:
+            return self._chat_seq
+
+    def chat_since(self, seq: int):
+        """返回 (seq 之后的新消息列表, 当前序号)。
+
+        用单调序号而不是列表长度：chat_messages 超过 MAX_CHAT_MESSAGES 时会从头部
+        删除，此时 [before:] 会丢消息或错位（命令/插件响应静默丢失）。
+        """
+        with self._chat_lock:
+            if not self._chat_seqs:
+                return [], self._chat_seq
+            import bisect
+            i = bisect.bisect_right(self._chat_seqs, seq)
+            return self.chat_messages[i:], self._chat_seq
 
     def _extract_chat_with_sender(self, data: bytes, is_system: bool):
         """从聊天包提取 (text, sender)，sender 为玩家名或'系统'"""

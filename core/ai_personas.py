@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""预设人格。目标：听起来像真人网友，而不是角色扮演提示词。"""
+"""预设人格。目标：听起来像真人网友，而不是角色扮演提示词。
+
+⚠ 合规约束（与 core/ai_bot.py 的 _safe_send_chat、README「负责任使用」一致）：
+1) 所有人格文本最终都会被注入 AIBotSession，出站前必须经过 _safe_send_chat 的
+   出站内容过滤（控制字符清理 + "/" 命令前缀拦截），不得绕过；
+2) 人格只用于让回复更像真人网友，禁止用于伪造真人身份、挑动真实玩家冲突；
+3) **不得在未获得服务器所有者授权的情况下，把 AI 或多 AI 群投放到第三方服务器**。
+"""
 
 _HUMAN = (
     "硬性要求："
@@ -509,21 +516,42 @@ import threading
 _PERSONAS_LOCK = threading.Lock()
 _PERSONAS_FILE = "personas.json"
 _custom_personas = {}  # name -> {name, label, persona}
+_custom_loaded = False
+_custom_mtime = 0.0
+
+
+def _custom_file_mtime() -> float:
+    try:
+        return os.path.getmtime(_PERSONAS_FILE) if os.path.exists(_PERSONAS_FILE) else 0.0
+    except OSError:
+        return 0.0
 
 
 def _load_custom():
-    """从personas.json加载自定义人格"""
-    global _custom_personas
+    """从personas.json加载自定义人格。
+
+    读/解析失败时保留内存里的旧值：原先失败会把 _custom_personas 清空，
+    之后任何 _save_custom 都可能把空集写回磁盘 → 一次瞬时读失败即丢全部自定义人格。
+    """
+    global _custom_personas, _custom_loaded, _custom_mtime
     try:
-        if os.path.exists(_PERSONAS_FILE):
-            with open(_PERSONAS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    _custom_personas = {p["name"]: p for p in data if "name" in p}
-                elif isinstance(data, dict):
-                    _custom_personas = data
+        if not os.path.exists(_PERSONAS_FILE):
+            _custom_loaded = True
+            return
+        with open(_PERSONAS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            _custom_personas = {p["name"]: p for p in data if isinstance(p, dict) and "name" in p}
+        elif isinstance(data, dict):
+            _custom_personas = data
+        else:
+            return
+        _custom_mtime = _custom_file_mtime()
+        _custom_loaded = True
     except Exception:
-        _custom_personas = {}
+        # 不清空旧数据；记录 mtime 避免每次调用都重读同一个坏文件
+        _custom_mtime = _custom_file_mtime()
+        _custom_loaded = True
 
 
 def _save_custom():
@@ -538,7 +566,8 @@ def _save_custom():
 def get_personas():
     """获取所有人格（预设+自定义覆盖），即时生效"""
     with _PERSONAS_LOCK:
-        if not _custom_personas:
+        # 仅在文件变更或从未加载过时重读：原先 _custom_personas 为空就每次重读文件
+        if not _custom_loaded or _custom_file_mtime() != _custom_mtime:
             _load_custom()
         result = []
         for p in PRESET_PERSONAS:

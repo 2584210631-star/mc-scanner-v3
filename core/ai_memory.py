@@ -2,10 +2,12 @@
 """AI Bot 分层记忆：短期原文 + 中期摘要 + 长期玩家档案。
 纯本地规则提取，不花API钱。
 """
+import atexit
 import os
 import json
 import re
 import threading
+import time
 from collections import Counter
 from datetime import datetime
 
@@ -13,6 +15,17 @@ _LOCK = threading.Lock()
 _MEMORY_FILE = "ai_memory.json"
 _long_term = {}  # player_name -> {first_seen, last_seen, msg_count, keywords, facts}
 _loaded = False
+
+# 落盘策略：原先每条聊天消息都在持 _LOCK 的情况下把整个 JSON 重写一遍，
+# 而调用点在 bot 的收包线程里（bot.play → chat_callback → update_player_memory），
+# 服务器里任何人刷屏都能阻塞 keep-alive。改成脏标记 + 定时/显式 flush。
+_SAVE_INTERVAL = 5.0   # 最小落盘间隔（秒）
+_dirty = False
+_last_save = 0.0
+# 玩家档案上限：攻击者可用随机用户名制造无界内存/文件增长
+MAX_PLAYERS = 2000
+_FLUSH_STOP = threading.Event()
+_flusher = None
 
 
 def _load():
@@ -36,6 +49,64 @@ def _save():
             json.dump(_long_term, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+def _save_locked():
+    """在持 _LOCK 时立即落盘并清脏标记。"""
+    global _dirty, _last_save
+    _save()
+    _dirty = False
+    _last_save = time.monotonic()
+
+
+def flush_memory(force=False):
+    """把脏数据落盘。force=False 时受最小落盘间隔限制，避免刷屏时反复全量写。"""
+    global _dirty
+    with _LOCK:
+        if not _dirty:
+            return False
+        if not force and (time.monotonic() - _last_save) < _SAVE_INTERVAL:
+            return False
+        _save_locked()
+        return True
+
+
+def _flush_loop():
+    while not _FLUSH_STOP.is_set():
+        _FLUSH_STOP.wait(_SAVE_INTERVAL)
+        try:
+            flush_memory()
+        except Exception:
+            pass
+
+
+def _ensure_flusher():
+    """首次写入时启动后台落盘线程（daemon，不影响进程退出）。"""
+    global _flusher
+    if _flusher is not None:
+        return
+    with _LOCK:
+        if _flusher is not None:
+            return
+        t = threading.Thread(target=_flush_loop, daemon=True, name="ai-memory-flush")
+        _flusher = t
+        t.start()
+
+
+def _evict_locked():
+    """超过 MAX_PLAYERS 时按 last_seen 淘汰最旧的档案（需持 _LOCK）。"""
+    excess = len(_long_term) - MAX_PLAYERS
+    if excess <= 0:
+        return
+    oldest = sorted(_long_term.items(), key=lambda kv: kv[1].get("last_seen", ""))[:excess]
+    for name, _ in oldest:
+        _long_term.pop(name, None)
+
+
+try:
+    atexit.register(lambda: flush_memory(force=True))
+except Exception:
+    pass
 
 
 # 停用词（中文+英文），不参与关键词统计
@@ -83,9 +154,11 @@ def _extract_facts(text):
 
 
 def update_player_memory(sender, text):
-    """更新玩家长期记忆"""
+    """更新玩家长期记忆（只标脏，落盘交给后台 flusher，不阻塞收包线程）"""
+    global _dirty
     if not sender or sender in ("系统", "system", "Server"):
         return
+    _ensure_flusher()
     with _LOCK:
         _load()
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -97,6 +170,7 @@ def update_player_memory(sender, text):
                 "keywords": [],
                 "facts": [],
             }
+            _evict_locked()
         p = _long_term[sender]
         p["last_seen"] = now
         p["msg_count"] += 1
@@ -110,7 +184,8 @@ def update_player_memory(sender, text):
                 p["facts"].append(f)
         if len(p["facts"]) > 10:
             p["facts"] = p["facts"][-10:]
-        _save()
+        # 只标脏：真正的落盘由 _flush_loop / flush_memory 完成
+        _dirty = True
 
 
 def get_player_profile(sender):
@@ -251,7 +326,7 @@ def clear_all_memory():
         _load()
         n = len(_long_term)
         _long_term.clear()
-        _save()
+        _save_locked()
     return n
 
 
@@ -261,6 +336,6 @@ def clear_player(sender):
         _load()
         if sender in _long_term:
             del _long_term[sender]
-            _save()
+            _save_locked()
             return True
         return False
