@@ -144,11 +144,12 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
         if do_shuffle:
             print("[*] 已随机化扫描顺序（防顺序扫描特征）")
 
-    # 按IP并发限制：同一IP最多3个并发连接，防止单IP被打封
-    # 全局并发高但分散在不同IP上时不会触发；单IP多端口时自动收敛
+    # 按IP并发限制：单IP最多max(5, min(10, max_workers))个并发连接。
+    # 低并发扫描（如5线程）不限制，和之前行为一致；高并发扫描（200线程）
+    # 封顶到10，防止单IP被打封。全局并发分散在不同IP时不受影响。
     _per_ip_sems = {}
     _per_ip_lock = threading.Lock()
-    MAX_PER_IP = 3
+    MAX_PER_IP = max(5, min(10, max_workers))
 
     def _check_port_limited(ip, port, timeout):
         with _per_ip_lock:
