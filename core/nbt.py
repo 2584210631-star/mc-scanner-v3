@@ -166,8 +166,34 @@ def nbt_read_string(stream) -> str:
     return stream.read(slen).decode("utf-8", "ignore")
 
 
-def nbt_skip_value(stream, tag: int):
-    """跳过未知 NBT 值"""
+def _stream_remaining(stream) -> int:
+    """尽力估算流里还剩多少字节（用于校验集合长度是否可信）。
+    判断不出来时返回一个保守上限，避免把正常数据误判为攻击。"""
+    data = getattr(stream, "data", None)
+    pos = getattr(stream, "pos", None)
+    if data is not None and pos is not None:  # core.buffer.BytesStream
+        return max(0, len(data) - pos)
+    try:  # io.BytesIO 等可 seek 的流
+        cur = stream.tell()
+        end = stream.seek(0, 2)
+        stream.seek(cur)
+        return max(0, end - cur)
+    except Exception:
+        return 1 << 16
+
+
+def _check_list_count(count: int, stream, what: str = "NBT List"):
+    """校验集合元素个数。
+    每个元素至少要占 1 字节，所以 count 不可能大于剩余字节数；
+    不校验的话 count=0x7FFFFFFF 会让下面的 for 循环空转十几分钟（恶意服务器可触发）。"""
+    if count < 0 or count > _stream_remaining(stream):
+        raise ValueError(f"{what} 元素数非法: {count}")
+
+
+def nbt_skip_value(stream, tag: int, depth: int = 0):
+    """跳过未知 NBT 值（depth 用于限制嵌套深度，防止恶意嵌套触发 RecursionError）"""
+    if depth > 64:
+        raise ValueError("NBT 嵌套过深")
     if tag == 0x01:  # byte
         stream.read(1)
     elif tag == 0x02:  # short
@@ -185,18 +211,21 @@ def nbt_skip_value(stream, tag: int):
         if not elem:
             return
         count = int.from_bytes(stream.read(4), "big")
+        _check_list_count(count, stream)
         for _ in range(count):
-            nbt_skip_value(stream, elem[0])
+            nbt_skip_value(stream, elem[0], depth + 1)
     elif tag == 0x0a:  # compound
-        nbt_compound_to_text(stream)
+        nbt_compound_to_text(stream, depth + 1)
     elif tag == 0x0b:  # int array
         stream.read(4 * int.from_bytes(stream.read(4), "big"))
     elif tag == 0x0c:  # long array
         stream.read(8 * int.from_bytes(stream.read(4), "big"))
 
 
-def nbt_compound_to_text(stream) -> str:
+def nbt_compound_to_text(stream, depth: int = 0) -> str:
     """解析 network NBT 聊天组件（TAG_Compound），提取可读文本"""
+    if depth > 64:
+        raise ValueError("NBT 嵌套过深")
     text_val = ""
     translate_key = ""
     with_parts = []
@@ -221,22 +250,23 @@ def nbt_compound_to_text(stream) -> str:
                 break
             elem_type = elem_type_raw[0]
             count = int.from_bytes(stream.read(4), "big")
+            _check_list_count(count, stream, "NBT 聊天组件 List")
             items = []
             for _ in range(count):
                 if elem_type == 0x0a:
-                    items.append(nbt_compound_to_text(stream))
+                    items.append(nbt_compound_to_text(stream, depth + 1))
                 elif elem_type == 0x08:
                     items.append(nbt_read_string(stream))
                 else:
-                    nbt_skip_value(stream, elem_type)
+                    nbt_skip_value(stream, elem_type, depth + 1)
             if name == "with":
                 with_parts = items
             elif name == "extra":
                 extra_parts = items
         elif tag == 0x0a:  # 嵌套 compound（hoverEvent 等，跳过）
-            nbt_compound_to_text(stream)
+            nbt_compound_to_text(stream, depth + 1)
         else:
-            nbt_skip_value(stream, tag)
+            nbt_skip_value(stream, tag, depth + 1)
     if translate_key:
         friendly = TRANSLATE_MAP.get(translate_key)
         # 成就类消息：with = [玩家名, 成就名]，格式化为 "玩家名 达成了目标 [成就名]"

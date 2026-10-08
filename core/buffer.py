@@ -22,6 +22,9 @@ def write_varint(value: int) -> bytes:
 
 
 def read_varint(data: bytes, offset: int = 0) -> tuple:
+    """读取 VarInt，返回 (值, 新偏移)。
+    按 MC 规范做 int32 符号扩展（write_varint(-1) 写出的 5 字节读回来应是 -1，
+    而不是 4294967295）——read_varlong 一直是这么做的，这里原先漏了。"""
     result = 0
     num_read = 0
     while True:
@@ -30,14 +33,20 @@ def read_varint(data: bytes, offset: int = 0) -> tuple:
         byte = data[offset + num_read]
         result |= (byte & 0x7F) << (7 * num_read)
         num_read += 1
-        if not (byte & 0x80):
-            break
+        # MC VarInt 最长 5 字节；原先判断在 break 之后，第 6 字节会被先收下再判断
         if num_read > 5:
             raise ValueError("VarInt 过长")
+        if not (byte & 0x80):
+            break
+    if result >= (1 << 31):  # 符号扩展到 int32
+        result -= (1 << 32)
     return result, offset + num_read
 
 
 def read_varint_from_stream(stream) -> int:
+    """从流读取 VarInt。
+    这里的调用方基本是长度前缀/包 ID（都应当是非负的），所以**不做**符号扩展，
+    由调用方自行校验负值；只做 5 字节上限校验。"""
     result = 0
     num_read = 0
     while True:
@@ -47,10 +56,10 @@ def read_varint_from_stream(stream) -> int:
         byte = b[0]
         result |= (byte & 0x7F) << (7 * num_read)
         num_read += 1
-        if not (byte & 0x80):
-            break
         if num_read > 5:
             raise ValueError("VarInt 过长")
+        if not (byte & 0x80):
+            break
     return result
 
 
@@ -79,10 +88,11 @@ def read_varlong(data: bytes, offset: int = 0) -> tuple:
         byte = data[offset + num_read]
         result |= (byte & 0x7F) << (7 * num_read)
         num_read += 1
-        if not (byte & 0x80):
-            break
+        # 与 VarInt 同理：上限判断必须在 break 之前，否则会多接受 1 字节
         if num_read > 10:
             raise ValueError("VarLong 过长")
+        if not (byte & 0x80):
+            break
     if result >= (1 << 63):
         result -= (1 << 64)
     return result, offset + num_read
@@ -95,6 +105,10 @@ def write_string(s: str) -> bytes:
 
 def read_string(data: bytes, offset: int = 0) -> tuple:
     length, offset = read_varint(data, offset)
+    # read_varint 现在会符号扩展，长度可能是负数：必须显式拒绝，
+    # 否则负长度会通过下面的边界检查并产生错误的切片。
+    if length < 0:
+        raise ValueError(f"字符串长度非法: {length}")
     if offset + length > len(data):
         raise ValueError("字符串数据不完整")
     s = data[offset:offset + length].decode("utf-8", errors="replace")
