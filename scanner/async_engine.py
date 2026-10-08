@@ -151,6 +151,21 @@ class AsyncScanEngine:
                 result["plugin_channels"] = auth.get("plugin_channels", [])
                 if auth.get("detected_proto"):
                     result["proto"] = auth["detected_proto"]
+                # NeoForge/Forge 1.20.2+ 不在SLP暴露forgeData，用登录频道修正core_type
+                _ch = result["plugin_channels"]
+                if _ch and result.get("core_type") in ("vanilla", "unknown"):
+                    for c in _ch:
+                        cl = str(c).lower()
+                        if "neoforge" in cl:
+                            result["core_type"] = "neoforge"
+                            result["is_modded"] = 1
+                            result["server_type"] = "neoforge"
+                            break
+                        if "fml" in cl or "forge" in cl:
+                            result["core_type"] = "forge"
+                            result["is_modded"] = 1
+                            result["server_type"] = "forge"
+                            break
                 self._bump(result["auth"])
             except Exception:
                 result["auth"] = "unknown"
