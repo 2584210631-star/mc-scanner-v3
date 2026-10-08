@@ -22,6 +22,22 @@ def _html_escape(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def _to_int(value, default=0):
+    """请求参数转 int，非法值回退默认值（原实现直接 int() 会 500）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default=0.0):
+    """请求参数转 float，非法值回退默认值。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def register(app):
     observer_sessions = state.observer_sessions
     observer_lock = state.observer_lock
@@ -41,11 +57,11 @@ def register(app):
             return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         host = data.get("host")
-        port = int(data.get("port") or 25565)
+        port = _to_int(data.get("port"), 25565)
         username = data.get("username", "Observer")
         authme = data.get("authme_password") or None
-        timeout = float(data.get("timeout", 20.0))
-        duration = max(0, float(data.get("duration", 0) or 0))
+        timeout = _to_float(data.get("timeout"), 20.0)
+        duration = max(0.0, _to_float(data.get("duration"), 0.0))
         use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
         if not host:
@@ -56,9 +72,11 @@ def register(app):
         session = ObserverSession(host, port, username, authme_password=authme,
                                   timeout=timeout, duration=duration, use_premium=use_premium,
                                   premium_uuid=premium_uuid)
-        session.session_id = f"{int(time.time() * 1000)}-{os.getpid()}-{len(observer_sessions) + 1}"
         session.thread = threading.Thread(target=session.run, daemon=True)
+        # 会话id在锁内生成并注册：原实现用 len(observer_sessions)+1 且无锁，
+        # 同一毫秒的两个请求会拿到同一个 id，后注册的覆盖前者导致旧会话失控
         with observer_lock:
+            session.session_id = f"{int(time.time() * 1000)}-{os.getpid()}-{len(observer_sessions) + 1}"
             observer_sessions[session.session_id] = session
         session.thread.start()
         _log(f"观察者启动: {username} -> {host}:{port} [{session.session_id[-6:]}]")

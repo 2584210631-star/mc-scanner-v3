@@ -128,6 +128,18 @@ def register(app):
                    "health_interval", "health_probe_concurrency", "health_probe_ip_gap",
                    "health_monitor_db_extra"}
         to_save = {k: v for k, v in data.items() if k in allowed}
+        # 路径类字段强校验：白名单里的 db_path/exclude_file 原来是任意字符串，
+        # 可把库指到任意可写路径、让 Excluder 去 open 任意文件（鉴权受限下的最小收敛）
+        if "db_path" in to_save:
+            db_path = _safe_db_path(to_save["db_path"])
+            if db_path != to_save["db_path"]:
+                return jsonify({"success": False, "error": "db_path 只允许纯文件名（.db 结尾）"}), 400
+            to_save["db_path"] = db_path
+        if "exclude_file" in to_save:
+            exclude_name = str(to_save["exclude_file"] or "")
+            if exclude_name != "exclude.conf":
+                return jsonify({"success": False, "error": "exclude_file 只允许 exclude.conf"}), 400
+            to_save["exclude_file"] = exclude_name
         # api_key如果是打码状态（含****），不覆盖原值
         if "ai_api_key" in to_save and "****" in str(to_save["ai_api_key"]):
             del to_save["ai_api_key"]
@@ -189,17 +201,24 @@ def register(app):
 
     @app.route('/api/email/test', methods=['POST'])
     def email_test():
-        """发送测试邮件"""
+        """发送测试邮件。
+
+        主机、端口、账号密码只取服务端保存的配置：原实现允许请求体覆盖 smtp_host/
+        username/password，等于任何人可拿服务端保存的邮箱凭据去连任意主机
+        （出站 SSRF/内网端口探测 + 凭据外泄）。收件人与显示名仍可用请求值，它们不决定出站目标。
+        """
         data = request.json or {}
         cfg = {
-            "smtp_host": data.get("smtp_host") or config.get("email_smtp_host", ""),
-            "smtp_port": data.get("smtp_port") or config.get("email_smtp_port", 465),
-            "smtp_ssl": data.get("smtp_ssl", config.get("email_smtp_ssl", True)),
-            "username": data.get("username") or config.get("email_username", ""),
-            "password": data.get("password") or config.get("email_password", ""),
+            "smtp_host": config.get("email_smtp_host", ""),
+            "smtp_port": config.get("email_smtp_port", 465),
+            "smtp_ssl": config.get("email_smtp_ssl", True),
+            "username": config.get("email_username", ""),
+            "password": config.get("email_password", ""),
             "from": data.get("from_addr") or config.get("email_from", "") or config.get("email_username", ""),
             "to": data.get("to") or config.get("email_to", ""),
         }
+        if not cfg["smtp_host"]:
+            return jsonify({"success": False, "error": "请先在设置中保存 SMTP 服务器地址，再发送测试邮件"})
         from core.notifier import send_email
         subject = "[MC扫描] 邮件测试"
         body = f"""<html><body>

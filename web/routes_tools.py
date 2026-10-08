@@ -4,11 +4,36 @@ from flask import request, jsonify
 import os
 import sys
 import time
+import config
 from core.bot import MCBot
 try:
     from web import state
 except ImportError:
     import state  # type: ignore
+
+
+def _to_int(value, default=0):
+    """请求参数转 int，非法值回退默认值（原实现直接 int() 会 500）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default=0.0):
+    """请求参数转 float，非法值回退默认值。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+# tools 目录只需加入一次 sys.path：原来每个请求都 insert，sys.path 会无限膨胀
+_TOOLS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools')
+
+
+def _ensure_tools_path():
+    if _TOOLS_DIR not in sys.path:
+        sys.path.insert(0, _TOOLS_DIR)
 
 
 def register(app):
@@ -41,25 +66,29 @@ def register(app):
             if authme_password:
                 bot.authme_login(authme_password, mode="auto")
                 time.sleep(1.0)
-            before = len(bot.chat_messages)
+            # 用单调序号做增量基准：chat_messages 超过 MAX_CHAT_MESSAGES 会从头部截断，
+            # len() 基准的切片会错位/丢消息（core/bot.py 已提供 chat_seq/chat_since）
+            before_seq = bot.chat_seq()
             bot.send_command(command)
             time.sleep(1.5)  # 等服务器处理命令
             bot.keep_alive(hold)
             auth_mode = getattr(bot, 'auth_mode', 'unknown')
-            state = getattr(bot, 'state', 'unknown')
+            # 原来写 state = getattr(bot, 'state', ...)，遮蔽了模块级 state，
+            # 函数内任何对 state 的引用都会变成 UnboundLocalError
+            bot_state = getattr(bot, 'state', 'unknown')
             # 收集命令发送后收到的新聊天消息作为响应
-            chat_responses = bot.chat_messages[before:]
+            chat_responses, _ = bot.chat_since(before_seq)
             bot.close()
             cmd = command if command.startswith('/') else '/' + command
             return jsonify({"success": True, "command": cmd, "auth_mode": auth_mode,
-                            "state": state, "hold": hold, "chat": chat_responses[-10:]})
+                            "state": bot_state, "hold": hold, "chat": chat_responses[-10:]})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)})
 
     @app.route('/api/tools/gen_packets', methods=['POST'])
     def gen_packets():
         try:
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools'))
+            _ensure_tools_path()
             import gen_packets as gp
             if hasattr(gp, 'main'):
                 gp.main()
@@ -90,10 +119,11 @@ def register(app):
         data = request.json or {}
         from core.proxy import ProxyManager
         manager = ProxyManager(proxy_file="proxies.txt", auto_fetch=False)
+        # 探测目标默认值改从配置取：原来硬编码 mc.hypixel.net，会默认拿第三方服务器做探测目标
         alive = manager.health_check(
-            test_host=data.get("test_host", "mc.hypixel.net"),
-            test_port=data.get("test_port", 25565),
-            timeout=data.get("timeout", 5.0))
+            test_host=data.get("test_host") or config.get("proxy_test_host", "mc.hypixel.net"),
+            test_port=_to_int(data.get("test_port"), config.get("proxy_test_port", 25565)),
+            timeout=_to_float(data.get("timeout"), 5.0))
         _log(f"代理健康检查: {alive}/{len(manager)} 可用")
         return jsonify({"success": True, "alive": alive, "total": len(manager)})
 

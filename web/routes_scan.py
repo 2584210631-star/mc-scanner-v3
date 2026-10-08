@@ -31,6 +31,36 @@ def _html_escape(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
+def _to_int(value, default=0):
+    """请求参数转 int，非法值回退默认值（原实现直接 int() 会 500）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default=0.0):
+    """请求参数转 float，非法值回退默认值。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+_SAFE_EXCLUDE_FILES = {"exclude.conf"}
+
+
+def _safe_exclude_file(name):
+    """排除列表文件名白名单（默认 exclude.conf）。
+
+    原实现把请求参数直接交给 Excluder() -> open(filepath)：可读任意路径，
+    指向 /dev/zero 或 FIFO 时该文件的逐行迭代永不结束，扫描线程直接挂死。
+    """
+    if isinstance(name, str) and name in _SAFE_EXCLUDE_FILES:
+        return name
+    return "exclude.conf"
+
+
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
@@ -59,7 +89,8 @@ def register(app):
         ports = parse_ports_spec(data.get("ports", [25565]))
         if not ports:
             return jsonify({"error": "端口格式无效，请输入如 25565 或 25565-25575"}), 400
-        excluder = Excluder(data.get("exclude_file", "exclude.conf"))
+        exclude_file = _safe_exclude_file(data.get("exclude_file"))
+        excluder = Excluder(exclude_file)
         try:
             parsed_raw = list(parse_targets(targets_list, ports))
         except Exception as e:
@@ -80,8 +111,10 @@ def register(app):
             "use_masscan": data.get("use_masscan", "auto"),
             "portscan_only": data.get("portscan_only", False),
             "masscan_rate": data.get("masscan_rate", 5000),
+            # masscan 子进程最长运行秒数（可选）：防止卡死的 masscan 让任务永不结束
+            "masscan_timeout": data.get("masscan_timeout", 600),
             "ports": ports,
-            "exclude_file": data.get("exclude_file", "exclude.conf"),
+            "exclude_file": exclude_file,
             "continuous": continuous,
             "async_mode": data.get("async_mode", True),
             "scan_mode": data.get("scan_mode", "balanced"),
@@ -92,22 +125,33 @@ def register(app):
 
     @app.route('/api/scan/random', methods=['POST'])
     def random_scan_api():
+        # 与 /api/scan/start 同一套门禁：随机全网扫描风险最高，不能反而无门禁
+        if state.is_read_only():
+            return jsonify({"error": "只读模式下禁止扫描"}), 403
+        if not state.capability_enabled("scan"):
+            return jsonify({"error": "扫描能力未启用，请在config中设置 capabilities.scan=true"}), 403
         data = request.json or {}
-        # 检查全局scan_state和任务队列里是否有任务在跑
-        has_running = scan_state["running"] or any(t["running"] for t in state.scan_tasks.values())
+        # 持锁快照：另一线程正在 start_scan_task 里插入键时无锁遍历 values()
+        # 会抛 RuntimeError: dictionary changed size during iteration → 500
+        with scan_lock:
+            has_running = scan_state["running"] or any(t["running"] for t in state.scan_tasks.values())
         if has_running:
             return jsonify({"error": "已有扫描任务在运行"}), 400
-        count = data.get("count", 1000)
+        # task_id 在锁内分配：原实现直接读写全局 task_counter，
+        # 并发请求会拿到同一个 id，后写入的任务状态覆盖前者
+        with scan_lock:
+            state.task_counter += 1
+            task_id = state.task_counter
+        count = max(1, min(_to_int(data.get("count"), 1000), 65536))
         ports = data.get("ports", "25565-25575")
-        workers = data.get("workers", 200)
+        workers = max(1, min(_to_int(data.get("workers"), 200), 1000))
         timeout = data.get("timeout", 2.0)
         do_probe = data.get("probe", True)
 
         def _random_worker():
             try:
-                state.task_counter += 1
                 with scan_lock:
-                    scan_state["task_id"] = state.task_counter
+                    scan_state["task_id"] = task_id
                     scan_state["running"] = True
                     scan_state["results"] = []
                     scan_state["logs"] = []
@@ -149,7 +193,7 @@ def register(app):
 
         t = threading.Thread(target=_random_worker, daemon=True)
         t.start()
-        return jsonify({"status": "started", "count": count, "task_id": state.task_counter})
+        return jsonify({"status": "started", "count": count, "task_id": task_id})
 
     @app.route('/api/scan/stop', methods=['POST'])
     def stop_scan():
@@ -190,8 +234,9 @@ def register(app):
         core_type = request.args.get("core_type")
         version = request.args.get("version", "")
         only_online = request.args.get("only_online") == "1"
-        page = int(request.args.get("page", 1))
-        per_page = int(request.args.get("per_page", 50))
+        page = max(1, _to_int(request.args.get("page"), 1))
+        # per_page 上限 1000：原实现允许 ?per_page=100000000 一次把结果拉进内存
+        per_page = max(1, min(_to_int(request.args.get("per_page"), 50), 1000))
         with scan_lock:
             results = list(scan_state["results"])
         filtered = []
@@ -235,16 +280,24 @@ def register(app):
             import csv
             def _csv_generator():
                 if results:
-                    keys = list(results[0].keys())
+                    # fieldnames 取所有行的键并集：原实现只用第一行的键，
+                    # 后面某行字段更多时 DictWriter 会抛 ValueError，响应流中途断裂
+                    keys = []
+                    seen = set()
+                    for r in results:
+                        for k in r.keys():
+                            if k not in seen:
+                                seen.add(k)
+                                keys.append(k)
                     # 用yield逐行输出，避免大结果集全量进内存
                     import io
                     output = io.StringIO()
-                    writer = csv.DictWriter(output, fieldnames=keys)
+                    writer = csv.DictWriter(output, fieldnames=keys, extrasaction="ignore")
                     writer.writeheader()
                     yield output.getvalue()
                     for r in results:
                         output = io.StringIO()
-                        writer = csv.DictWriter(output, fieldnames=keys)
+                        writer = csv.DictWriter(output, fieldnames=keys, extrasaction="ignore")
                         writer.writerow(r)
                         yield output.getvalue()
             return Response(_csv_generator(), mimetype="text/csv",
@@ -343,7 +396,7 @@ def register(app):
         data = request.json or {}
         targets_raw = data.get("targets", [])
         db_path = _safe_db_path(data.get("db_path", "mcscanner.db"))
-        workers = int(data.get("workers", 10))
+        workers = max(1, min(_to_int(data.get("workers"), 10), 64))
 
         targets = []
         for t in targets_raw:
@@ -393,8 +446,8 @@ def register(app):
     @app.route('/api/favorites/rescan', methods=['POST'])
     def fav_rescan():
         data = request.json or {}
-        timeout = float(data.get("timeout", 5.0))
-        workers = int(data.get("workers", 10))
+        timeout = _to_float(data.get("timeout"), 5.0)
+        workers = max(1, min(_to_int(data.get("workers"), 10), 64))
         def _progress(done, total):
             _log(f"收藏重查进度: {done}/{total}")
         favs = favorites.rescan_all(timeout=timeout, workers=workers, progress_callback=_progress)
@@ -408,6 +461,6 @@ def register(app):
         if not ip:
             return jsonify({"success": False, "error": "请指定ip"}), 400
         port = int(data.get("port") or 25565)
-        info = favorites.rescan_one(ip, port, timeout=float(data.get("timeout", 5.0)))
+        info = favorites.rescan_one(ip, port, timeout=_to_float(data.get("timeout"), 5.0))
         return jsonify({"success": True, "info": info})
 

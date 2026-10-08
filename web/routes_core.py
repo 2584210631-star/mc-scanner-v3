@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Routes: core"""
+import html
 import os
 try:
     from web import state
@@ -33,7 +34,7 @@ def register(app):
         code = request.args.get("code", "")
         error = request.args.get("error", "")
         if error:
-            return f"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>登录失败</h2><p>{error}</p><p>可以关闭此页面返回APP</p></body></html>"
+            return f"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>登录失败</h2><p>{html.escape(str(error))}</p><p>可以关闭此页面返回APP</p></body></html>"
         if not code:
             return "<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>缺少授权码</h2><p>可以关闭此页面返回APP</p></body></html>"
         try:
@@ -41,7 +42,7 @@ def register(app):
             r = fcl_exchange_code(code)
             if "access_token" not in r:
                 err_desc = r.get("error_description", str(r))
-                return f"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>换Token失败</h2><p>{err_desc}</p><p>可以关闭此页面返回APP</p></body></html>"
+                return f"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>换Token失败</h2><p>{html.escape(str(err_desc))}</p><p>可以关闭此页面返回APP</p></body></html>"
             msa_token = r["access_token"]
             print(f"[MSA] 获取MSA token成功: {msa_token[:30]}...")
             result = full_login_flow(msa_token)
@@ -54,12 +55,12 @@ def register(app):
             print(f"[MSA] 正版登录成功: {result['name']}")
             return f"""<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;background:#1a1a2e;color:#fff;'>
             <h2 style='color:#00d992;'>✅ 登录成功！</h2>
-            <p>欢迎，<b>{result['name']}</b></p>
+            <p>欢迎，<b>{html.escape(str(result['name']))}</b></p>
             <p style='color:#888;font-size:14px;'>可以关闭此页面，返回APP查看状态</p>
             <script>setTimeout(function(){{window.location.href='/'}}, 2000);</script>
             </body></html>"""
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return f"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>登录异常</h2><p>{str(e)}</p><p>可以关闭此页面返回APP</p></body></html>"
+            return f"<html><body style='font-family:sans-serif;text-align:center;padding-top:50px;'><h2>登录异常</h2><p>{html.escape(str(e))}</p><p>可以关闭此页面返回APP</p></body></html>"
 

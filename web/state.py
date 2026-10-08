@@ -79,8 +79,25 @@ health_monitor = {
     "status": {},
 }
 
+# 健康监控状态锁：监控线程与 Web 请求线程共享 status/events/last_players，
+# 之前两边都无锁（监控线程 del、请求线程遍历）会抛 RuntimeError 并返回 500。
+health_lock = threading.RLock()
+
 _ai_bots = {}
 _ai_bot_seq = 0
+_ai_bot_lock = threading.Lock()
+
+
+def next_ai_bot_seq() -> int:
+    """线程安全地分配AI会话序号。
+
+    原实现各路由直接 state._ai_bot_seq += 1，并发请求会拿到同一个 id，
+    同名会话互相覆盖，旧会话失控且无法 stop。
+    """
+    global _ai_bot_seq
+    with _ai_bot_lock:
+        _ai_bot_seq += 1
+        return _ai_bot_seq
 
 # 全局安全开关：只读模式下禁止危险操作（警告/进服/扫描）
 read_only_mode = False
@@ -127,18 +144,33 @@ def safe_db_path(path: str) -> str:
 
 
 def parse_ports_spec(ports_spec, max_ports=2000):
-    """解析端口规格，返回去重排序后的端口列表。max_ports限制单次扫描端口数防滥用。"""
+    """解析端口规格，返回去重排序后的端口列表。max_ports限制单次扫描端口数防滥用。
+
+    原实现先把 range(start, end+1) 整段物化再截断，传入 "1-99999999" 这类输入会直接
+    吃掉几 GB 内存；现在先把区间夹到合法端口范围（1-65535），并在收集到 max_ports 时
+    立即停止，绝不物化超长区间。范围外的端口直接丢弃（由调用方决定是否报错）。
+    """
     if ports_spec is None or (isinstance(ports_spec, str) and not ports_spec.strip()):
         return [25565]
     if isinstance(ports_spec, list):
-        result = []
+        result = set()
         for p in ports_spec:
-            result.extend(parse_ports_spec(p, max_ports))
-        return sorted(set(result))[:max_ports]
+            result.update(parse_ports_spec(p, max_ports))
+            if len(result) >= max_ports:
+                break
+        return sorted(result)[:max_ports]
     if not isinstance(ports_spec, str):
-        return [int(ports_spec)]
-    result = []
+        # 显式类型分支：原实现 int(dict) 之类会 TypeError 直冒到 500
+        try:
+            port = int(ports_spec)
+        except (TypeError, ValueError):
+            return []
+        return [port] if 1 <= port <= 65535 else []
+    result = set()
+    full = False
     for part in ports_spec.split(","):
+        if full:
+            break
         part = part.strip()
         if not part:
             continue
@@ -146,14 +178,27 @@ def parse_ports_spec(ports_spec, max_ports=2000):
             try:
                 start, end = part.split("-", 1)
                 start = int(start.strip()); end = int(end.strip())
-                if start > end:
-                    start, end = end, start
-                result.extend(range(start, end + 1))
             except ValueError:
                 continue
+            if start > end:
+                start, end = end, start
+            start = max(1, start)
+            end = min(65535, end)
+            for p in range(start, end + 1):
+                result.add(p)
+                if len(result) >= max_ports:
+                    full = True
+                    break
         else:
             try:
-                result.append(int(part))
+                p = int(part)
             except ValueError:
                 continue
-    return sorted(set(result))[:max_ports]
+            if 1 <= p <= 65535:
+                result.add(p)
+                if len(result) >= max_ports:
+                    full = True
+    if full:
+        # 不再静默截断：用户以为扫了全部端口却没扫，留日志便于排查
+        logger.warning(f"[!] 端口数量超过上限 {max_ports}，已截断（超出部分被忽略）")
+    return sorted(result)[:max_ports]

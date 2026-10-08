@@ -89,11 +89,12 @@ def register(app):
         if not topic and not custom_prompt:
             return jsonify({"success": False, "error": "请输入主题或自定义提示词"}), 400
         from core.ai_generator import generate_content
-        cfg = config.get("ai_api_key", "")
+        # 忽略请求里的 api_key/base_url：否则服务端会把配置中的 ai_api_key 以
+        # Authorization: Bearer 发往请求方指定的任意 URL（SSRF + 凭据外泄）
         result = generate_content(
             topic=topic, preset=preset,
-            api_key=data.get("api_key") or cfg,
-            base_url=data.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+            api_key=config.get("ai_api_key", ""),
+            base_url=config.get("ai_base_url", "https://api.openai.com/v1"),
             model=data.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
             custom_prompt=custom_prompt, custom_system=custom_system,
         )
@@ -102,19 +103,28 @@ def register(app):
     @app.route('/api/ai/send', methods=['POST'])
     def ai_send():
         """AI生成内容并发送到指定服务器"""
+        # 与 /api/warn/single 相同的门禁：AI进服发消息属于高风险能力，不能绕过只读/能力开关
+        if state.is_read_only():
+            return jsonify({"success": False, "error": "只读模式下禁止AI进服发送"}), 403
+        if not state.capability_enabled("login_interact"):
+            return jsonify({"success": False, "error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         ip = data.get("ip")
-        port = int(data.get("port") or 25565)
+        try:
+            port = int(data.get("port") or 25565)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "端口格式无效"}), 400
         username = data.get("username", "StoryBot")
         authme_password = data.get("authme_password")
         if not ip:
             return jsonify({"success": False, "error": "请指定服务器地址"}), 400
         # 先生成
         from core.ai_generator import generate_content
+        # 同上：api_key/base_url 只取服务端配置
         gen = generate_content(
             topic=data.get("topic", ""), preset=data.get("preset", "novel"),
-            api_key=data.get("api_key") or config.get("ai_api_key", ""),
-            base_url=data.get("base_url") or config.get("ai_base_url", "https://api.openai.com/v1"),
+            api_key=config.get("ai_api_key", ""),
+            base_url=config.get("ai_base_url", "https://api.openai.com/v1"),
             model=data.get("model") or config.get("ai_model", "gpt-3.5-turbo"),
             custom_prompt=data.get("custom_prompt"),
         )

@@ -8,6 +8,14 @@ except ImportError:
     import state  # type: ignore
 
 
+def _to_int(value, default=0):
+    """请求参数转 int，非法值回退默认值（原实现直接 int() 会 500）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def register(app):
     _ai_bots = state._ai_bots
     def _log(msg):
@@ -35,15 +43,14 @@ def register(app):
         username = data.get("username", "AI助手")
         if not host:
             return jsonify({"success": False, "error": "请指定服务器地址"}), 400
-        state._ai_bot_seq += 1
-        session_id = f"aibot_{state._ai_bot_seq}"
+        # 序号分配加锁：无锁自增会让并发请求拿到同名 session_id，旧会话被覆盖且无法 stop
+        session_id = f"aibot_{state.next_ai_bot_seq()}"
         from core.ai_bot import AIBotSession
         ai_cfg = data.get("ai_config", {})
-        # 空值回退到全局设置
-        if not ai_cfg.get("api_key"):
-            ai_cfg["api_key"] = config.get("ai_api_key", "")
-        if not ai_cfg.get("base_url"):
-            ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
+        # api_key/base_url 只取服务端配置：允许请求方指定 URL 会让服务端把 ai_api_key
+        # 以 Bearer 发往任意地址（SSRF + 凭据外泄），与 routes_ai.py 同因
+        ai_cfg["api_key"] = config.get("ai_api_key", "")
+        ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
         if not ai_cfg.get("model"):
             ai_cfg["model"] = config.get("ai_model", "gpt-3.5-turbo")
         if "reply_cooldown" not in ai_cfg or ai_cfg.get("reply_cooldown") is None:
@@ -80,7 +87,7 @@ def register(app):
     @app.route('/api/ai_bot/chat')
     def ai_bot_chat():
         sid = request.args.get("session_id")
-        since = int(request.args.get("since", 0))
+        since = _to_int(request.args.get("since"), 0)
         if sid in _ai_bots:
             return jsonify({"messages": _ai_bots[sid].get_chat(since)})
         return jsonify({"messages": []})
@@ -110,11 +117,10 @@ def register(app):
         bot_count = max(2, min(8, bot_count))
         from core.ai_bot import multi_ai_bot
         ai_cfg = data.get("ai_config", {})
-        # 空值回退到全局设置
-        if not ai_cfg.get("api_key"):
-            ai_cfg["api_key"] = config.get("ai_api_key", "")
-        if not ai_cfg.get("base_url"):
-            ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
+        # api_key/base_url 只取服务端配置：允许请求方指定 URL 会让服务端把 ai_api_key
+        # 以 Bearer 发往任意地址（SSRF + 凭据外泄），与 routes_ai.py 同因
+        ai_cfg["api_key"] = config.get("ai_api_key", "")
+        ai_cfg["base_url"] = config.get("ai_base_url", "https://api.openai.com/v1")
         if not ai_cfg.get("model"):
             ai_cfg["model"] = config.get("ai_model", "gpt-3.5-turbo")
         if "reply_cooldown" not in ai_cfg or ai_cfg.get("reply_cooldown") is None:
@@ -148,7 +154,7 @@ def register(app):
     @app.route('/api/ai_multi/chat')
     def ai_multi_chat():
         gid = request.args.get("group_id")
-        since = int(request.args.get("since", 0))
+        since = _to_int(request.args.get("since"), 0)
         from core.ai_bot import multi_ai_bot
         return jsonify({"messages": multi_ai_bot.get_group_chat(gid, since)})
 

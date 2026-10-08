@@ -5,6 +5,8 @@
 """
 import json
 import os
+import tempfile
+import threading
 
 # 版本号单一来源：CLI、Web 面板、启动脚本都从这里取，避免各处写死导致不一致。
 __version__ = "3.6.3"
@@ -31,6 +33,10 @@ DEFAULT_CONFIG = {
     "web_host": "127.0.0.1",
     "web_port": 8080,
     "web_token": "",          # Web面板访问token，空=不启用认证
+    "api_rate_limit": 600,    # API限流：按IP+模块滑动窗口每分钟请求数，0=关闭
+                              # 默认值必须容得下面板轮询（/api/scan/status+tasks 各1次/秒）
+    "proxy_test_host": "mc.hypixel.net",  # 代理健康检查目标，建议改成自有服务器（默认值为第三方服）
+    "proxy_test_port": 25565,             # 代理健康检查目标端口
     "log_level": "INFO",
     "warn_bot_max": 20,       # 多机器人警告硬上限，防止滥用
     # v3.3 新增
@@ -60,6 +66,10 @@ DEFAULT_CONFIG = {
 
 _GLOBAL_CFG = None
 _CONFIG_PATH = None
+
+# 配置读改写锁：多个路由并发 set()+save_config() 会互相覆盖内存配置，
+# 且直接写目标文件时进程中断会留下半截 JSON（token/密钥全丢）。
+_SAVE_LOCK = threading.RLock()
 
 
 def _apply_env_overrides(cfg: dict) -> dict:
@@ -127,43 +137,63 @@ def set(key: str, value):
     """运行时覆盖单个配置项（不写入文件）。"""
     if _GLOBAL_CFG is None:
         load_config()
-    _GLOBAL_CFG[key] = value
+    with _SAVE_LOCK:
+        _GLOBAL_CFG[key] = value
 
 
 def get_all() -> dict:
     """返回全部配置的副本。"""
     if _GLOBAL_CFG is None:
         load_config()
-    return dict(_GLOBAL_CFG)
+    with _SAVE_LOCK:
+        return dict(_GLOBAL_CFG)
 
 
 def save_config(cfg: dict = None, path: str = None) -> bool:
-    """保存配置到文件。cfg为None则保存当前内存配置；传入部分字段时自动合并到完整配置。"""
+    """保存配置到文件。cfg为None则保存当前内存配置；传入部分字段时自动合并到完整配置。
+
+    整段（合并内存配置 → 序列化 → 落盘）持锁，并改为「临时文件 → fsync → os.replace」
+    原子替换：原实现直接 open(target,"w") 截断后写入，并发保存在此互相覆盖，
+    写一半被杀则 config.json 损坏（web_token/AI Key 全部丢失）。
+    """
     if _GLOBAL_CFG is None:
         load_config()
-    if cfg is not None:
-        # 合并到完整配置，避免部分保存覆盖其他字段
-        _GLOBAL_CFG.update(cfg)
-    data = dict(_GLOBAL_CFG)
-    target = path or _CONFIG_PATH or "config.json"
-    # 保存时把配置文件所在目录下的绝对 db_path 转回相对路径，避免烤进 config.json
-    # 基准必须与 load_config 一致（都用配置文件自己的目录），否则子目录配置会叠层
-    _db = data.get("db_path", "")
-    if _db and os.path.isabs(_db):
-        _base = os.path.dirname(os.path.abspath(target))
+    with _SAVE_LOCK:
+        if cfg is not None:
+            # 合并到完整配置，避免部分保存覆盖其他字段
+            _GLOBAL_CFG.update(cfg)
+        data = dict(_GLOBAL_CFG)
+        target = path or _CONFIG_PATH or "config.json"
+        # 保存时把配置文件所在目录下的绝对 db_path 转回相对路径，避免烤进 config.json
+        # 基准必须与 load_config 一致（都用配置文件自己的目录），否则子目录配置会叠层
+        _db = data.get("db_path", "")
+        if _db and os.path.isabs(_db):
+            _base = os.path.dirname(os.path.abspath(target))
+            try:
+                _rel = os.path.relpath(_db, _base)
+                if not _rel.startswith(".."):
+                    data["db_path"] = _rel
+            except ValueError:
+                pass
         try:
-            _rel = os.path.relpath(_db, _base)
-            if not _rel.startswith(".."):
-                data["db_path"] = _rel
-        except ValueError:
-            pass
-    try:
-        with open(target, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        print(f"[!] 保存配置失败: {e}")
-        return False
+            directory = os.path.dirname(os.path.abspath(target)) or "."
+            fd, tmp = tempfile.mkstemp(prefix=os.path.basename(target) + ".", suffix=".tmp", dir=directory)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, target)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+            return True
+        except Exception as e:
+            print(f"[!] 保存配置失败: {e}")
+            return False
 
 
 def reload_config(path: str = None) -> dict:
