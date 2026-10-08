@@ -27,19 +27,25 @@ def _slp_cache_get(host, port, protocol_version):
         key = (host, port, protocol_version)
         item = _slp_cache.get(key)
         if item and (time.time() - item[0]) < _slp_cache_ttl:
-            return item[1]
+            # 必须返回副本：probe_with_fallback 会往结果里写 _used_protocol，
+            # 直接返回同一个对象会把标记污染给所有命中该键的线程。
+            return dict(item[1])
     return None
 
 def _slp_cache_set(host, port, protocol_version, result):
+    # 不入缓存的字段：_raw 是整份 SLP JSON（含 favicon base64，单条可达几十 KB）。
+    # 10000 条带 _raw 的缓存能吃掉上百 MB~GB 内存，而全项目没有任何地方读它
+    # （storage/favorites.py:190,271 反而是显式剥掉它）。
+    cached = {k: v for k, v in result.items() if k != "_raw"}
     with _slp_cache_lock:
-        _slp_cache[(host, port, protocol_version)] = (time.time(), result)
-        # 缓存超过10000条时清理旧的；超20000条直接清空兜底，防止无界增长
-        if len(_slp_cache) > 10000:
+        _slp_cache[(host, port, protocol_version)] = (time.time(), cached)
+        # 缓存超过5000条时清理旧的；超10000条直接清空兜底，防止无界增长
+        if len(_slp_cache) > 5000:
             cutoff = time.time() - _slp_cache_ttl
             for k in list(_slp_cache.keys()):
                 if _slp_cache[k][0] < cutoff:
                     del _slp_cache[k]
-            if len(_slp_cache) > 20000:
+            if len(_slp_cache) > 10000:
                 _slp_cache.clear()
 
 # 认证状态常量
@@ -138,7 +144,10 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
                 }
                 _slp_cache_set(host, port, protocol_version, result)
                 return result
-        except (ConnectionError, OSError, TimeoutError, socket_timeout, ValueError, KeyError, IndexError) as e:
+        # RecursionError 也在这里捕获：恶意服务器可以在断开原因/JSON 里塞超深嵌套，
+        # 让 NBT/JSON 解析递归爆栈，漏掉它会让整个探测线程带着 500 抛出去。
+        except (ConnectionError, OSError, TimeoutError, socket_timeout,
+                ValueError, KeyError, IndexError, RecursionError) as e:
             last_error = str(e)
             continue
     result = {"state": STATE_OFFLINE if _is_offline_err(last_error) else STATE_ERROR,
@@ -147,12 +156,22 @@ def slp_probe(host: str, port: int, timeout: float = 5.0,
     return result
 
 
-def probe_with_fallback(host: str, port: int, timeout: float = 5.0) -> dict | None:
-    """SLP 探测带协议回退：先用 -1 探测，失败则尝试常见协议号"""
+def probe_with_fallback(host: str, port: int, timeout: float = 5.0,
+                        total_budget: float | None = None) -> dict | None:
+    """SLP 探测带协议回退：先用 -1 探测，失败则尝试常见协议号。
+
+    total_budget 限制整轮回退的总耗时。不加预算时最坏情况是
+    19 个协议 × 3 次重试 × timeout ≈ 285 秒/主机，收藏夹刷新和 bot 启动都会被拖死。
+    """
+    if total_budget is None:
+        total_budget = max(20.0, timeout * 4)
+    deadline = time.time() + total_budget
     result = slp_probe(host, port, timeout, protocol_version=-1)
     if result and result.get("state") == "up":
         return result
     for proto in COMMON_PROTOCOLS:
+        if time.time() > deadline:
+            break
         result = slp_probe(host, port, timeout, protocol_version=proto)
         if result and result.get("state") == "up":
             result["_used_protocol"] = proto
@@ -224,7 +243,8 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
                     return {"state": STATE_REJECTED, "detected_proto": proto,
                             "detail": f"rejected: {msg[:80]}", "plugin_channels": channels}
                 last_detail = f"意外响应 0x{resp_id:02x}"
-        except (ConnectionError, OSError, TimeoutError, socket_timeout) as e:
+        except (ConnectionError, OSError, TimeoutError, socket_timeout,
+                ValueError, RecursionError) as e:
             last_detail = str(e)
     # 连接被直接关闭（无disconnect包）通常是白名单服或代理拒绝，归为rejected而非offline
     if last_detail and "连接被关闭" in last_detail:
@@ -232,13 +252,20 @@ def auth_probe(host: str, port: int, reported_proto: int, username: str = "Scann
     return {"state": STATE_OFFLINE, "detected_proto": None, "detail": last_detail, "plugin_channels": []}
 
 
-def _recv_login_response(conn, login_pkts):
+def _recv_login_response(conn, login_pkts, max_rounds: int = 32,
+                         total_timeout: float = 15.0):
     """读取登录阶段服务端响应；自动处理插件请求（模组服）与压缩设置。
 
     模组服（Forge/Fabric 等）会在登录阶段发送 LoginPluginRequest，
     必须回一个 declined 的 LoginPluginResponse，否则服务端会一直等待。
+
+    加轮次/时长上限：恶意服务器可以无限发 LoginPluginRequest，
+    原来的 while True 会让这个线程永远出不来（连接一直有数据就永远不超时）。
     """
-    while True:
+    deadline = time.time() + total_timeout
+    for _round in range(max_rounds):
+        if time.time() > deadline:
+            raise ConnectionError("登录阶段响应超时（插件请求过多）")
         resp_id, resp_payload = conn.recv_packet()
         if resp_id == login_pkts.get("cb_plugin_request"):
             try:
@@ -258,6 +285,7 @@ def _recv_login_response(conn, login_pkts):
             conn.set_compression(threshold)
             continue
         return resp_id, resp_payload
+    raise ConnectionError(f"登录阶段响应轮次超过上限（{max_rounds}）")
 
 
 def _motd_text(desc) -> str:

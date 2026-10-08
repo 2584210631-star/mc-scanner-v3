@@ -1,22 +1,73 @@
 # -*- coding: utf-8 -*-
 """微软/Minecraft正版认证模块。
 Azure AD v2.0 设备码流程 + RSA/AES加密握手。
-用Azure CLI官方client_id，支持v2.0端点。
+
+===================== 关于 client_id（重要，合规相关） =====================
+下面这几个 client_id 都是**别人的应用**，不是本项目的：
+    CLIENT_ID        = Azure CLI 的公开 client_id
+    FCL_CLIENT_ID    = FCL 启动器的 client_id
+    LEGACY_CLIENT_ID = 旧版官方启动器的 client_id
+拿它们去发登录请求，等于"以他人应用的身份"完成 OAuth 授权。这可能违反 Microsoft
+以及对应项目的使用条款，也随时可能被对方吊销（一旦吊销，本项目的登录功能会整体失效）。
+
+**对外分发前请换成你自己在 Azure 注册的应用**，不需要改代码：
+    - 配置文件里设置 msa_client_id / msa_fcl_client_id，或
+    - 环境变量 MC_MSA_CLIENT_ID / MC_MSA_FCL_CLIENT_ID
+再用你自己的应用替换下面的默认值，然后删掉这段说明。
+=========================================================================
 """
 import json
+import os
 import urllib.request
 import urllib.parse
 import urllib.error
 
-# v2.0设备码流程用Azure CLI的client_id（支持v2.0端点）
+# 内置默认值（他人应用，仅为兼容保留；请按上面的说明替换为自己的）
 CLIENT_ID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
 SCOPE = "XboxLive.signin offline_access"
-# FCL启动器的client_id（旧版MSA端点授权码流程，已验证可用）
 FCL_CLIENT_ID = "d903cc0e-c3b4-4a3c-b347-06c2e6269be0"
 FCL_REDIRECT_URI = "http://localhost:8090/auth-response"
 # 旧版client_id（保留，用于兼容）
 LEGACY_CLIENT_ID = "00000000402b5328"
 REDIRECT_URI = "https://login.live.com/oauth20_desktop.srf"
+
+_notice_shown = False
+
+
+def _default_client_notice():
+    """第一次真正用到内置 client_id 时提示一次，避免使用者不知情。"""
+    global _notice_shown
+    if _notice_shown:
+        return
+    _notice_shown = True
+    print("[MSA] 注意: 正在使用内置的第三方 client_id（Azure CLI / FCL）。"
+          "对外分发请通过配置 msa_client_id / msa_fcl_client_id 换成你自己的应用。")
+
+
+def _client_id() -> str:
+    """优先级：调用方传入 > 配置/环境变量 > 内置默认值。"""
+    try:
+        import config
+        v = config.get("msa_client_id", "") or ""
+    except Exception:
+        v = ""
+    cid = v or os.environ.get("MC_MSA_CLIENT_ID", "") or CLIENT_ID
+    if cid == CLIENT_ID:
+        _default_client_notice()
+    return cid
+
+
+def _fcl_client_id() -> str:
+    """FCL 流程的 client_id，同样支持配置覆盖。"""
+    try:
+        import config
+        v = config.get("msa_fcl_client_id", "") or ""
+    except Exception:
+        v = ""
+    cid = v or os.environ.get("MC_MSA_FCL_CLIENT_ID", "") or FCL_CLIENT_ID
+    if cid == FCL_CLIENT_ID:
+        _default_client_notice()
+    return cid
 
 def _post(url, data=None, headers=None):
     """简单POST请求，出错时返回错误详情"""
@@ -40,7 +91,7 @@ def _post(url, data=None, headers=None):
 
 def start_device_code(client_id=None):
     """开始设备码流程(v2.0)，返回 {user_code, verification_uri, device_code, interval}"""
-    cid = client_id or CLIENT_ID
+    cid = client_id or _client_id()
     data = {
         "client_id": cid,
         "scope": SCOPE,
@@ -59,7 +110,7 @@ def start_device_code(client_id=None):
 
 def poll_token(device_code, client_id=None, interval=5):
     """轮询获取MSA access token(v2.0)。用户登录后返回 {access_token, refresh_token}"""
-    cid = client_id or CLIENT_ID
+    cid = client_id or _client_id()
     data = {
         "client_id": cid,
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
@@ -71,7 +122,7 @@ def poll_token(device_code, client_id=None, interval=5):
 
 def get_auth_url(client_id=None, redirect_uri=None):
     """生成授权URL（隐式流程，直接返回access_token）"""
-    cid = client_id or CLIENT_ID
+    cid = client_id or _client_id()
     rd = redirect_uri or REDIRECT_URI
     params = {
         "client_id": cid,
@@ -84,7 +135,7 @@ def get_auth_url(client_id=None, redirect_uri=None):
 
 def exchange_code(code, client_id=None, redirect_uri=None):
     """用授权码换MSA access token"""
-    cid = client_id or CLIENT_ID
+    cid = client_id or _client_id()
     rd = redirect_uri or REDIRECT_URI
     data = {
         "client_id": cid,
@@ -100,7 +151,7 @@ def exchange_code(code, client_id=None, redirect_uri=None):
 def get_fcl_auth_url():
     """生成FCL授权码流程的登录URL（旧版MSA端点，已验证可用）"""
     params = {
-        "client_id": FCL_CLIENT_ID,
+        "client_id": _fcl_client_id(),
         "response_type": "code",
         "redirect_uri": FCL_REDIRECT_URI,
         "scope": SCOPE,
@@ -111,7 +162,7 @@ def get_fcl_auth_url():
 def fcl_exchange_code(code):
     """用FCL授权码换MSA access token（旧版MSA端点）"""
     data = {
-        "client_id": FCL_CLIENT_ID,
+        "client_id": _fcl_client_id(),
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": FCL_REDIRECT_URI,
@@ -124,7 +175,7 @@ def fcl_exchange_code(code):
 def fcl_get_device_code():
     """FCL设备码流程：获取设备码（v2.0端点，FCL同款）"""
     data = {
-        "client_id": FCL_CLIENT_ID,
+        "client_id": _fcl_client_id(),
         "scope": SCOPE,
     }
     r = _post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", data)
@@ -134,7 +185,7 @@ def fcl_get_device_code():
 def fcl_poll_device_code(device_code):
     """FCL设备码流程：轮询获取MSA token（v2.0端点）"""
     data = {
-        "client_id": FCL_CLIENT_ID,
+        "client_id": _fcl_client_id(),
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "device_code": device_code,
     }
@@ -282,7 +333,7 @@ def refresh_msa_token(refresh_token, client_id=None):
     """用refresh_token刷新MSA access_token。返回 {access_token, refresh_token} 或 None"""
     if not refresh_token:
         return None
-    cid = client_id or FCL_CLIENT_ID  # FCL流程用FCL_CLIENT_ID
+    cid = client_id or _fcl_client_id()  # FCL流程
     data = {
         "client_id": cid,
         "grant_type": "refresh_token",

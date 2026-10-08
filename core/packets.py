@@ -3,6 +3,8 @@
 多版本 Play 阶段包 ID 表管理。
 支持自动生成表（packets_auto.py）优先，回退到手写表。
 """
+import threading
+
 from .protocol import get_chat_format
 
 # 手写 Play 包 ID 表（按协议版本范围）
@@ -43,8 +45,12 @@ _PLAY_TABLES = [
      "cb_plugin_message": 0x19, "sb_plugin_message": 0x14, "cb_player_info": 0x40,
      "cb_player_remove": 0x3F, "cb_chat_message": 0x3B, "cb_system_chat": 0x73,
      "cb_profileless_chat": 0x1E},
-    # 770-772: 1.21.5-1.21.8
-    {"min_proto": 770, "max_proto": 772, "sb_chat": 0x07, "sb_chat_command": 0x05,
+    # 770: 1.21.5（只覆盖 770！）
+    # 771/772(1.21.6~1.21.8) 的包 ID 已经整体后移：chat_message 8(非7)、chat_command 6(非5)、
+    # keep_alive 27(非26)、custom_payload 21(非20)、pong 44(非43)。
+    # 原来这一行写成 770-772，等于用 1.21.5 的 ID 覆盖了 1.21.6+，会导致保活回错包被踢、指令发错包。
+    # 771/772 现在交给自动表（字段完整），不要在这里加范围。
+    {"min_proto": 770, "max_proto": 770, "sb_chat": 0x07, "sb_chat_command": 0x05,
      "cb_keep_alive": 0x26, "sb_keep_alive": 0x1A, "cb_ping": 0x36, "sb_pong": 0x2B,
      "cb_login": 0x2B, "cb_teleport": 0x41, "sb_confirm_teleport": 0x00, "cb_disconnect": 0x1C,
      "cb_plugin_message": 0x18, "sb_plugin_message": 0x14, "cb_player_info": 0x3F,
@@ -87,20 +93,37 @@ _PLAY_TABLES = [
      "sb_player_position_look": 0x12, "sb_player_position": 0x11, "sb_player_movement": 0x14},
     # 340 (1.12.2): HOTFIX — Chat Message = 0x02（0x03 是 Client Status，搞混会导致服务器 ArrayIndexOutOfBounds）
     {"min_proto": 340, "max_proto": 340, "sb_chat": 0x02},
-    # 341-753: 旧版本兜底 sb_chat=0x03（自动表未覆盖的中间版本回退到340会得到错误的0x02）
-    {"min_proto": 341, "max_proto": 753, "sb_chat": 0x03},
+    # 旧版本兜底 sb_chat=0x03（自动表未覆盖的中间版本回退到340会得到错误的0x02）。
+    # 但必须避开 1.13/1.13.1/1.13.2（393/401/404）：它们的 Chat Message 是 0x02，
+    # 被 0x03（Client Status）覆盖会让服务器报 ArrayIndexOutOfBounds。
+    # 这三个版本改由自动表提供正确值，所以把兜底区间拆成两段绕开它们。
+    {"min_proto": 341, "max_proto": 392, "sb_chat": 0x03},
+    {"min_proto": 405, "max_proto": 753, "sb_chat": 0x03},
 ]
 
 _auto_tables = None
 _auto_loaded = False
+_auto_lock = threading.Lock()
 
 
 def _load_auto_tables():
-    """尝试加载 packets_auto.py 生成的协议表"""
+    """尝试加载 packets_auto.py 生成的协议表。
+    双检锁：原实现先把 _auto_loaded 置 True 再加载，并发扫描时其他线程会在
+    窗口期看到 _auto_loaded=True 但 _auto_tables 仍是 None，从而误判"该版本不可用"。"""
     global _auto_tables, _auto_loaded
     if _auto_loaded:
         return _auto_tables
-    _auto_loaded = True
+    with _auto_lock:
+        if _auto_loaded:          # 另一个线程已经加载完
+            return _auto_tables
+        _load_auto_tables_locked()
+        _auto_loaded = True
+        return _auto_tables
+
+
+def _load_auto_tables_locked():
+    """真正的加载逻辑，调用方必须已持有 _auto_lock。"""
+    global _auto_tables
     try:
         from .packets_auto import PACKET_TABLES_AUTO
         auto_play = {}
@@ -108,6 +131,12 @@ def _load_auto_tables():
             try:
                 proto = int(proto_str)
             except (ValueError, TypeError):
+                continue
+            # 生成物里混进了 "1073741839" 这种伪造键（packets_auto.py:7933）。
+            # 它会让"回退到 <= proto 的最大版本"逻辑把一个垃圾表当成正常版本使用，
+            # 所以这里只接受合理范围内的协议号（MC 协议号现在是 340~776）。
+            if not (1 <= proto <= 9999):
+                print(f"[packets] 忽略非法协议号条目: {proto_str}")
                 continue
             play = stages.get("play", {})
             sb = play.get("toServer", {})
@@ -252,19 +281,28 @@ def get_config_packets(proto: int) -> dict | None:
         CONFIG_SB_PLUGIN_MESSAGE, CONFIG_SB_FINISH_CONFIGURATION,
         CONFIG_SB_KEEP_ALIVE, CONFIG_SB_PONG, CONFIG_SB_KNOWN_PACKS,
     )
+    # 1.20.2~1.20.4（764/765）还没有 Cookie Request 包，Configuration 阶段的
+    # clientbound/serverbound 包 ID 比 766+ 整体小 1（已用自动表逐项核对过：
+    # 764 的 custom_payload=0x00、finish=0x02，而 766+ 是 0x01、0x03）。
+    # protocol.py 里的常量是按 766+ 写的，直接套用会让这两个版本配置阶段全部发错包。
+    shift = 0 if proto >= 766 else -1
+
+    def _c(value):
+        return value + shift
+
     return {
-        "cb_plugin_message": CONFIG_CB_PLUGIN_MESSAGE,
-        "cb_finish": CONFIG_CB_FINISH_CONFIGURATION,
-        "cb_keep_alive": CONFIG_CB_KEEP_ALIVE,
-        "cb_ping": CONFIG_CB_PING,
-        "cb_disconnect": CONFIG_CB_DISCONNECT,
-        "cb_known_packs": CONFIG_CB_KNOWN_PACKS,
-        "sb_client_info": CONFIG_SB_CLIENT_INFORMATION,
-        "sb_plugin_message": CONFIG_SB_PLUGIN_MESSAGE,
-        "sb_finish": CONFIG_SB_FINISH_CONFIGURATION,
-        "sb_keep_alive": CONFIG_SB_KEEP_ALIVE,
-        "sb_pong": CONFIG_SB_PONG,
-        "sb_known_packs": CONFIG_SB_KNOWN_PACKS,
+        "cb_plugin_message": _c(CONFIG_CB_PLUGIN_MESSAGE),
+        "cb_finish": _c(CONFIG_CB_FINISH_CONFIGURATION),
+        "cb_keep_alive": _c(CONFIG_CB_KEEP_ALIVE),
+        "cb_ping": _c(CONFIG_CB_PING),
+        "cb_disconnect": _c(CONFIG_CB_DISCONNECT),
+        "cb_known_packs": _c(CONFIG_CB_KNOWN_PACKS),
+        "sb_client_info": _c(CONFIG_SB_CLIENT_INFORMATION),
+        "sb_plugin_message": _c(CONFIG_SB_PLUGIN_MESSAGE),
+        "sb_finish": _c(CONFIG_SB_FINISH_CONFIGURATION),
+        "sb_keep_alive": _c(CONFIG_SB_KEEP_ALIVE),
+        "sb_pong": _c(CONFIG_SB_PONG),
+        "sb_known_packs": _c(CONFIG_SB_KNOWN_PACKS),
     }
 
 
@@ -283,8 +321,16 @@ def get_login_packets() -> dict:
 
 
 def supported_protos() -> list:
-    """返回所有支持的协议版本号"""
+    """返回所有支持的协议版本号。
+
+    原实现只把每张手写表的 min/max 收进来，语义与函数名不符
+    （例如 341-753 那段只返回 341 和 753 两个数）。现在以自动表的全部精确版本
+    为主，再补上手写表的边界，去重排序。
+    """
     protos = set()
+    auto = _load_auto_tables()
+    if auto:
+        protos.update(auto.keys())
     for table in _PLAY_TABLES:
         protos.add(table["min_proto"])
         if table["max_proto"] < 9999:

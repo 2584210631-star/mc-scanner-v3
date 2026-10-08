@@ -99,7 +99,10 @@ def load_private_key_der(der_bytes: bytes) -> bytes:
     if len(der_bytes) >= 32:
         # 私钥seed是DER中最后一个OCTET STRING的内容
         # 扫描找 0x04 0x20 (OCTET STRING, length 32)
-        for i in range(len(der_bytes) - 34):
+        # 上界写成 len-34 会漏掉最后一个可能位置（i 必须能取到 len-34，
+        # 因为切片是 der[i+2:i+34]），导致这个"正常路径"永远命中不了、
+        # 只能靠下面的兜底取末 32 字节——结果碰巧对，但等于主逻辑是死的。
+        for i in range(len(der_bytes) - 33):
             if der_bytes[i] == 0x04 and der_bytes[i + 1] == 0x20:
                 return der_bytes[i + 2:i + 34]
         # 兜底：取最后32字节

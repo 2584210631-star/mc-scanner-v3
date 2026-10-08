@@ -18,6 +18,7 @@ PROTO_STATE_CONFIGURATION = 3
 PROTO_STATE_PLAY = 4
 
 MAX_PACKET_SIZE = 2 * 1024 * 1024  # 单个包最大2MB，防止恶意服务器内存放大
+MAX_UNCOMPRESSED_SIZE = 8 * 1024 * 1024  # 单包解压后最大8MB，防 zip 炸弹
 
 # 全局代理（设置后所有MCConnection默认走代理）
 _global_proxy = None
@@ -206,20 +207,25 @@ class MCConnection:
             return bytes(self._dec_cipher.update(data))
 
     def connect(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(self.timeout)
+        proxy = self.proxy if self.proxy is not None else get_global_proxy()
+        # 本地/私有地址不走代理（否则会连到代理服务器的本地）
+        if proxy is not None:
+            import ipaddress
+            try:
+                addr = ipaddress.ip_address(self.host)
+                if addr.is_private or addr.is_loopback or addr.is_link_local:
+                    proxy = None
+            except ValueError:
+                pass
         try:
-            proxy = self.proxy if self.proxy is not None else get_global_proxy()
-            # 本地/私有地址不走代理（否则会连到代理服务器的本地）
-            if proxy is not None:
-                import ipaddress
-                try:
-                    addr = ipaddress.ip_address(self.host)
-                    if addr.is_private or addr.is_loopback or addr.is_link_local:
-                        proxy = None
-                except ValueError:
-                    pass
-            if proxy is not None:
+            if proxy is None:
+                # 用 create_connection 而不是手搓 AF_INET：域名解析出 AAAA 记录时也能连上
+                # （原来只建 AF_INET 套接字，纯 IPv6 目标一律失败），并自动做多地址回退。
+                self.sock = socket.create_connection(
+                    (self.host, self.port), timeout=self.timeout)
+            else:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.settimeout(self.timeout)
                 if proxy.proto == "socks5":
                     _connect_via_socks5(self.sock, proxy.host, proxy.port,
                                         self.host, self.port,
@@ -228,10 +234,12 @@ class MCConnection:
                     _connect_via_http(self.sock, proxy.host, proxy.port,
                                       self.host, self.port,
                                       proxy.username, proxy.password)
-            else:
-                self.sock.connect((self.host, self.port))
         except Exception:
-            self.sock.close()
+            if self.sock is not None:
+                try:
+                    self.sock.close()
+                except Exception:
+                    pass
             self.sock = None
             raise
 
@@ -279,21 +287,15 @@ class MCConnection:
             packet_data = uncompressed
         frame = write_varint(len(packet_data)) + packet_data
         with self._send_lock:
-            import selectors
-            sel = selectors.DefaultSelector()
-            sel.register(self.sock, selectors.EVENT_WRITE)
-            try:
-                # 等待写就绪，不修改 socket.timeout，避免与 recv 线程竞态
-                events = sel.select(timeout=self.timeout)
-                if not events:
-                    raise socket.timeout("send 等待写就绪超时")
-                data = frame
-                if getattr(self, '_crypto_backend', None) is not None:
-                    data = self._encrypt(data)
-                self.sock.sendall(data)
-            finally:
-                sel.unregister(self.sock)
-                sel.close()
+            # 不再为每个包新建 selectors/epoll（高频发包时每次都 epoll_create 是纯开销）。
+            # socket 已在 connect 时 settimeout(self.timeout)，sendall 阻塞超时自己会抛。
+            data = frame
+            if getattr(self, '_crypto_backend', None) is not None:
+                data = self._encrypt(data)
+            sock = self.sock
+            if sock is None:
+                raise ConnectionError("未连接")
+            sock.sendall(data)
 
     def recv_packet(self, timeout: float | None = None) -> tuple:
         """接收一个数据包，返回 (packet_id, payload_bytes)
@@ -338,14 +340,22 @@ class MCConnection:
             remaining = buf.read()
             if data_length == 0:
                 decompressed = remaining
+            elif data_length < 0:
+                self.close()
+                raise ValueError(f"解压长度非法: {data_length}")
             else:
                 # 解压上限8MB：防止恶意服务器发小压缩包解压出超大内存（zip炸弹）
-                if data_length > 8 * 1024 * 1024:
+                if data_length > MAX_UNCOMPRESSED_SIZE:
                     self.close()
                     raise ValueError(f"解压后数据过大: {data_length}")
+                # data_length 是服务器自报的，不可信：真正的防线是让解压过程本身在
+                # MAX_UNCOMPRESSED_SIZE 处停下。zlib.decompress 没有 max_length 参数，
+                # 会先全量解压再返回——200KB 的包就能解出 256MB，先前的"解压后再检查"无效。
                 try:
-                    decompressed = zlib.decompress(remaining, 15)
-                    if len(decompressed) > 8 * 1024 * 1024:
+                    dec = zlib.decompressobj(15)
+                    decompressed = dec.decompress(remaining, MAX_UNCOMPRESSED_SIZE)
+                    # unconsumed_tail 非空说明还有数据没解出来，即超出上限
+                    if dec.unconsumed_tail:
                         self.close()
                         raise ValueError("解压后数据过大")
                 except zlib.error as e:
@@ -362,7 +372,12 @@ class MCConnection:
         result = 0
         num_read = 0
         while True:
-            b = self.sock.recv(1)
+            # 取局部引用：close() 可能在别处把 self.sock 置 None，
+            # 直接 self.sock.recv 会抛 AttributeError 而不是可读的 ConnectionError
+            sock = self.sock
+            if sock is None:
+                raise ConnectionError("未连接")
+            b = sock.recv(1)
             if not b:
                 raise ConnectionError("连接已关闭")
             # 启用加密后，长度字段也是加密的，需要先解密
@@ -371,10 +386,12 @@ class MCConnection:
             byte = b[0]
             result |= (byte & 0x7F) << (7 * num_read)
             num_read += 1
-            if not (byte & 0x80):
-                break
+            # MC VarInt 最长 5 字节。原先这个判断写在 break 之后，第 6 字节会被先收下再判断，
+            # 实际接受了 6 字节的非法编码。
             if num_read > 5:
                 raise ValueError("VarInt 过长")
+            if not (byte & 0x80):
+                break
         return result
 
     def _recv_exact(self, n: int, total_timeout: float = 15.0) -> bytes:
@@ -383,8 +400,11 @@ class MCConnection:
         while len(buf) < n:
             if time.time() > deadline:
                 raise socket.timeout(f"读包中途超时（已读{len(buf)}/{n}）")
+            sock = self.sock
+            if sock is None:
+                raise ConnectionError("连接已关闭")
             try:
-                chunk = self.sock.recv(n - len(buf))
+                chunk = sock.recv(n - len(buf))
             except socket.timeout:
                 continue  # 短暂超时继续，但受 total_timeout 总限制
             if not chunk:

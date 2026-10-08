@@ -81,13 +81,22 @@ def fingerprint_server(slp_info: dict, existing_core_type: str = None) -> dict:
     if not slp_info or not isinstance(slp_info, dict):
         return {"type": existing_core_type or "unknown", "confidence": 0.0, "source": "unknown", "details": {}}
 
+    # version / players 是**远端服务器可控**的字段，类型完全不可信：
+    # 恶意或畸形服务器发 {"version": "1.20"} / {"players": []} 就能让这里 AttributeError，
+    # 进而把整个扫描线程带崩（调用方大多没有兜底 try）。所以逐个做类型归一化。
     version_info = slp_info.get("version", {})
-    version_name = (version_info.get("name", "") or "").lower()
+    if not isinstance(version_info, dict):
+        version_info = {}
+    version_name = str(version_info.get("name", "") or "").lower()
     description = slp_info.get("description", "")
     motd = _extract_text(description).lower()
     players = slp_info.get("players", {})
+    if not isinstance(players, dict):
+        players = {}
     sample = players.get("sample", []) or []
-    sample_names = [p.get("name", "").lower() for p in sample if isinstance(p, dict)]
+    if not isinstance(sample, list):
+        sample = []
+    sample_names = [str(p.get("name", "")).lower() for p in sample if isinstance(p, dict)]
 
     details = {
         "version_name": version_info.get("name", ""),

@@ -79,14 +79,44 @@ class ProtocolHandler:
             return ""
 
     def _sender_from_json(self, stream) -> str:
-        """从聊天 JSON 的 chat.type.text.with[0] 提取 sender（player_list查不到时的fallback）"""
+        """从聊天 JSON 的 chat.type.text.with[0] 提取 sender（player_list查不到时的fallback）。
+
+        签名字段的布局各版本并不统一：老版本用 VarInt 长度前缀，
+        1.19.3+ 的 Optional Signature 是"Bool + 固定 256 字节"。
+        原来只按长度前缀解析，于是新版离线服（UUID 查不到、正是要走这个 fallback 的场景）
+        永远解析失败。这里把剩余字节取出来，两种布局各试一次，
+        只接受**能解出合法 chat.type.text JSON** 的结果；都失败就返回 ""，
+        与原来的失败行为一致，不会带来新副作用。
+        """
         try:
-            from ..buffer import read_varint_from_stream, read_boolean_from_stream, read_string_from_stream
-            read_varint_from_stream(stream)  # index
-            if read_boolean_from_stream(stream):  # hasSignature
-                sig_len = read_varint_from_stream(stream)
-                stream.read(sig_len)
-            json_str = read_string_from_stream(stream)
+            data = getattr(stream, "data", None)
+            if data is not None and hasattr(stream, "pos"):
+                rest = data[stream.pos:]
+                stream.pos = len(data)   # 原实现会消费流；保持一致，避免调用方拿到半截数据
+            else:
+                rest = stream.read()
+            for fixed_sig in (False, True):
+                name = self._sender_with_signature_layout(rest, fixed_sig)
+                if name:
+                    return name
+        except Exception:
+            pass
+        return ""
+
+    @staticmethod
+    def _sender_with_signature_layout(rest: bytes, fixed_sig: bool) -> str:
+        """按指定签名布局解析剩余字节，解不出 chat.type.text 就返回空串。"""
+        try:
+            from ..buffer import (BytesStream, read_varint_from_stream,
+                                  read_boolean_from_stream, read_string_from_stream)
+            s = BytesStream(rest)
+            read_varint_from_stream(s)              # index
+            if read_boolean_from_stream(s):         # hasSignature
+                if fixed_sig:
+                    s.read(256)                     # 1.19.3+ 的固定 256 字节签名
+                else:
+                    s.read(read_varint_from_stream(s))
+            json_str = read_string_from_stream(s)
             obj = json.loads(json_str)
             if isinstance(obj, dict) and obj.get("translate") == "chat.type.text":
                 with_args = obj.get("with", [])
