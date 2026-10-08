@@ -286,44 +286,22 @@ python3 tools/gen_packets.py --download
 <details>
 <summary><b>v3.6.4</b>（点击展开 / Click to expand）</summary>
 
-**NeoForge 识别修复 / NeoForge Detection Fix**
-- NeoForge 1.20.2+ 不在 SLP 响应暴露 `forgeData`/`modinfo`，纯 SLP 探测会误判为 vanilla
-- 现在通过登录握手阶段的 LoginPluginRequest 频道（`neoforge:login` / `fml:loginwrapper`）自动修正 core_type
-- 同步引擎和异步引擎均已接入；需开启认证检测（默认开启）才生效
-- NeoForge 1.20.2+ no longer exposes `forgeData`/`modinfo` in SLP responses, causing false "vanilla" detection. Now corrected via LoginPluginRequest channels captured during auth probe (`neoforge:login` / `fml:loginwrapper`). Requires auth detection enabled (default on).
+这版主要是修 bug 和清理，没有新功能。/ Mostly bug fixes and cleanup, no new features.
 
-**人数趋势图修复 / Popularity Chart Fix**
-- 修复收藏页人数趋势图不渲染：`popChart` 是 `<div>` 而非 `<canvas>`，无数据时写入的 `<p>` 标签残留导致 Chart.js 初始化失败
-- 现在有数据时先清空 div 再创建 canvas 元素
-- Fixed popularity chart not rendering: `popChart` was a `<div>` (not `<canvas>`), leftover "no data" `<p>` tag caused Chart.js init failure. Now clears div and creates canvas before chart init.
+**修了什么 / What's fixed**
 
-**扫描进度优化 / Scan Progress Optimization**
-- 自适应限速器初始速率取 `min(用户配置, profile上限)`，不再被 profile 默认值覆盖
-- 初始批次从 200 改为 `max_workers*2`，避免提交全部目标才进主循环
-- 端口扫描进度步长动态化：`max(1, min(500, total//100))`，小目标也能实时更新
-- Adaptive rate limiter now uses `min(user_config, profile_cap)` as initial rate. Initial batch reduced from 200 to `max_workers*2`. Port scan progress step is now dynamic (`max(1, min(500, total//100))`).
+- **NeoForge 识别**：NeoForge 1.20.2+ 不在 SLP 里暴露 forgeData，之前会误判成 vanilla。现在靠登录握手时的 `neoforge:login` 频道修正。注意：只在开了认证检测时有效；强制模组校验的 NeoForge 服依然连不进去（这是硬限制，不是 bug）
+- **人数趋势图不显示**：一个低级错误——图表容器是 `<div>` 不是 `<canvas>`，无数据时塞进去的 `<p>` 标签残留导致 Chart.js 初始化失败。现在先清空再建 canvas
+- **扫描进度条不动**：自适应限速器初始速率被 profile 默认值覆盖了用户配置，初始批次 200 太大导致小目标一次性提交完才进循环。改了初始速率取 min(用户配置, 上限)，批次改 max_workers*2，进度步长动态化
+- **配置路径叠层**：config.json 在子目录时，保存一次路径多一层。已统一以配置文件所在目录为基准
+- **删了两个空壳依赖**：libs/uvloop 和 libs/simdjson 只有源码没有编译产物，从来没真正工作过，白占 8MB。run.py 里的自动 pip install 也一并删了
+- **代码卫生**：8 处 raise 补了 from e，补了一个测试断言，测试结束清理 observer_logs，清了 21 个 unused import，PWA 缓存加了版本号
 
-**路径基准统一 / Path Resolution Unification**
-- `config.json` 中相对路径（如 `db_path`）统一以配置文件所在目录为基准解析，不再混用 CWD 和仓库目录
-- 修复子目录配置文件保存后路径叠层的 bug
-- Relative paths in `config.json` (e.g. `db_path`) are now resolved relative to the config file's directory, fixing path-stacking bugs when config is in a subdirectory.
+**还没修好的 / Still broken**
 
-**依赖清理 / Dependency Cleanup**
-- 删除 `libs/uvloop` 和 `libs/simdjson` 空壳（仅有源码无编译产物 `.so`，约 8MB 死重量）
-- `run.py` 移除自动 pip install 逻辑和空转导入循环
-- Removed `libs/uvloop` and `libs/simdjson` empty shells (source only, no compiled `.so`, ~8MB dead weight). Removed auto pip-install logic from `run.py`.
-
-**代码质量 / Code Quality**
-- 8 处 `raise` 补 `from e` 保留异常链（rcon / conn / bot / microsoft_auth）
-- `test_mark_failed` 补断言 `assertEqual(p.fail_count, before + 1)`
-- `conftest.py` 测试结束自动清理 `observer_logs/`
-- ruff 清理 21 处 unused import
-- PWA：`sw.js` 缓存名加版本号，`index.html` 加 apple-touch-icon
-- 8 `raise` statements now use `from e` to preserve exception chains. Added `test_mark_failed` assertion. `conftest.py` cleans `observer_logs/` after tests. Ruff cleaned 21 unused imports. PWA: `sw.js` cache versioned, apple-touch-icon added.
-
-**调试 / Debugging**
-- 离线账号发消息时打印 payload hex（`[聊天调试]`），便于排查 "larger than expected" 等协议格式问题
-- Offline chat sends now log payload hex (`[聊天调试]`) for troubleshooting protocol format issues.
+- 部分离线服发消息被踢 "Packet chat was larger than expected"：正在排查，已加 payload hex 调试日志，根因还没定位到
+- 个别协议版本（如 776）自动生成的协议表缺 Configuration 段，回退手写常量，可能导致新版服务器连接异常
+- 强制模组校验的 Forge/NeoForge 服无法连接（需要客户端发模组列表，纯原版客户端做不到）
 
 </details>
 
