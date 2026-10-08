@@ -97,15 +97,15 @@ async def _check_port(ip: str, port: int, timeout: float,
                       semaphore: asyncio.Semaphore,
                       per_ip_sems: dict = None,
                       per_ip_lock: asyncio.Lock = None,
+                      max_per_ip: int = 10,
                       retries: int = 2) -> AsyncScanResult:
     """异步检查单个端口，带重试和按IP并发限制。"""
-    # 按IP限速：同一IP最多3个并发连接，防止单IP被打封
     per_ip_sem = None
     if per_ip_sems is not None and per_ip_lock is not None:
         async with per_ip_lock:
             per_ip_sem = per_ip_sems.get(ip)
             if per_ip_sem is None:
-                per_ip_sem = asyncio.Semaphore(3)
+                per_ip_sem = asyncio.Semaphore(max_per_ip)
                 per_ip_sems[ip] = per_ip_sem
     async with semaphore:
         if per_ip_sem is not None:
@@ -152,7 +152,8 @@ async def _scan_async(targets, concurrency: int, timeout: float,
                       controller=None) -> list:
     """异步扫描核心逻辑。"""
     semaphore = asyncio.Semaphore(concurrency)
-    # 按IP并发限制：同一IP最多3个并发连接
+    # 按IP并发限制：低并发不限制，高并发封顶10
+    max_per_ip = max(5, min(10, concurrency))
     per_ip_sems = {}
     per_ip_lock = asyncio.Lock()
     results = []
@@ -187,6 +188,7 @@ async def _scan_async(targets, concurrency: int, timeout: float,
         try:
             r = await _check_port(ip, port, timeout, semaphore,
                                    per_ip_sems=per_ip_sems, per_ip_lock=per_ip_lock,
+                                   max_per_ip=max_per_ip,
                                    retries=1)
         except Exception as e:
             r = AsyncScanResult(ip=ip, port=port, is_open=False, error=str(e)[:80])
