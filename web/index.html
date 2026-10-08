@@ -3259,13 +3259,18 @@ async function refreshPopularity() {
   const avg = online.length ? Math.round(online.reduce((a,b)=>a+b,0)/online.length) : 0;
   document.getElementById('popSummary').textContent =
     `记录点: ${online.length} | 峰值: ${peak}人 | 平均: ${avg}人 | 范围: ${hours}小时`;
-  if (popChart) popChart.destroy();
+  if (popChart) { popChart.destroy(); popChart = null; }
   const ctx = document.getElementById('popChart');
   if (online.length === 0) {
     ctx.innerHTML = '<p style="text-align:center;color:var(--mute);padding:60px 0;">暂无数据，扫描后自动记录</p>';
     return;
   }
-  popChart = new Chart(ctx, {
+  ctx.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  ctx.appendChild(canvas);
+  popChart = new Chart(canvas, {
     type: 'line',
     data: { labels, datasets: [
       { label: '在线人数', data: online, borderColor: '#00d992', backgroundColor: 'rgba(0,217,146,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
