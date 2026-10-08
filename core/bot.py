@@ -764,6 +764,10 @@ class MCBot:
                 print(f"[聊天签名] 失败，回退无签名: {e}")
 
         payload = self.protocol_handler.send_chat_payload(message)
+        print(f"[聊天调试] 无签名消息 proto={self.protocol_version} "
+              f"handler={type(self.protocol_handler).__name__} "
+              f"pkt=0x{chat_id:02x} len={len(payload)} "
+              f"hex={payload[:64].hex()}")
         self.conn.send_packet(chat_id, payload)
 
     def _build_signed_chat(self, message: str) -> bytes:
