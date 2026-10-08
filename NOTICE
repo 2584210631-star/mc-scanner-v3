@@ -32,13 +32,13 @@ v2 used GPL-3.0. v3 is an independent reimplementation containing no v2 code, so
 
 | 库 / Library | 许可 / License | 用途 / Purpose |
 |----|------|------|
-| Flask | BSD-3-Clause | Web 框架 / Web framework (`libs/flask/`) |
+| Flask | BSD-3-Clause | Web 框架 / Web framework (pip install) |
 | pycryptodome | BSD-2-Clause | AES/RSA 加密，正版登录与聊天签名必需 / AES/RSA encryption, required for premium login & chat signing |
 | cryptography | Apache-2.0/BSD | AES/CFB8 加密（推荐后端）/ AES/CFB8 encryption (recommended backend) |
 | pytest | MIT | 测试框架 / Testing framework |
 
-> **注意 / Note**：v3.6.4 起已移除 `libs/uvloop` 和 `libs/simdjson` 空壳（仅有源码无编译产物）。异步扫描降级为标准库 asyncio，不影响功能。
-> Since v3.6.4, `libs/uvloop` and `libs/simdjson` empty shells have been removed (source only, no compiled binaries). Async scanning falls back to stdlib asyncio with no functional loss.
+> **注意 / Note**：v3.6.4 起不再 vendor 任何第三方依赖，全部通过 `pip install -r requirements.txt` 安装。异步扫描降级为标准库 asyncio，不影响功能。
+> Since v3.6.4, no third-party dependencies are vendored. Install all dependencies via `pip install -r requirements.txt`. Async scanning falls back to stdlib asyncio with no functional loss.
 
 ## 代码中的参考标注 / Reference Annotations in Code
 

@@ -1,17 +1,26 @@
-# === 必需依赖 ===
-# flask 已 vendor 在 libs/，此处仅作声明（从零部署时可用）
+# MC Scanner v3 依赖 / Dependencies
+# 安装 / Install: pip install -r requirements.txt
+#
+# 必需 / Required: flask (Web 面板 / Web panel)
+# 正版登录 / Premium login: pycryptodome（推荐 / recommended）或 cryptography
+# 可选加速 / Optional speedup: uvloop, pysimdjson（不装自动降级 / auto-fallback）
+# 开发测试 / Dev & testing: pytest, ruff
+
+# === 必需 / Required ===
 flask>=2.0.0
 
-# === 正版账号进服（二选一，推荐 pycryptodome） ===
-# 纯 Python 实现，Termux/手机等环境可用；项目默认走此后端
+# === 正版账号登录 / Premium Login（二选一 / pick one，推荐 pycryptodome）===
+# 纯 Python 实现，Termux/手机等无编译环境可用，项目默认走此后端
+# Pure Python, works on Termux/mobile, used by default
 pycryptodome>=3.19.0
 # 原生实现，性能更好；部分环境装不上时用上面的 pycryptodome 兜底
-cryptography>=41.0.0
+# Native, faster; fallback to pycryptodome if install fails
+# cryptography>=41.0.0
 
-# === 可选性能加速（不装自动降级，不影响功能） ===
-uvloop>=0.19.0; sys_platform != 'win32'   # Linux/Mac 异步事件循环加速
-pysimdjson>=5.0.0                          # SIMD JSON 解析加速（SLP 响应解析）
+# === 可选性能加速 / Optional Speedup（不装自动降级 / auto-fallback）===
+# uvloop>=0.19.0; sys_platform != 'win32'   # Linux/Mac 异步事件循环加速
+# pysimdjson>=5.0.0                          # SIMD JSON 解析加速
 
-# === 开发/测试（可选） ===
-# pytest>=7.0.0   # 运行测试
-# ruff>=0.1.0     # 静态检查
+# === 开发/测试 / Dev & Testing（可选 / optional）===
+# pytest>=7.0.0
+# ruff>=0.1.0

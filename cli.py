@@ -29,13 +29,6 @@ import time
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _base_dir)
 
-# 加载本地依赖（vendored libs，离线可用），与 run.py 保持一致。
-# 少了这一步，`python3 cli.py web` 会直接 ModuleNotFoundError: flask，
-# 且 libs 里的 uvloop / simdjson 加速会被静默跳过。
-_libs_dir = os.path.join(_base_dir, 'libs')
-if os.path.isdir(_libs_dir):
-    sys.path.insert(0, _libs_dir)
-
 import config
 import logger
 
