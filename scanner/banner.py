@@ -17,28 +17,47 @@ def parse_banner(banner: str) -> Optional[dict]:
         return None
 
     # 尝试直接解析 JSON
+    # banner 完全由目标服务器控制：除 JSONDecodeError 外还可能出现 TypeError 等，
+    # 任何异常都不允许穿透（旧实现只 catch JSONDecodeError，畸形 banner 会中断整批导入）
     try:
         info = json.loads(banner)
         return _extract_info(info)
-    except json.JSONDecodeError:
+    except Exception:
         pass
 
     # 尝试从 banner 中提取 JSON 部分
-    json_match = re.search(r'\{.*\}', banner, re.DOTALL)
-    if json_match:
-        try:
+    try:
+        json_match = re.search(r'\{.*\}', banner, re.DOTALL)
+        if json_match:
             info = json.loads(json_match.group())
             return _extract_info(info)
-        except json.JSONDecodeError:
-            pass
+    except Exception:
+        pass
 
     return None
 
 
-def _extract_info(info: dict) -> dict:
-    """从 SLP JSON 中提取标准化信息"""
+def _extract_info(info) -> dict:
+    """从 SLP JSON 中提取标准化信息。
+
+    version/players 等嵌套字段由远端控制、类型不可信（可能是 str/int），
+    一律用 isinstance 兜底，避免 AttributeError 穿透后中断调用方。
+    """
+    if not isinstance(info, dict):
+        info = {}
     version = info.get("version", {})
+    if isinstance(version, dict):
+        ver_name = version.get("name", "")
+        proto = version.get("protocol", 0)
+    else:
+        # 少数服务端把 version 直接写成字符串/数字，当作版本名保留，不丢信息
+        ver_name, proto = version, 0
     players = info.get("players", {})
+    if not isinstance(players, dict):
+        players = {}
+    sample = players.get("sample", [])
+    if not isinstance(sample, list):
+        sample = []
     desc = info.get("description", "")
 
     motd = ""
@@ -47,15 +66,20 @@ def _extract_info(info: dict) -> dict:
     elif isinstance(desc, dict):
         motd = desc.get("text", str(desc))
 
+    if ver_name is None:
+        ver_name = ""
+    if not isinstance(ver_name, str):
+        ver_name = str(ver_name)
+
     return {
-        "version": version.get("name", ""),
-        "proto": version.get("protocol", 0),
+        "version": ver_name,
+        "proto": proto,
         "motd": motd[:500],
         "online": players.get("online", 0),
         "max": players.get("max", 0),
-        "sample": players.get("sample", []),
+        "sample": sample,
         "favicon": info.get("favicon", ""),
-        "is_modded": _looks_modded(version.get("name", "")),
+        "is_modded": _looks_modded(ver_name),
     }
 
 

@@ -11,8 +11,32 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Optional
 
-from scanner.safe import (get_profile, shuffle_targets,
+from scanner.safe import (get_profile, iter_shuffled_chunks,
                              AdaptiveRateController, ScanProgressStore)
+
+# 疑似封禁时暂停投递的秒数（暂停期间继续收割在途任务，可被 stop_event 打断）
+BAN_PAUSE_SECONDS = 30.0
+
+_config_cache = None
+
+
+def _get_config_value(key: str, default):
+    """读取用户配置。
+
+    函数内 import 是为了避免 config ↔ scanner 的循环导入；在模块级缓存模块引用，
+    避免旧实现"每次提交一个目标就 import 一次"。
+    """
+    global _config_cache
+    if _config_cache is None:
+        try:
+            import config as _cfg
+        except Exception:
+            return default
+        _config_cache = _cfg
+    try:
+        return _config_cache.get(key, default)
+    except Exception:
+        return default
 
 
 @dataclass
@@ -77,22 +101,25 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
     do_shuffle = profile.shuffle if shuffle is None else shuffle
     BATCH_SIZE = max(max_workers * 4, 200)
 
-    # 物化 + 随机化 + 断点续扫
+    # 断点续扫需要物化（该路径本身有 50 万上限保护）；其余情况不物化，
+    # 交给分块洗牌惰性消费，避免"先 list(targets) 再判随机化上限"的假保护
     progress_store = ScanProgressStore(progress_file) if progress_file else None
     if progress_store is not None and progress_store.enabled:
-        target_list, _resumed = progress_store.begin(targets)
+        target_seq, _resumed = progress_store.begin(targets)
+        total = len(target_seq)
     else:
-        target_list = list(targets)
+        target_seq = targets
+        total = len(target_seq) if hasattr(target_seq, '__len__') else 0
     if do_shuffle:
-        target_list = shuffle_targets(target_list, seed=seed)
+        target_seq = iter_shuffled_chunks(target_seq, seed=seed)
 
-    total = len(target_list)
     results = []
     done = 0
     open_count = 0
     lock = threading.Lock()
     # 进度更新步长：约每1%更新一次，小目标逐个更，大目标封顶500（避免打印/回调过频）
-    _progress_step = max(1, min(500, total // 100)) if total else 1
+    # total 未知（生成器输入）时用固定步长 500，避免逐个回调
+    _progress_step = max(1, min(500, total // 100)) if total else 500
 
     controller = None
     if adaptive and profile.adaptive and rate > 0:
@@ -112,21 +139,13 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {}
-        target_iter = iter(target_list)
+        target_iter = iter(target_seq)
         last_submit = time.time()
+        done_since_cooldown = 0
+        pause_until = 0.0
 
         def _submit_one(ip, port):
             nonlocal last_submit
-            # 疑似封禁时自动暂停（每提交一个检查一次）
-            if controller is not None and controller.ban_suspected:
-                import config as _cfg
-                on_ban = _cfg.get("on_ban_suspect", "pause")
-                if on_ban == "abort":
-                    if stop_event:
-                        stop_event.set()
-                    return
-                # pause: 睡 30 秒再继续，给封禁恢复时间
-                time.sleep(30)
             cur_rate = controller.rate if controller is not None else rate
             if cur_rate > 0:
                 # 令牌桶限速：每次提交间隔至少 1/rate 秒
@@ -140,64 +159,108 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
         # 初始填充一批（用较小批次让主循环尽早开始处理已完成的任务，
         # 避免限速下提交全部目标要等很久才看到进度）
         _initial_batch = min(BATCH_SIZE, max_workers * 2)
+        targets_left = True
         for ip, port in target_iter:
             if stop_event and stop_event.is_set():
                 break
             _submit_one(ip, port)
             if len(futures) >= _initial_batch:
                 break
+        else:
+            # for-else：迭代器已耗尽，没有更多目标可提交
+            targets_left = False
 
-        while futures:
+        while True:
             if stop_event and stop_event.is_set():
                 for f in futures:
                     f.cancel()
                 break
+            in_pause = time.time() < pause_until
+            just_submitted = False
+            if not in_pause:
+                n_before = len(futures)
+                for ip, port in target_iter:
+                    if stop_event and stop_event.is_set():
+                        break
+                    _submit_one(ip, port)
+                    if len(futures) >= BATCH_SIZE:
+                        break
+                else:
+                    targets_left = False
+                just_submitted = len(futures) > n_before
+            # 目标已全部提交并回收：收工（暂停中也不例外，避免空转）
+            if not futures and not targets_left:
+                break
+            if not futures:
+                # 还有目标没提交（只可能是封禁暂停中）：等暂停结束再投递，避免空转
+                delay = max(0.0, min(1.0, pause_until - time.time()))
+                if stop_event is not None:
+                    stop_event.wait(delay)
+                else:
+                    time.sleep(delay)
+                continue
             done_set, _ = concurrent.futures.wait(
-                futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                futures, return_when=concurrent.futures.FIRST_COMPLETED,
+                timeout=1.0 if in_pause else None)
             for future in done_set:
-                futures.pop(future)
+                ip, port = futures.pop(future)
                 try:
                     result = future.result()
-                except Exception:
-                    continue
+                except Exception as e:
+                    # 失败也要生成结果并计数：旧实现直接 continue，
+                    # 目标已从 futures 弹出却被丢弃，done 永远对不上 total
+                    result = ScanResult(ip=ip, port=port, is_open=False,
+                                        error=f"worker error: {str(e)[:80]}")
                 results.append(result)
                 with lock:
                     done += 1
                     if result.is_open:
                         open_count += 1
-                    # 自适应控制
-                    if controller is not None:
-                        if result.is_open:
-                            controller.record("open")
-                        elif "timeout" in (result.error or "").lower():
-                            controller.record("timeout")
-                        elif "refused" in (result.error or "").lower():
-                            controller.record("refused")
-                        else:
-                            controller.record("error")
-                    # 断点续扫
-                    if progress_store is not None:
-                        progress_store.done((result.ip, result.port))
-                    if show_progress and (done % _progress_step == 0 or done == total):
-                        pct = done * 100 // total if total else 0
-                        print(f"[*] 进度: {done}/{total} ({pct}%) 开放: {open_count}")
-                    if progress_callback and (done % _progress_step == 0 or done == total):
-                        try:
-                            progress_callback(done, total, open_count)
-                        except Exception:
-                            pass
-            # 批次冷却：每完成 batch_size 个暂停（防突发连接风暴）
-            if profile.batch_cooldown > 0 and done > 0 and done % profile.batch_size == 0:
-                if not (stop_event and stop_event.is_set()):
-                    print(f"[*] 批次冷却 {profile.batch_cooldown:.1f}s（已扫 {done}）...")
+                # 自适应控制：放在锁外，controller.record 会派发 event_cb 回调，
+                # 持锁执行可能阻塞投递主循环甚至与回调反向取锁
+                if controller is not None:
+                    if result.is_open:
+                        controller.record("open")
+                    elif "timeout" in (result.error or "").lower():
+                        controller.record("timeout")
+                    elif "refused" in (result.error or "").lower():
+                        controller.record("refused")
+                    else:
+                        controller.record("error")
+                # 断点续扫
+                if progress_store is not None:
+                    progress_store.done((result.ip, result.port))
+                if show_progress and (done % _progress_step == 0 or done == total):
+                    pct = done * 100 // total if total else 0
+                    print(f"[*] 进度: {done}/{total} ({pct}%) 开放: {open_count}")
+                if progress_callback and (done % _progress_step == 0 or done == total):
+                    try:
+                        progress_callback(done, total, open_count)
+                    except Exception:
+                        pass
+                done_since_cooldown += 1
+            # 批次冷却：用独立计数器（旧实现 done % batch_size == 0 在一次收割跨过
+            # 整倍数时永不触发），并且冷却可被 stop_event 打断
+            if (profile.batch_cooldown > 0 and done_since_cooldown >= profile.batch_size
+                    and not (stop_event and stop_event.is_set())):
+                done_since_cooldown = 0
+                print(f"[*] 批次冷却 {profile.batch_cooldown:.1f}s（已扫 {done}）...")
+                if stop_event is not None:
+                    stop_event.wait(profile.batch_cooldown)
+                else:
                     time.sleep(profile.batch_cooldown)
-            # 补充新任务
-            for ip, port in target_iter:
-                if stop_event and stop_event.is_set():
+            # 刚投递过一批就检测到疑似封禁：暂停后续投递，在途任务继续收割。
+            # 旧实现是在投递循环里 time.sleep(30)：不可被 stop_event 打断，
+            # 且 30 秒内完全不收割已完成任务，看起来像卡死。
+            if just_submitted and controller is not None and controller.ban_suspected:
+                if _get_config_value("on_ban_suspect", "pause") == "abort":
+                    if stop_event:
+                        stop_event.set()
                     break
-                _submit_one(ip, port)
-                if len(futures) >= BATCH_SIZE:
-                    break
+                pause_until = time.time() + BAN_PAUSE_SECONDS
+                in_pause = True
+                print(f"[!] 疑似出口 IP 被封禁，暂停投递 {BAN_PAUSE_SECONDS:.0f}s"
+                      f"（在途任务继续回收，随时可停止）")
 
     if progress_store is not None:
         progress_store.finish()

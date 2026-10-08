@@ -17,6 +17,7 @@ class Excluder:
 
     def load(self, filepath: str):
         """从文件加载排除列表，文件不存在则跳过"""
+        before = len(self.networks)
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 for line in f:
@@ -27,10 +28,25 @@ class Excluder:
                         self.networks.append(ipaddress.ip_network(line, strict=False))
                     except ValueError:
                         continue
+            if len(self.networks) == before:
+                # 文件存在但一条有效规则都没有：不能静默丢掉私网保护
+                # （旧实现只在 FileNotFoundError 分支加载默认段）
+                print(f"[!] 排除列表 {filepath} 无有效规则，改用默认私有地址段")
+                self._load_defaults()
+                return
+            self._collapse()
             print(f"[*] 已加载排除列表: {filepath} ({len(self.networks)} 条)")
         except FileNotFoundError:
             print(f"[!] 排除列表文件不存在: {filepath}，使用默认私有地址段")
             self._load_defaults()
+
+    def _collapse(self):
+        """合并相邻/重叠网段：is_excluded 是逐个网段线性匹配，合并后大幅减少比较次数"""
+        try:
+            self.networks = list(ipaddress.collapse_addresses(self.networks))
+        except Exception:
+            # 混合 IPv4/IPv6 等异常场景保持原样，不影响过滤结果
+            pass
 
     def _load_defaults(self):
         """加载默认私有地址段"""
@@ -49,6 +65,7 @@ class Excluder:
                 self.networks.append(ipaddress.ip_network(cidr, strict=False))
             except ValueError:
                 pass
+        self._collapse()
 
     def is_excluded(self, ip: str) -> bool:
         """检查 IP 是否在排除列表中"""

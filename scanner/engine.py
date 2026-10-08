@@ -8,6 +8,7 @@ import json
 import threading
 import time
 
+import logger
 from core.probe import slp_probe, auth_probe, active_fingerprint
 from core.bot import join_and_warn
 from storage import db
@@ -151,7 +152,8 @@ class ScanEngine:
             self._post_probe_hooks(result)
         except Exception as e:
             result["state"] = "error"
-            result["error"] = str(e)
+            # 统一截断：其他路径都截 80/100 字符，这里不截会让 DB 字段膨胀并可能写入本地路径
+            result["error"] = str(e)[:200]
             self._bump("error")
         return result
 
@@ -202,13 +204,18 @@ class ScanEngine:
         return results, done
 
     def scan_targets(self, targets, save_every: int = 50) -> list:
-        """批量扫描目标（分批提交，大网段不OOM）"""
+        """批量扫描目标（分批提交，大网段不OOM）
+
+        结果增量落库：save_callback 写过的部分不再整体重写，收尾只补最后
+        不足一批的尾巴（旧实现最后又 upsert_many 全量，写库量翻倍）。
+        """
         db.init_db(self.db_path)
         def _save(batch):
             db.upsert_many(self.db_path, batch)
-        results, _ = self._run_batch(targets, self.probe_one, _save, save_every)
-        if results:
-            db.upsert_many(self.db_path, results)
+        results, done = self._run_batch(targets, self.probe_one, _save, save_every)
+        tail = done % save_every if save_every else 0
+        if tail:
+            db.upsert_many(self.db_path, results[-tail:])
         self.results = results
         return results
 
@@ -335,8 +342,16 @@ class ScanEngine:
         pending = []
         all_targets = []
         total = 0
+        skipped = 0
         for ip, port, banner in extract_records(ndjson_path):
-            p = parse_banner(banner)
+            try:
+                p = parse_banner(banner)
+            except Exception as e:
+                # banner 完全由目标服务器控制：单条解析失败只跳过并计数，
+                # 不能让旧实现那样子类异常（AttributeError 等）中断整批导入
+                skipped += 1
+                logger.warning(f"banner 解析失败 {ip}:{port}: {e}")
+                continue
             if not p:
                 p = {"version": "", "proto": 0, "motd": "", "online": 0,
                      "max": 0, "sample": [], "favicon": "", "is_modded": 0}
@@ -352,7 +367,8 @@ class ScanEngine:
                 pending = []
         if pending:
             db.upsert_many(self.db_path, pending)
-        print(f"[*] banner 导入完成，共 {total} 条")
+        print(f"[*] banner 导入完成，共 {total} 条"
+              + (f"，跳过 {skipped} 条解析失败" if skipped else ""))
 
         if then_auth:
             print(f"[*] 对 {len(all_targets)} 个已发现服务器做认证检测...")
@@ -360,7 +376,9 @@ class ScanEngine:
         return self.results
 
     def _print_progress(self, done: int):
-        c = dict(self.counters)
+        # counters 由多个 worker 线程 _bump，加锁取快照，避免打印出中间态
+        with self._lock:
+            c = dict(self.counters)
         print(f"[{done:>6}] up={c['up']} cracked={c['cracked']} "
               f"online={c['online']} whitelist={c['whitelist']} "
               f"rejected={c['rejected']} offline={c['offline']} error={c['error']}")
@@ -409,14 +427,15 @@ class ScanEngine:
                 # 即使不开启重扫，也记录玩家历史
                 from storage import player_history as ph
                 ph.update_players(self.db_path, result["ip"], result["port"], result["player_list"])
-        except Exception:
-            pass
+        except Exception as e:
+            # 钩子失败必须留痕：旧实现完全静默，玩家历史缺数据时无法定位
+            logger.warning(f"玩家历史/重扫钩子失败 {result.get('ip')}:{result.get('port')}: {e}")
         try:
             # 2. 重复服务器检测
             if self.duplicate_detection:
                 self._get_dup_detector().add(result)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"重复检测钩子失败 {result.get('ip')}:{result.get('port')}: {e}")
         try:
             # 3. Discord 通知
             if self.discord_webhook:
@@ -424,8 +443,8 @@ class ScanEngine:
                 d.notify_new_server(result)
                 if result.get("auth") == "cracked":
                     d.notify_cracked_server(result)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Discord 通知钩子失败 {result.get('ip')}:{result.get('port')}: {e}")
 
     def rescan_due(self, limit: int = 50) -> list:
         """
@@ -443,7 +462,8 @@ class ScanEngine:
             try:
                 r = self.probe_one(item["ip"], item["port"])
                 results.append(r)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"重扫失败 {item.get('ip')}:{item.get('port')}: {e}")
                 continue
         return results
 
@@ -452,15 +472,3 @@ class ScanEngine:
         if self._dup_detector:
             return self._dup_detector.get_duplicates()
         return []
-
-
-def _looks_modded(version: str) -> bool:
-    """判断是否为模组服（Forge/Fabric/NeoForge/Quilt），不包含插件服"""
-    v = (version or "").lower()
-    return any(kw in v for kw in ("forge", "fabric", "neoforge", "quilt", "fml", "modloader"))
-
-
-def _looks_plugin(version: str) -> bool:
-    """判断是否为插件服（Paper/Spigot/Bukkit/Purpur）"""
-    v = (version or "").lower()
-    return any(kw in v for kw in ("paper", "spigot", "bukkit", "purpur", "catserver", "arclight"))

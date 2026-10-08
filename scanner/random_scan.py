@@ -195,7 +195,11 @@ async def async_random_scan(
     stop_event: Optional[threading.Event] = None,
     exclude_file: Optional[str] = None,
 ) -> List[Tuple[str, int]]:
-    """异步随机扫描：asyncio 协程并发，比线程池快 3-5 倍"""
+    """异步随机扫描：asyncio 协程并发，比线程池快 3-5 倍
+
+    进度回调签名：progress_callback(done, total, found)（与端口扫描的
+    callback(done, open_count) 不同，调用方注意区分）。
+    """
     try:
         from .async_portscan import scan_ports_async
     except ImportError:
@@ -208,18 +212,36 @@ async def async_random_scan(
         if progress_callback:
             progress_callback(done, target_count, opened)
 
-    results = await scan_ports_async(targets, concurrency=concurrency, timeout=timeout, progress_cb=_progress)
+    # stop_event 必须透传：旧实现声明了参数却从不传入，异步随机扫描无法停止
+    results = await scan_ports_async(targets, concurrency=concurrency, timeout=timeout,
+                                     progress_cb=_progress, stop_event=stop_event)
     return [(r.ip, r.port) for r in results if r.is_open]
 
 
 def parse_port_ranges(spec: str) -> List[Tuple[int, int]]:
+    """解析端口段 '25565-25575,19132'。
+
+    旧实现不处理 start>end（random_port 随即 ValueError）也不处理非数字，
+    会让扫描线程直接异常退出；现在交换区间、跳过非法项并限制到 1..65535。
+    """
     ranges = []
-    for part in spec.split(','):
+    for part in str(spec).split(','):
         part = part.strip()
-        if '-' in part:
-            start, end = part.split('-', 1)
-            ranges.append((int(start), int(end)))
-        elif part:
-            p = int(part)
-            ranges.append((p, p))
+        if not part:
+            continue
+        try:
+            if '-' in part:
+                start, end = part.split('-', 1)
+                start, end = int(start), int(end)
+                if start > end:
+                    start, end = end, start
+                start, end = max(start, 1), min(end, 65535)
+                if start <= end:
+                    ranges.append((start, end))
+            else:
+                p = int(part)
+                if 1 <= p <= 65535:
+                    ranges.append((p, p))
+        except ValueError:
+            continue
     return ranges if ranges else [(25565, 25575)]

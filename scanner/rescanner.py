@@ -4,6 +4,7 @@
 封装 storage/rescan.py 的数据库操作，提供高层调度接口。
 可在扫描引擎中自动调用，也可通过 CLI 手动管理。
 """
+import logger
 from storage import rescan as rescan_db
 from storage import player_history as ph_db
 
@@ -63,6 +64,8 @@ class RescanScheduler:
         """
         执行到期重扫。
         probe_func: 接收 (ip, port) 返回扫描结果的函数
+        timeout: 预留参数。单次探测超时由 probe_func 自己控制（用线程强制超时
+            无法回收卡死的线程，反而更危险），保留该参数只为兼容既有调用签名。
         """
         if not self.enabled:
             return []
@@ -76,6 +79,8 @@ class RescanScheduler:
                 if result:
                     self.update(result)
                     results.append(result)
-            except Exception:
+            except Exception as e:
+                # 失败必须留痕：旧实现静默 continue，重扫缺数据时完全无法定位
+                logger.warning(f"重扫失败 {item.get('ip')}:{item.get('port')}: {e}")
                 continue
         return results

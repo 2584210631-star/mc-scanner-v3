@@ -17,9 +17,10 @@
 import json
 import os
 import random
+import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 
@@ -64,10 +65,14 @@ SCAN_MODES = {
 
 
 def get_profile(mode: Optional[str]) -> ScanProfile:
-    """按名称获取扫描模式，未知/None 回退 balanced"""
+    """按名称获取扫描模式，未知/None 回退 balanced。
+
+    返回副本而不是 SCAN_MODES 里的共享实例：旧实现返回全局可变 dataclass，
+    调用方一个 ".rate = x" 就会永久污染所有后续扫描的配置。
+    """
     if mode and mode in SCAN_MODES:
-        return SCAN_MODES[mode]
-    return SCAN_MODES["balanced"]
+        return replace(SCAN_MODES[mode])
+    return replace(SCAN_MODES["balanced"])
 
 
 # ---------------------------------------------------------------- 随机化
@@ -75,8 +80,9 @@ def get_profile(mode: Optional[str]) -> ScanProfile:
 def shuffle_targets(targets, seed: Optional[int] = None, max_items: int = 500_000):
     """
     打乱 (ip, port) 任务顺序，去掉"顺序递增"扫描特征。
-    - 仅对可物化的列表生效（≤ max_items），避免大网段 OOM
-    - 超过上限时原样返回并提示
+
+    注意：本函数必须先把输入物化成 list 才能整体洗牌，因此只适合中小规模任务；
+    大网段请改用 iter_shuffled_chunks()（分块洗牌，不在内存里驻留全量目标）。
     """
     try:
         lst = list(targets)
@@ -90,6 +96,27 @@ def shuffle_targets(targets, seed: Optional[int] = None, max_items: int = 500_00
     else:
         random.shuffle(lst)
     return lst
+
+
+def iter_shuffled_chunks(targets, chunk_size: int = 100_000,
+                         seed: Optional[int] = None):
+    """分块读取 + 块内洗牌（惰性生成器）。
+
+    旧实现在调用点 list(targets) 之后才用 shuffle_targets 判断上限，
+    200 万目标时"上限保护"形同虚设；这里改成边读边洗，内存上限 ≈ chunk_size。
+    块内洗牌同样能去掉"顺序递增"特征，只是不再是全局均匀排列。
+    """
+    rng = random.Random(seed) if seed is not None else random
+    chunk = []
+    for item in targets:
+        chunk.append(item)
+        if len(chunk) >= chunk_size:
+            rng.shuffle(chunk)
+            yield from chunk
+            chunk = []
+    if chunk:
+        rng.shuffle(chunk)
+        yield from chunk
 
 
 # ---------------------------------------------------------------- 自适应速率 / 封禁检测
@@ -185,6 +212,12 @@ class ScanProgressStore:
         self._last_save = time.time()
         self._save_interval = 5.0   # 距上次保存至少间隔秒数
         self.MAX_MATERIALIZE = 500_000  # 新任务物化上限，超限不启用续扫（防大网段 OOM）
+        # 剩余集合由扫描主线程 discard、保存线程/主线程读快照，必须加锁
+        self._lock = threading.Lock()
+        self._write_lock = threading.Lock()   # 保证同一时刻只有一个写盘者
+        self._save_lock = threading.Lock()
+        self._save_pending = False
+        self._saver = None
 
     @property
     def enabled(self) -> bool:
@@ -225,31 +258,60 @@ class ScanProgressStore:
         """标记一个目标完成（从剩余集合移除，间隔保存）"""
         if self._remaining is None:
             return
-        self._remaining.discard(item)
-        self._dirty = True
+        with self._lock:
+            self._remaining.discard(item)
+            self._dirty = True
         now = time.time()
         if self._dirty and (now - self._last_save) >= self._save_interval:
+            # 后台保存：旧实现在扫描主线程里 json.dump 整个剩余集合（上限 50 万条、
+            # 单文件可达十几 MB），每 5 秒造成一次秒级 I/O 停顿并阻塞结果收割
+            self._schedule_save()
+
+    def _schedule_save(self):
+        """唤醒后台保存线程（已有线程在跑时只置一次标志）"""
+        with self._save_lock:
+            self._save_pending = True
+            if self._saver is None or not self._saver.is_alive():
+                self._saver = threading.Thread(target=self._save_loop,
+                                               name="progress-save", daemon=True)
+                self._saver.start()
+
+    def _save_loop(self):
+        while True:
+            with self._save_lock:
+                if not self._save_pending:
+                    return
+                self._save_pending = False
             self._save()
 
     def finish(self):
-        """扫描结束/中断时保存最终状态"""
+        """扫描结束/中断时保存最终状态（同步写，保证返回时已落盘）"""
+        with self._save_lock:
+            self._save_pending = False
+        saver = self._saver
+        if saver is not None and saver.is_alive() and saver is not threading.current_thread():
+            saver.join(timeout=10)
         if self._remaining is not None:
             self._save()
 
     def _save(self):
-        if not self.progress_file:
+        if not self.progress_file or self._remaining is None:
             return
-        try:
-            tmp = self.progress_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({
-                    "version": PROGRESS_VERSION,
-                    "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "remaining_count": len(self._remaining),
-                    "remaining": [list(item) for item in self._remaining],
-                }, f, ensure_ascii=False)
-            os.replace(tmp, self.progress_file)
-            self._dirty = False
-            self._last_save = time.time()
-        except Exception as e:
-            print(f"[!] 保存续扫进度失败: {e}")
+        with self._write_lock:
+            # 先在锁内取快照，序列化（可能十几 MB）在锁外进行
+            with self._lock:
+                snapshot = [list(item) for item in self._remaining]
+            try:
+                tmp = self.progress_file + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "version": PROGRESS_VERSION,
+                        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "remaining_count": len(snapshot),
+                        "remaining": snapshot,
+                    }, f, ensure_ascii=False)
+                os.replace(tmp, self.progress_file)
+                self._dirty = False
+                self._last_save = time.time()
+            except Exception as e:
+                print(f"[!] 保存续扫进度失败: {e}")
