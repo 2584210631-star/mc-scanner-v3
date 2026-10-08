@@ -11,9 +11,9 @@
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.3
+# 🛠️ MC Scanner v3.6.4
 
-### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒
+### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒 / Minecraft Server Scanner · Probe · Observer · Security Alert
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
@@ -281,7 +281,51 @@ python3 tools/gen_packets.py --download
 
 ---
 
-## 📜 更新日志
+## 📜 更新日志 / Changelog
+
+<details>
+<summary><b>v3.6.4</b>（点击展开 / Click to expand）</summary>
+
+**NeoForge 识别修复 / NeoForge Detection Fix**
+- NeoForge 1.20.2+ 不在 SLP 响应暴露 `forgeData`/`modinfo`，纯 SLP 探测会误判为 vanilla
+- 现在通过登录握手阶段的 LoginPluginRequest 频道（`neoforge:login` / `fml:loginwrapper`）自动修正 core_type
+- 同步引擎和异步引擎均已接入；需开启认证检测（默认开启）才生效
+- NeoForge 1.20.2+ no longer exposes `forgeData`/`modinfo` in SLP responses, causing false "vanilla" detection. Now corrected via LoginPluginRequest channels captured during auth probe (`neoforge:login` / `fml:loginwrapper`). Requires auth detection enabled (default on).
+
+**人数趋势图修复 / Popularity Chart Fix**
+- 修复收藏页人数趋势图不渲染：`popChart` 是 `<div>` 而非 `<canvas>`，无数据时写入的 `<p>` 标签残留导致 Chart.js 初始化失败
+- 现在有数据时先清空 div 再创建 canvas 元素
+- Fixed popularity chart not rendering: `popChart` was a `<div>` (not `<canvas>`), leftover "no data" `<p>` tag caused Chart.js init failure. Now clears div and creates canvas before chart init.
+
+**扫描进度优化 / Scan Progress Optimization**
+- 自适应限速器初始速率取 `min(用户配置, profile上限)`，不再被 profile 默认值覆盖
+- 初始批次从 200 改为 `max_workers*2`，避免提交全部目标才进主循环
+- 端口扫描进度步长动态化：`max(1, min(500, total//100))`，小目标也能实时更新
+- Adaptive rate limiter now uses `min(user_config, profile_cap)` as initial rate. Initial batch reduced from 200 to `max_workers*2`. Port scan progress step is now dynamic (`max(1, min(500, total//100))`).
+
+**路径基准统一 / Path Resolution Unification**
+- `config.json` 中相对路径（如 `db_path`）统一以配置文件所在目录为基准解析，不再混用 CWD 和仓库目录
+- 修复子目录配置文件保存后路径叠层的 bug
+- Relative paths in `config.json` (e.g. `db_path`) are now resolved relative to the config file's directory, fixing path-stacking bugs when config is in a subdirectory.
+
+**依赖清理 / Dependency Cleanup**
+- 删除 `libs/uvloop` 和 `libs/simdjson` 空壳（仅有源码无编译产物 `.so`，约 8MB 死重量）
+- `run.py` 移除自动 pip install 逻辑和空转导入循环
+- Removed `libs/uvloop` and `libs/simdjson` empty shells (source only, no compiled `.so`, ~8MB dead weight). Removed auto pip-install logic from `run.py`.
+
+**代码质量 / Code Quality**
+- 8 处 `raise` 补 `from e` 保留异常链（rcon / conn / bot / microsoft_auth）
+- `test_mark_failed` 补断言 `assertEqual(p.fail_count, before + 1)`
+- `conftest.py` 测试结束自动清理 `observer_logs/`
+- ruff 清理 21 处 unused import
+- PWA：`sw.js` 缓存名加版本号，`index.html` 加 apple-touch-icon
+- 8 `raise` statements now use `from e` to preserve exception chains. Added `test_mark_failed` assertion. `conftest.py` cleans `observer_logs/` after tests. Ruff cleaned 21 unused imports. PWA: `sw.js` cache versioned, apple-touch-icon added.
+
+**调试 / Debugging**
+- 离线账号发消息时打印 payload hex（`[聊天调试]`），便于排查 "larger than expected" 等协议格式问题
+- Offline chat sends now log payload hex (`[聊天调试]`) for troubleshooting protocol format issues.
+
+</details>
 
 <details>
 <summary><b>v3.6.3</b>（点击展开）</summary>
