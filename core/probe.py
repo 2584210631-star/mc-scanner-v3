@@ -271,9 +271,10 @@ def _motd_text(desc) -> str:
             return "".join(_motd_text(e) for e in extra)
     return str(desc)
 
-def detect_core_type(version_name: str, raw: dict = None) -> str:
+def detect_core_type(version_name: str, raw: dict = None, plugin_channels: list = None) -> str:
     """识别服务器核心类型。
     返回: vanilla / paper / spigot / bukkit / purpur / forge / fabric / neoforge / quilt / catserver / arclight / unknown
+    plugin_channels: 登录握手阶段记录的 LoginPluginRequest 频道列表，用于识别不暴露forgeData的NeoForge/Forge
     """
     v = (version_name or "").lower()
     if "neoforge" in v:
@@ -308,6 +309,15 @@ def detect_core_type(version_name: str, raw: dict = None) -> str:
             return "fabric"
         if "neoforge" in motd_low:
             return "neoforge"
+    # NeoForge 1.20.2+ 和 Forge 1.20.2+ 不在SLP暴露forgeData，
+    # 靠登录握手的LoginPluginRequest频道识别（neoforge:login / fml:loginwrapper）
+    if plugin_channels:
+        for ch in plugin_channels:
+            cl = str(ch).lower()
+            if "neoforge" in cl:
+                return "neoforge"
+            if "fml" in cl or "forge" in cl:
+                return "forge"
     return "vanilla" if v else "unknown"
 
 def extract_mods(raw: dict = None) -> list:
