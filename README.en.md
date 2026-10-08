@@ -1,0 +1,648 @@
+<div align="center">
+
+English | [中文](README.md)
+
+```text
+  ◆──────────────────────────────────────◆
+  ███╗   ███╗ ██████╗    ███████╗ ██████╗
+  ████╗ ████║██╔════╝    ██╔════╝██╔════╝
+  ██╔████╔██║██║         ███████╗██║
+  ██║╚██╔╝██║██║         ╚════██║██║
+  ██║ ╚═╝ ██║╚██████╗    ███████║╚██████╗
+  ╚═╝     ╚═╝ ╚═════╝    ╚══════╝ ╚═════╝
+  ◆──────────────────────────────────────◆
+```
+
+# 🛠️ MC Scanner v3.6.4
+
+### Minecraft Server Scanner · Probe · Observer · Security Alert
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
+[![Protocol](https://img.shields.io/badge/Protocol-41%20versions%20(340%2B)-10b981.svg)](#protocols)
+[![Tests](https://img.shields.io/badge/Tests-193%20passing-00d992.svg)](#tests)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
+
+**Port Scan · SLP Probe · Auth Detection · Observer · AI Bot · Security Scan · Web Panel**
+
+</div>
+
+---
+
+## 📑 Table of Contents
+
+| | | |
+|:---:|:---:|:---:|
+| [🧭 Introduction](#-introduction) | [✨ Features](#-features) | [🚦 Capabilities](#-capabilities-honest-assessment) |
+| [🚀 Quick Start](#-quick-start) | [📖 Beginner's Guide](#-beginners-guide) | [🧩 Project Structure](#-project-structure) |
+| [🧪 Tests](#-tests) | [📜 Changelog](#-changelog) | [⚖️ Legal & Ethics](#️-legal--ethics) |
+
+---
+
+## 🧭 Introduction
+
+**MC Scanner** is a pure-Python Minecraft server scanning and probing tool with both a **Web control panel** and **command-line** interface.
+
+It can: scan network ranges for open ports, query server info via SLP (version / MOTD / player count / online players), detect auth mode (offline / online / whitelist), log in as a bot to send messages, monitor chat in real-time with an observer, and (experimental) host AI chat bots.
+
+> This project is a **fully-functional personal tool** positioned as "server inspection and security reminders within authorized scope." It is not a general-purpose Minecraft client, and unauthorized access is not encouraged.
+
+```text
+┌─ Typical Workflow ───────────────────────────────────────┐
+│  Port Scan  →  SLP Probe  →  Auth Detect  →  Observer / Alert  │
+│  (find ports)  (get info)    (offline/online)  (monitor / warn) │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ✨ Features
+
+### 🔍 Scanning & Probing
+
+| Feature | Description |
+|---------|-------------|
+| Multi-threaded / async port scan | CIDR ranges, port ranges, hostnames |
+| SLP protocol probe | Version, player count, MOTD, protocol number, player list |
+| Auth mode detection | offline / online / whitelist / rejected — four states |
+| Core / modded detection | vanilla · paper · spigot · forge · fabric · neoforge, etc. |
+| masscan two-stage integration | Large-range masscan discovery → SLP probe |
+
+### 🤖 Bot & Observer
+
+| Feature | Description |
+|---------|-------------|
+| Login & send messages | Log into servers and send custom messages |
+| AuthMe support | `auto` / `login_only` / `register_then_login` modes, branches based on server response |
+| Multi-version adaptation | Protocol table auto-generated from minecraft-data (41 protocol versions) |
+| Concurrent bots | Per-server limit configurable (`warn_bot_max`) |
+| Observer mode | Real-time chat monitoring, keyword handling, logging to disk, exponential backoff reconnect |
+| Premium account login | Microsoft OAuth device code flow, multi-account management |
+
+### 🧠 AI Hosting (Experimental)
+
+> Experimental feature, not loaded by default. Must be explicitly enabled in config.
+
+| Feature | Description |
+|---------|-------------|
+| AI chat bot | Compatible with DeepSeek / OpenAI APIs |
+| Preset personas | Multiple personas, editable in Web panel |
+| Multi-AI group chat | Multiple bots interacting on the same server |
+| Layered memory | Short-term raw + mid-term summary + long-term player profile (clearable anytime) |
+| Safety guardrail | AI replies starting with `/` are blocked; API failures trigger automatic backoff |
+
+### 🛡️ Scan Modes
+
+| Mode | Concurrency | Rate | Use Case |
+|------|------------|------|----------|
+| `safe` | Low | Adaptive throttle | Public internet / authorized testing, gentle and slow |
+| `balanced` | Medium | Moderate | Default mode, daily scanning |
+| `aggressive` | High | Full speed | **Internal / trusted networks only** |
+
+- **Multi-task concurrency**: Run multiple scan tasks simultaneously (`max_concurrent_scans`, default 2), excess auto-queued; bot login, favorite re-check, observer, AI, health monitor all run in parallel without blocking
+- **Batch cooldown**: Pause between batches to reduce connection storms
+- **Adaptive rate**: Auto-throttle on timeout spikes, pause/abort on connection anomalies
+- **Resume**: `--resume` continues from last position after interruption (progress file has version check, corrupted files are rejected)
+
+### 🌐 Web Panel
+
+- Access at `http://127.0.0.1:8090` after startup
+- **No login auth**: Binds to `127.0.0.1` by default for local use; if bound to `0.0.0.0`, **anyone on the network can operate it — ensure your network is trusted**
+- Dark theme, **desktop / mobile responsive**
+- One-stop management: scan tasks, observers, AI bots, premium accounts, database, favorites, player history
+- Capability status badges always visible at top
+
+### 🔒 Security & Ops
+
+- **Capability toggles**: Scan (on by default) / login interaction / RCON commands (off by default)
+- **Global read-only mode**: One-click lock on all write operations
+- **Audit log**: Write operations record source, target, action, result
+- Per-module API rate limiting; sensitive config supports `MC_*` environment variable override
+- SLP probe cache to avoid duplicate probing
+
+### 💓 Health Monitor (Favorites)
+
+- Periodically probes favorited servers, records online/offline, player count, player joins/leaves; changes can be emailed
+- **Gentle probe rate** (avoid rate-limiting/ban): concurrency ≤ `health_probe_concurrency` (default 8); same IP gap ≥ `health_probe_ip_gap` seconds (default 1.5); round interval `health_interval` seconds (default 300) — all adjustable in Web settings or `config.json`
+- Uses fast mode (auto-version only, no full protocol iteration), 55 targets done in ~10 seconds; auto-complements auth detection when missing
+- Also includes "popular" servers from database (max 20); set `health_monitor_db_extra: false` to monitor only favorites
+
+---
+
+## 🚦 Capabilities (Honest Assessment)
+
+To avoid overpromising, here's what this version can and cannot do:
+
+| Scenario | Status | Notes |
+|----------|:------:|-------|
+| Port scan / SLP info probe | ✅ Reliable | Main path, covers all versions |
+| Offline server login + messaging | ✅ Reliable | Primary use case for security alerts |
+| Online (premium) server login | ✅ Works | Requires Microsoft OAuth first |
+| Premium server **chat** | ✅ Works | Auto-fetches Mojang-issued RSA cert after login, signs with RSA-2048+SHA256 via pycryptodome; falls back to unsigned on signature failure |
+| Forge / Fabric / NeoForge modded servers | ⚠️ Partial | Can pass some acceptance tests as vanilla client; forced-mod-validation servers cannot be entered |
+| Old versions (1.12.2 etc.) | ⚠️ Best effort | Protocol table covers and is tested, but edge cases remain |
+| General Minecraft client | ❌ Not a goal | No full game controls / real signing / mod loading |
+| Unauthorized internet-wide scanning | 🚫 Forbidden | See [Legal & Ethics](#️-legal--ethics) |
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+git clone https://github.com/2584210631-star/mc-scanner-v3.git
+cd mc-scanner-v3
+
+# Install dependencies (flask required + pycryptodome for premium login)
+pip install -r requirements.txt
+
+# Optional: copy config template
+cp config.example.json config.json
+```
+
+> **Dependencies**: As of v3.6.4, no third-party libraries are vendored. Install all via pip. `flask` is required for Web panel, `pycryptodome` for premium account login. `uvloop` / `pysimdjson` are optional speedups — auto-fallback if missing.
+
+### Pre-built Bundles (no pip install needed)
+
+| Platform | Download | Size |
+|----------|----------|------|
+| Windows x64 (Python 3.12) | [mc-scanner-v3.6.4-windows-x64.zip](https://github.com/2584210631-star/mc-scanner-v3/releases/download/v3.6.4/mc-scanner-v3.6.4-windows-x64.zip) | 20 MB |
+| Linux x86_64 (Python 3.12) | [mc-scanner-v3.6.4-linux-x86_64.zip](https://github.com/2584210631-star/mc-scanner-v3/releases/download/v3.6.4/mc-scanner-v3.6.4-linux-x86_64.zip) | 33 MB |
+
+Extract and run — all dependencies bundled in `libs/`. Windows: double-click `run.bat`. Linux: `python3 cli.py web --port 8090`.
+
+### Start Web Panel
+
+```bash
+python3 cli.py web --port 8090 --host 127.0.0.1
+# Open http://127.0.0.1:8090 in browser
+```
+
+### Command-line Scan
+
+```bash
+# Single IP, all ports, safe mode
+python3 cli.py scan 1.2.3.4 --port 1-65535 --mode safe
+
+# Network range, balanced mode
+python3 cli.py scan 192.168.1.0/24 --mode balanced
+
+# Resume interrupted scan
+python3 cli.py scan 1.2.3.4 --port 1-65535 --mode safe --resume
+
+# Port scan only (no MC protocol probe)
+python3 cli.py portscan 192.168.1.0/24 --port 1-65535
+
+# masscan large-range scan (auto two-stage)
+python3 cli.py scan 10.0.0.0/8 --port 25565 --use-masscan auto
+```
+
+### Premium Account Login (Device Code)
+
+1. Web panel → Settings → Premium Accounts → "Get Device Code"
+2. Open `microsoft.com/link` in browser, enter the code, log in
+3. Account auto-saved; manually check "Premium Verification" when using observer/AI
+
+### Environment Variables (Sensitive Config)
+
+```bash
+MC_AI_API_KEY=your_key
+MC_AI_BASE_URL=https://api.deepseek.com
+MC_AI_MODEL=deepseek-chat
+MC_DISCORD_WEBHOOK=your_webhook
+MC_AUTHME_PASSWORD=your_password
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|:----:|---------|
+| 0 | Success |
+| 1 | No results / failure |
+| 2 | High-speed mode not confirmed |
+| 3 | Parameter error (missing args / missing `--yes`) |
+| 4 | Capability toggle denied |
+
+---
+
+## 📖 Beginner's Guide
+
+### 1. Requirements
+
+| Item | Requirement |
+|------|-------------|
+| Python | 3.10+ (3.12 recommended) |
+| OS | Linux / macOS / Windows / Termux(Android) |
+| Network | Can reach target servers and GitHub |
+| Optional | masscan (large-range high-speed scanning) |
+
+### 2. Installation
+
+```bash
+git clone https://github.com/2584210631-star/mc-scanner-v3.git
+cd mc-scanner-v3
+pip install -r requirements.txt
+python3 cli.py --help  # verify
+```
+
+If `pip install` fails (common on Termux/mobile):
+```bash
+pkg install python python-pip openssl
+pip install flask pycryptodome
+```
+
+### 3. First Run
+
+```bash
+python3 cli.py web --port 8090 --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:8090` — you'll see the dark panel. Bottom nav: Scan, Results, Favorites, Observer, AI, Auto, Library, History.
+
+> **Termux/mobile users**: Run the command in Termux, then open `http://127.0.0.1:8090` in your phone browser. Panel is mobile-optimized.
+
+### 4. Your First Scan
+
+In the Web panel "Scan" tab:
+1. Enter an IP or hostname (e.g. `1.2.3.4` or `mc.example.com`)
+2. Port defaults to `25565`, can be a range `25565-25570`
+3. Choose `safe` (public internet) or `balanced` (default)
+4. Click "Start Scan"
+
+Two stages:
+- **Stage 1**: Port scan, find open ports
+- **Stage 2**: SLP probe + auth detection, determine offline/online/whitelist
+
+View results in "Results" tab, filter by auth mode, version, keyword.
+
+CLI equivalent:
+```bash
+python3 cli.py scan 1.2.3.4 --mode safe
+python3 cli.py scan 192.168.1.0/24 --mode balanced
+```
+
+### 5. Observer Mode
+
+Observer = log in as a bot, watch chat and player joins/leaves in real-time, can send messages.
+
+Click "Observe" on any server in Results or Observer tab:
+- Enter a username (e.g. `WatchDog`)
+- Offline servers connect directly; premium servers need Microsoft account setup (see §6)
+- Once in, type messages in the input box; chat auto-saved
+- Click "Disconnect" to exit; records exportable as TXT/HTML
+
+CLI equivalent:
+```bash
+python3 cli.py bot 1.2.3.4:25565 -u WatchDog -m "Hello" --hold 10
+```
+
+### 6. Premium Account (Microsoft)
+
+To join premium servers, complete Microsoft OAuth:
+
+1. Web panel → Settings (top-right) → Premium Accounts → "Get Device Code"
+2. Terminal shows a device code and URL `microsoft.com/link`
+3. Open the URL, enter the code, log in to your Microsoft account
+4. Account auto-saved; check "Premium Verification" when joining servers
+
+> Premium login requires `pycryptodome` (in requirements.txt). Chat signing uses RSA-2048+SHA256 with Mojang-issued certificates.
+
+### 7. Security Warnings
+
+Automatically send friendly security reminders to offline servers:
+
+```bash
+# Scan and auto-warn all offline servers
+python3 cli.py warn 192.168.1.0/24 -u SecurityBot \
+  -m "Hello, I'm a friendly security scanner bot" \
+  -m "Your server is in offline mode — consider enabling online-mode=true"
+
+# Warn from existing database results (no re-scan)
+python3 cli.py warn-db --auth cracked --limit 10
+```
+
+Servers with AuthMe: use `--authme password` for auto register/login.
+
+### 8. Favorites & Health Monitor
+
+- Star servers in Results tab to favorite them
+- Favorites tab manages them, filter by auth mode / has players
+- Health monitor periodically probes favorited servers, records player count changes, can email notifications
+- Player trend chart in Favorites tab, click 📈 to view
+
+### 9. Configuration
+
+`config.json` (auto-generated on first run) key fields:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `username` | `Herobrine` | Default bot username |
+| `messages` | `[]` | Default warning message list |
+| `ports` | `[25565]` | Default scan ports |
+| `scan_threads` | `200` | Scan concurrency |
+| `scan_timeout` | `2.5` | Per-target timeout (seconds) |
+| `bot_threads` | `10` | Bot concurrency |
+| `authme_password` | `""` | AuthMe auto-login password |
+| `db_path` | `mcscanner.db` | SQLite database path |
+| `health_interval` | `300` | Health monitor poll interval (seconds) |
+
+Sensitive config can also be overridden via environment variables: `MC_AI_API_KEY`, `MC_DISCORD_WEBHOOK`, etc.
+
+### 10. FAQ
+
+**Q: `ModuleNotFoundError: No module named 'flask'`**
+A: Dependencies not installed. Run `pip install -r requirements.txt`
+
+**Q: Can't join premium server, `authservers_down`**
+A: Mojang auth servers temporarily unavailable. Wait a few minutes and retry; check if your network can reach `authserver.mojang.com`
+
+**Q: Kicked for `chat.disabled.missingProfileKey`**
+A: Server enforces secure profiles. Must use a premium account (§6). Offline accounts cannot chat on enforce-secure-profile servers.
+
+**Q: Kicked for `Packet chat was larger than expected`**
+A: Chat packet format compatibility issue on some server versions. Under investigation — try a different server.
+
+**Q: Can't connect to NeoForge/Forge modded servers**
+A: Forced-mod-validation servers require the client to send a mod list. A vanilla client cannot enter. Servers with "allow vanilla clients" enabled can be joined.
+
+**Q: Scan progress bar stuck**
+A: Small targets (<100) scan very quickly, bar may jump straight to 100%. For large targets use `--workers` to increase concurrency.
+
+**Q: `pip install` compile failure on Termux**
+A: Run `pkg install python openssl`, then install pure-Python packages only: `pip install flask pycryptodome`, skip `cryptography` (pycryptodome covers it).
+
+### 11. Uninstall
+
+```bash
+# Stop the service, then delete the directory
+rm -rf mc-scanner-v3
+# Database and config are inside, deleted together
+```
+
+---
+
+## 🧩 Project Structure
+
+```text
+mc-scanner-v3/
+├── cli.py                  # CLI entry point
+├── config.py               # Config management
+├── core/
+│   ├── bot.py              # Minecraft bot core
+│   ├── conn.py             # Connection layer (encryption / protocol)
+│   ├── probe.py            # SLP / auth probing
+│   ├── protocol.py         # Version mapping / protocol constants
+│   ├── packets.py          # Protocol table loading & integrity check
+│   ├── packets_auto.py     # Auto-generated protocol table (41 versions)
+│   ├── microsoft_auth.py   # Microsoft OAuth premium login
+│   ├── ed25519.py          # Pure-Python Ed25519 signing (zero deps)
+│   ├── errors.py           # Unified error codes & mapping
+│   ├── nbt.py / chat.py    # NBT / JSON text parsing
+│   ├── buffer.py           # Byte stream utilities
+│   ├── rcon.py             # RCON remote console
+│   ├── command_runner.py   # Command executor
+│   ├── plugins.py          # Plugin / anti-cheat detection
+│   ├── fingerprint.py      # Server fingerprinting
+│   ├── ai_bot.py           # AI bot session
+│   ├── ai_memory.py        # AI layered memory
+│   ├── ai_personas.py      # AI persona presets
+│   └── protocols/          # Per-version protocol handlers
+├── scanner/
+│   ├── safe.py             # Safe scan config / progress storage
+│   ├── async_engine.py     # Async pipeline
+│   ├── portscan.py         # Sync port scan
+│   └── engine.py           # Scan engine
+├── web/
+│   ├── app.py              # Flask app
+│   ├── index.html          # Frontend panel (desktop / mobile)
+│   ├── state.py            # Shared state
+│   └── routes_*.py         # Per-module API routes
+├── service/                # Scan / warn task services
+├── storage/                # Favorites persistence
+├── tools/
+│   ├── gen_packets.py      # Auto-generate protocol table
+│   ├── get_mc_token.py     # Premium device code tool
+│   └── send_command.py     # Command sender (authorized, use with care)
+├── distributed/            # ⚠️ Experimental: distributed sharding
+├── android_patches/        # ⚠️ Experimental: Termux adaptation
+├── tests/                  # Unit / integration tests
+├── config.example.json     # Config template
+├── requirements.txt        # Dependencies
+├── LICENSE                 # MIT
+└── README.md
+```
+
+---
+
+## 🧪 Tests
+
+```bash
+python3 -m pytest tests/ -q
+```
+
+Currently **193 tests all passing**, covering: protocol table integrity, version mapping, auth probing, Login Start segmentation, Client Settings segmentation, AuthMe branching, progress storage, AI safety guardrails, failure paths, no-reported-protocol fallback, etc.
+
+Regenerate protocol table:
+
+```bash
+python3 tools/gen_packets.py --download
+```
+
+---
+
+## 📜 Changelog
+
+<details>
+<summary><b>v3.6.4</b></summary>
+
+This release is mostly bug fixes and cleanup, no new features.
+
+**Fixed**
+
+- **NeoForge detection**: NeoForge 1.20.2+ doesn't expose forgeData in SLP, was misidentified as vanilla. Now corrected via `neoforge:login` channel during login handshake. Note: only works when auth detection is enabled; forced-mod-validation NeoForge servers still can't be joined (hard limit, not a bug)
+- **Player trend chart not rendering**: Dumb mistake — chart container was `<div>` not `<canvas>`, leftover `<p>` tag from empty-state caused Chart.js init failure. Now clears div before creating canvas
+- **Scan progress bar stuck**: Adaptive rate limiter's initial rate was overridden by profile default, initial batch of 200 was too large for small targets. Fixed: initial rate = min(user config, cap), batch = max_workers*2, dynamic progress step
+- **Config path stacking**: When config.json is in a subdirectory, saving once added an extra path layer. Unified to config file's own directory as base
+- **No more vendored deps**: Deleted entire `libs/` directory (Flask + deps, ~2.6MB), all via `pip install -r requirements.txt`. Previous uvloop/simdjson empty shells also removed
+- **Code hygiene**: 8 `raise` statements got `from e`, one test assertion added, test cleanup for observer_logs, 21 unused imports cleared, PWA cache versioned
+
+**Still broken**
+
+- Some offline servers kick with "Packet chat was larger than expected": under investigation, payload hex debug logging added, root cause not yet found
+- Some protocol versions (e.g. 776) auto-generated table lacks Configuration segment, falls back to hand-written constants, may cause connection issues on new servers
+- Forced-mod-validation Forge/NeoForge servers can't connect (requires client to send mod list, vanilla client can't)
+
+</details>
+
+<details>
+<summary><b>v3.6.3</b></summary>
+
+**Chat fixes (core)**
+- Fixed observer not receiving chat on 1.21 (proto 767): `extract_chat_text` incorrectly skipped `globalIndex` field (added in 1.21.2/768), causing byte misalignment and empty text. Messages were always broadcast, just not parsed
+- Removed workarounds from wrong diagnosis: offline account `/me` fallback, self-signed Chat Session (harmful to offline accounts — server receives unverifyable key and silently drops subsequent unsigned messages)
+
+**Premium signed chat (RSA-2048+SHA256)**
+- Minecraft 1.19+ chat signing actually uses **RSA-2048 + SHA256 PKCS#1 v1.5** (not Ed25519), Mojang `/player/certificates` returns RSA keypair
+- `_build_signed_chat` uses pycryptodome for RSA-SHA256, signature data = sender UUID(16) + timestamp(8) + salt(8) + message(UTF-8)
+- 766+ (1.20.5+) signature field is fixed 256-byte buffer, no varint length prefix
+- Offline servers don't fetch certs or send Chat Session (offline UUID doesn't match premium cert UUID, sending gets kicked for invalid_public_key_signature)
+- Fixed Chat Session / signed chat base64 decode `Incorrect padding`: Mojang keys may lack trailing `=` padding, auto-completed before decode
+
+**Auth state machine hardening**
+- `auth_mode` initialized to `unknown` in `__init__`, Play success only marks offline if unknown (premium accounts that passed Encryption keep online, no longer overwritten)
+- Bot and probe whitelist keywords aligned (whitelist / white list / not white-listed / not whitelisted / 白名单 / 不在白名单 / not on the whitelist)
+- `join_and_warn` exception path uses `BotError.code` (WHITELIST / ONLINE_MODE_REQUIRED / BANNED / KICKED / INCOMPATIBLE_VERSION), no more string scanning
+- neoforge split from forge pattern into separate category
+- plugin_channels data flow connected: auth_probe returns and persists, aids Forge/modded detection
+- No-reported-protocol cross-era fallback (775/767/763/761/754/340), not just latest 3 versions
+- `fingerprint_server` renamed to `fingerprint_by_field_order`, avoids name clash with `core/fingerprint.py`
+
+**Security hardening**
+- `msa_refresh_token` and other sensitive tokens masked, prefix narrowed to 2 chars
+- Fixed two stored XSS (logBox, observer cards)
+
+**AI & Observer**
+- AI Bot ignores identical content within 10 seconds, no more talking to itself
+- Observer chat records grouped by date, IP-searchable, zero-message records manually deletable
+
+**Favorites & Health Monitor**
+- Favorite player count shows `online/max` format (e.g. 2/20) with player names
+- Favorites filter adds auth mode (premium/offline) and has players/no players
+- Player trend chart moved to Favorites tab
+- Health monitor auto-complements auth detection when missing
+
+**Web Panel**
+- Close service button added top-right
+- Mobile UI optimization
+
+</details>
+
+<details>
+<summary><b>v3.6.2</b></summary>
+
+**Fixes & improvements**
+- Fixed 1.19.3–1.20.4 protocol layer bugs (Login Start byte segmentation, Client Settings field segmentation)
+- Health monitor fast mode, no longer iterates 19 protocol versions, 10x speedup
+- AI Bot truly identifies its own messages via UUID, no more talking to itself
+- Premium login auto-syncs actual server username, supports Ed25519 signed chat
+- Database page adds import/clear/favorite buttons, favorite list sorted by whitelist priority
+- Favorite player count shows online/max with player names
+- Web panel close service button
+- Removed login auth (local tool), README honestly describes
+
+</details>
+
+<details>
+<summary><b>v3.6.1</b></summary>
+
+**Favorites & Health Monitor**
+- Favorites retain last online info (`last_good_info`), offline re-check/monitor no longer overwrites
+- Health monitor concurrent probing, cleans residual state by monitor list, events judged by online status (empty server boot no longer missed)
+- Health monitor supports Web panel poll interval config, manual "check now", per-server probe real-time updates
+- Favorite file atomic write + concurrent write lock, monitor write-back skips when unchanged
+
+</details>
+
+<details>
+<summary><b>v3.6.0</b></summary>
+
+**Scan engine**
+- `safe` / `balanced` / `aggressive` three modes
+- Batch cooldown, adaptive throttle, connection anomaly detection, resume
+
+**Protocol foundation**
+- Protocol table auto-generated from minecraft-data (41 versions), integrity check before release
+- Version mapping calibrated and locked with unit tests
+- Configuration phase packet IDs from auto table
+
+**AI features**
+- Layered memory system, persona editing, auto-reconnect
+- AI reply command interception, API failure backoff, clearable memory
+
+**Premium login**
+- Microsoft OAuth device code flow, multi-account management
+- All join entry points support premium verification toggle (manual check)
+- ⚠️ Does not send real chat signatures, enforce-secure-profile servers may reject
+
+**Security hardening**
+- Capability toggles, global read-only, audit log, API rate limiting
+
+</details>
+
+<details>
+<summary><b>v3.4.0</b></summary>
+
+- Web panel modular split (multiple route modules + service layer)
+- Web UI visual upgrade + mobile adaptation
+- AI assistant floating window, health monitor email, player history chart
+
+</details>
+
+---
+
+## ⚖️ Legal & Ethics
+
+> This section is a **hard constraint** for using this tool, not optional.
+
+### ✅ Legal Use
+
+- **Security research / authorized testing**: Assess target systems under explicit (preferably written) authorization
+- **Own asset inspection**: Scan and manage servers you own or host
+- **Internal education**: Learn networking and protocols on isolated private networks
+
+### 🚫 Prohibited
+
+- Port scanning, probing, or vulnerability scanning of **unauthorized** servers
+- Logging into unauthorized servers (including offline servers) or accessing their data
+- Executing `/op`, `/gamemode`, `/ban`, `/stop` or any commands on unauthorized servers
+- Connecting RCON to unauthorized servers
+- DDoS, botnets, spam, or any form of denial-of-service / harassment
+- Collecting or disseminating third-party server player data, IPs, or personal information
+- Bypassing or breaking firewalls, whitelists, premium verification, or other security measures
+
+### 🔐 Data Privacy
+
+- The tool does not upload your scan data or config to any third party
+- Scan results are stored locally, managed by you
+- Do not commit results or credentials containing real IPs / player info to public repos
+- `.gitignore` excludes `*.db`, `*.json`, and other data/credential files by default
+
+<details>
+<summary><b>📖 Relevant legal references (China mainland)</b></summary>
+
+Unauthorized scanning, login, or control of computer information systems may involve:
+
+- Criminal Law of the PRC Article 285 — Illegal intrusion into computer information systems, illegal acquisition of computer information system data, **providing intrusion/illegal control programs or tools**
+- Criminal Law Article 286 — Destroying computer information systems
+- Criminal Law Article 287(2) — Assisting information network criminal activities
+- Cybersecurity Law of the PRC
+- Data Security Law of the PRC
+- Personal Information Protection Law of the PRC
+
+In other countries/regions, comply with local laws on computer misuse, unauthorized access, and data protection (e.g. CFAA, GDPR).
+
+</details>
+
+<details>
+<summary><b>📝 Disclaimer</b></summary>
+
+- This tool is provided "as is," author makes no warranty of fitness, reliability, or safety
+- Users bear all legal responsibility and consequences of using this tool
+- Author is not liable for any direct or indirect damages from using this tool
+- If you disagree with these terms, stop using and delete this tool immediately
+- The above is general information, not legal advice; consult a licensed attorney for specific cases
+
+</details>
+
+---
+
+## 📄 License
+
+This project is released under the [MIT License](LICENSE).
+
+<div align="center">
+
+**Use within authorized scope. Happy & Safe Scanning. 🟢**
+
+</div>
