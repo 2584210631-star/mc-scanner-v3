@@ -39,6 +39,14 @@ _rate_limit_store = {}  # (ip, module) -> [timestamps]
 _rate_limit_lock = _threading.Lock()
 _RATE_WINDOW = 60.0  # 秒
 
+# 单模块收紧上限：配置文件里的 api_rate_limit 与本表取小值。
+#   auth  —— 每次登录要算两次 200k 轮 PBKDF2，不限速=无限爆破+CPU DoS
+#   warn  —— 单请求可投放 warn_bot_max 个机器人
+#   ai    —— 面板会轮询 /api/ai_bot/chat、/api/ai_multi/chat（各1次/2秒），留足余量
+# scan 不单独设限：/api/scan/status 与 /api/scan/tasks 每秒各轮询一次，由 api_rate_limit（600）兜底
+_RATE_MODULE_CAP = {"auth": 20, "warn": 30, "ai": 180}
+
+
 def _get_module(path):
     if path.startswith("/api/scan/") or path.startswith("/api/masscan/"):
         return "scan"
@@ -46,6 +54,8 @@ def _get_module(path):
         return "warn"
     if path.startswith("/api/ai_bot/") or path.startswith("/api/ai_multi/") or path.startswith("/api/assistant/"):
         return "ai"
+    if path.startswith("/api/auth/"):
+        return "auth"
     return None
 
 @app.before_request
@@ -57,6 +67,7 @@ def _rate_limit():
         module = _get_module(request.path)
         if not module:
             return None
+        limit = min(limit, _RATE_MODULE_CAP.get(module, limit))
         ip = request.remote_addr or "unknown"
         key = (ip, module)
         now = _time.time()

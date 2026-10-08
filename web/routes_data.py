@@ -27,6 +27,14 @@ def _csv_field(s):
     return s
 
 
+def _to_int(value, default=0):
+    """请求参数转 int，非法值回退默认值（原实现直接 int() 会 500）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def register(app):
     scan_state = state.scan_state
     scan_lock = state.scan_lock
@@ -54,6 +62,9 @@ def register(app):
             offset = int(request.args.get("offset", 0))
         except (ValueError, TypeError):
             offset = 0
+        # 上下界收敛：SQLite 里 LIMIT -1 表示"不限"，?limit=-1 一次就把整库拉进内存
+        limit = max(1, min(limit, 1000))
+        offset = max(0, offset)
         try:
             modded_val = int(modded) if modded else None
         except (ValueError, TypeError):
@@ -176,19 +187,30 @@ def register(app):
         hours = request.args.get("hours", type=int, default=24)
         if not ip or not port:
             return jsonify({"error": "ip和port必填"}), 400
+        hours = max(1, min(hours, 24 * 365))
         db_path = _safe_db_path(request.args.get("db_path", "mcscanner.db"))
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        # 按小时聚合，取每小时最大人数
-        rows = conn.execute(
-            """SELECT strftime('%Y-%m-%d %H:00', recorded_at) as hour,
-                      MAX(players_online) as online, MAX(players_max) as max_p
-               FROM server_popularity
-               WHERE ip=? AND port=? AND recorded_at > datetime('now', ?)
-               GROUP BY hour ORDER BY hour ASC""",
-            (ip, port, f'-{hours} hours')
-        ).fetchall()
-        conn.close()
+        # 库不存在时直接返回空：原实现会静默新建一个空 .db 污染 CWD
+        if not os.path.exists(db_path):
+            return jsonify({"ip": ip, "port": port, "hours": hours, "data": []})
+        conn = None
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            # 按小时聚合，取每小时最大人数
+            # 时间窗用 julianday 比较：recorded_at 里混存 "T...%z"（storage/db.py）和
+            # 空格格式（健康监控），字符串比较会把窗口外的记录也算进来
+            rows = conn.execute(
+                """SELECT strftime('%Y-%m-%d %H:00', recorded_at) as hour,
+                          MAX(players_online) as online, MAX(players_max) as max_p
+                   FROM server_popularity
+                   WHERE ip=? AND port=? AND julianday(recorded_at) > julianday('now', ?)
+                   GROUP BY hour ORDER BY hour ASC""",
+                (ip, port, f'-{hours} hours')
+            ).fetchall()
+        finally:
+            # 缺表/查询异常也必须关连接，否则 sqlite 句柄泄漏
+            if conn is not None:
+                conn.close()
         return jsonify({
             "ip": ip, "port": port, "hours": hours,
             "data": [{"time": r["hour"], "online": r["online"], "max": r["max_p"]} for r in rows]
@@ -394,7 +416,7 @@ def register(app):
         player_name = request.args.get("name")
         ip = request.args.get("ip")
         port = request.args.get("port", type=int)
-        limit = int(request.args.get("limit", 100))
+        limit = max(1, min(_to_int(request.args.get("limit"), 100), 1000))
         if not os.path.exists(db_path):
             return jsonify({"total": 0, "players": []})
         from storage import player_history as ph
@@ -418,15 +440,19 @@ def register(app):
         except Exception:
             favs = []
         result = []
+        # 持锁快照：健康监控线程会在同一字典里删/写，无锁遍历会抛 RuntimeError 变 500
+        with state.health_lock:
+            status_snapshot = dict(health_monitor["status"])
         for f in favs:
             key = f"{f['ip']}:{f['port']}"
-            st = health_monitor["status"].get(key)
+            st = status_snapshot.get(key)
             if not st:
                 # 还没有实时监控数据：不返回该项，前端保留收藏中上次探查的信息
                 continue
             result.append({
                 "ip": f['ip'], "port": f['port'],
-                "tag": f.get('tag', ''),
+                # 收藏里存的是 tags（列表），原来读 f['tag'] 永远是空字符串
+                "tag": f.get('tags') or [],
                 "note": f.get('note', ''),
                 "online": st.get("online", False),
                 "players": st.get("players", 0),
@@ -442,8 +468,10 @@ def register(app):
     @app.route('/api/db/clear', methods=['POST'])
     def db_clear():
         """清空servers表（需二次确认）"""
-        db_path = _safe_db_path(request.json.get("db_path", "mcscanner.db"))
-        confirm = request.json.get("confirm", "")
+        # body 为合法 JSON null 时 request.json 是 None，原来直接 .get() → AttributeError 500
+        data = request.json or {}
+        db_path = _safe_db_path(data.get("db_path", "mcscanner.db"))
+        confirm = data.get("confirm", "")
         if confirm != "CLEAR":
             return jsonify({"error": "需传confirm=CLEAR确认"}), 400
         if not os.path.exists(db_path):

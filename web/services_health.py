@@ -10,6 +10,7 @@ except ImportError:
     import state  # type: ignore
 health_monitor = state.health_monitor
 scan_lock = state.scan_lock
+health_lock = state.health_lock
 
 def _log(msg):
     state.log_scan(msg)
@@ -70,12 +71,15 @@ def _health_monitor_loop(once=False):
 
             # 清理已不在监控列表中的残留状态（收藏删除后不留脏数据）
             valid_keys = {f"{ip}:{port}" for ip, port in targets}
-            for k in list(health_monitor["status"].keys()):
-                if k not in valid_keys:
-                    del health_monitor["status"][k]
-            for k in list(health_monitor.get("last_players", {}).keys()):
-                if k not in valid_keys:
-                    del health_monitor["last_players"][k]
+            # 持锁删除：请求线程（/api/health/status、/api/favorites/realtime）
+            # 会遍历同一批字典，无锁 del 会让它们抛 RuntimeError 变 500
+            with health_lock:
+                for k in list(health_monitor["status"].keys()):
+                    if k not in valid_keys:
+                        del health_monitor["status"][k]
+                for k in list(health_monitor.get("last_players", {}).keys()):
+                    if k not in valid_keys:
+                        del health_monitor["last_players"][k]
             _log(f"[健康监控] 本轮目标数: {len(targets)}, 并发{probe_concurrency} 同IP间隔{probe_ip_gap}s")
 
             # 逐台探测、逐台更新（扫一个报一个，不用等全部跑完）
@@ -134,7 +138,8 @@ def _health_monitor_loop(once=False):
                             pass
                     online = r.get('online', 0) if r else 0
                     online_flag = bool(r and r.get("state") == "up")
-                    prev = health_monitor["status"].get(key, {})
+                    with health_lock:
+                        prev = health_monitor["status"].get(key, {})
                     prev_online = prev.get('players', 0)
                     prev_flag = prev.get('online', False)
                     player_names = []
@@ -156,7 +161,8 @@ def _health_monitor_loop(once=False):
                         finally:
                             if conn:
                                 conn.close()
-                    prev_players = set(health_monitor.get("last_players", {}).get(key, []))
+                    with health_lock:
+                        prev_players = set(health_monitor.get("last_players", {}).get(key, []))
                     curr_players = set(player_names)
                     new_players = list(curr_players - prev_players)
                     left_players = list(prev_players - curr_players)
@@ -169,8 +175,9 @@ def _health_monitor_loop(once=False):
                             "new_players": new_players, "left_players": left_players,
                             "type": "up" if online_flag else "down"
                         }
-                        health_monitor["events"].insert(0, event)
-                        health_monitor["events"] = health_monitor["events"][:100]
+                        with health_lock:
+                            health_monitor["events"].insert(0, event)
+                            health_monitor["events"] = health_monitor["events"][:100]
                         changed_servers.append({
                             "ip": ip, "port": port,
                             "prev": prev_online, "curr": online,
@@ -188,8 +195,9 @@ def _health_monitor_loop(once=False):
                             "new_players": new_players, "left_players": left_players,
                             "type": "change"
                         }
-                        health_monitor["events"].insert(0, event)
-                        health_monitor["events"] = health_monitor["events"][:100]
+                        with health_lock:
+                            health_monitor["events"].insert(0, event)
+                            health_monitor["events"] = health_monitor["events"][:100]
                         changed_servers.append({
                             "ip": ip, "port": port,
                             "prev": prev_online, "curr": online,
@@ -198,46 +206,55 @@ def _health_monitor_loop(once=False):
                             "new_players": new_players, "left_players": left_players,
                         })
                         _log(f"[健康监控] {ip}:{port} 人数变化: {prev_online}→{online} (进{len(new_players)}走{len(left_players)})")
-                    if "last_players" not in health_monitor:
-                        health_monitor["last_players"] = {}
-                    health_monitor["last_players"][key] = player_names
-                    health_monitor["status"][key] = {
-                        "online": online_flag, "players": online,
-                        "max": r.get("max", 0) if r else 0,
-                        "prev_players": prev_online,
-                        "joined": len(new_players), "left": len(left_players),
-                        "player_names": player_names,
-                        "last_check": datetime.now().strftime('%H:%M:%S')
-                    }
+                    with health_lock:
+                        if "last_players" not in health_monitor:
+                            health_monitor["last_players"] = {}
+                        health_monitor["last_players"][key] = player_names
+                        health_monitor["status"][key] = {
+                            "online": online_flag, "players": online,
+                            "max": r.get("max", 0) if r else 0,
+                            "prev_players": prev_online,
+                            "joined": len(new_players), "left": len(left_players),
+                            "player_names": player_names,
+                            "last_check": datetime.now().strftime('%H:%M:%S')
+                        }
                     # 写回favorites.json，重启后保留上次状态（只更新在线字段，保留之前的core_type/auth等）
                     try:
-                        from storage.favorites import load_favorites, save_favorites
-                        favs = load_favorites()
-                        for f in favs:
-                            if f.get("ip") == ip and f.get("port") == port:
-                                li = f.get("last_info") or {}
-                                li["version"] = r.get("version", li.get("version", ""))
-                                li["core_type"] = r.get("core_type", li.get("core_type", ""))
-                                li["state"] = "up" if online_flag else "down"
-                                li["online"] = online
-                                li["max"] = r.get("max", li.get("max", 0))
-                                li["players_online"] = online
-                                li["players_max"] = r.get("max", li.get("players_max", 0))
-                                li["motd"] = r.get("motd", li.get("motd", ""))
-                                if r.get("auth"):
-                                    li["auth"] = r["auth"]
-                                f["last_info"] = li
-                                # 在线时同步更新last_good_info（保留之前的auth等字段）
-                                if online_flag:
-                                    old_good = f.get("last_good_info") or {}
-                                    new_good = dict(li)
-                                    for k in ("auth", "auth_detail", "proto", "ping_ms", "sample", "player_list", "favicon", "fingerprint", "mods", "forge_channels"):
-                                        if k in old_good and k not in new_good:
-                                            new_good[k] = old_good[k]
-                                    f["last_good_info"] = new_good
-                                f["last_check"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                break
-                        save_favorites(favs)
+                        from storage import favorites as favorites_mod
+                        _r = r or {}  # r 为 None（探测失败）时原来会 AttributeError，被外层 except 吞掉
+                        _check_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                        def _mutate_fav(fav):
+                            """在 favorites 的 _LOCK 内完成读-改-写。
+
+                            原实现 load_favorites()→改→save_favorites() 是跨调用的读-改-写，
+                            与 /api/favorites/add 并发时监控线程会用陈旧快照整文件回写，
+                            把用户刚新增的收藏静默吞掉。
+                            """
+                            li = fav.get("last_info") or {}
+                            li["version"] = _r.get("version", li.get("version", ""))
+                            li["core_type"] = _r.get("core_type", li.get("core_type", ""))
+                            li["state"] = "up" if online_flag else "down"
+                            li["online"] = online
+                            li["max"] = _r.get("max", li.get("max", 0))
+                            li["players_online"] = online
+                            li["players_max"] = _r.get("max", li.get("players_max", 0))
+                            li["motd"] = _r.get("motd", li.get("motd", ""))
+                            if _r.get("auth"):
+                                li["auth"] = _r["auth"]
+                            fav["last_info"] = li
+                            # 在线时同步更新last_good_info（保留之前的auth等字段）
+                            if online_flag:
+                                old_good = fav.get("last_good_info") or {}
+                                new_good = dict(li)
+                                for k in ("auth", "auth_detail", "proto", "ping_ms", "sample", "player_list", "favicon", "fingerprint", "mods", "forge_channels"):
+                                    if k in old_good and k not in new_good:
+                                        new_good[k] = old_good[k]
+                                fav["last_good_info"] = new_good
+                            fav["last_check"] = _check_time
+                            return fav
+
+                        favorites_mod.update_favorite(ip, port, _mutate_fav)
                     except Exception as e:
                         _log(f"[健康监控] {ip}:{port} 写回favorites失败: {e}")
                 except Exception as e:

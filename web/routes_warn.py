@@ -9,6 +9,31 @@ try:
 except ImportError:
     import state  # type: ignore
 
+# 批量警告硬上限：workers/targets 直接来自请求，无上限时单请求可开上千线程/连接把机器拖死
+MAX_WARN_WORKERS = 20
+MAX_WARN_TARGETS = 200
+
+
+def _to_int(value, default=0):
+    """请求参数转 int，非法值回退默认值（原实现直接 int() 会 500）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value, default=0.0):
+    """请求参数转 float，非法值回退默认值。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_workers(value, default=5):
+    """workers 收敛到 1..MAX_WARN_WORKERS。"""
+    return max(1, min(_to_int(value, default), MAX_WARN_WORKERS))
+
 
 def register(app):
     scan_state = state.scan_state
@@ -29,7 +54,7 @@ def register(app):
             return jsonify({"error": "进服交互能力未启用，请在config中设置 capabilities.login_interact=true"}), 403
         data = request.json or {}
         ip = data.get("ip")
-        port = int(data.get("port") or 25565)
+        port = _to_int(data.get("port"), 25565)
         username = data.get("username", "SecurityBot")
         messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
         authme_password = data.get("authme_password")
@@ -69,20 +94,26 @@ def register(app):
         targets_raw = data.get("targets", [])
         username = data.get("username", "SecurityBot")
         messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
-        workers = int(data.get("workers", 5))
+        workers = _clamp_workers(data.get("workers"), 5)
         authme_password = data.get("authme_password")
-        message_delay = float(data.get("message_delay", 0.8))
+        message_delay = _to_float(data.get("message_delay"), 0.8)
         use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
 
         # 解析目标列表，支持 [{"ip":...,"port":...,"proto":...}] 或 ["ip:port", ...]
         targets = []
         for t in targets_raw:
-            if isinstance(t, dict):
-                targets.append((t["ip"], int(t.get("port", 25565)), t.get("proto", 0)))
-            elif isinstance(t, str) and ":" in t:
-                ip, port = t.rsplit(":", 1)
-                targets.append((ip, int(port), 0))
+            try:
+                if isinstance(t, dict):
+                    targets.append((t["ip"], int(t.get("port", 25565)), t.get("proto", 0)))
+                elif isinstance(t, str) and ":" in t:
+                    ip, port = t.rsplit(":", 1)
+                    targets.append((ip, int(port), 0))
+            except (KeyError, TypeError, ValueError):
+                # 单条坏数据（port=abc / 缺 ip）跳过，不让整个请求 500
+                continue
+        if len(targets) > MAX_WARN_TARGETS:
+            return jsonify({"error": f"单次最多警告 {MAX_WARN_TARGETS} 个服务器"}), 400
         if not targets:
             return jsonify({"error": "请先选择要警告的服务器"}), 400
 
@@ -102,8 +133,11 @@ def register(app):
                                     "messages_sent": r.messages_sent, "error": r.error})
                 except Exception as e:
                     ip, port = futures[fut]
-                    results.append({"ip": ip, "port": port, "success": False, "error": str(e)})
-        sent = sum(r["messages_sent"] for r in results)
+                    # 补 messages_sent=0：否则下面 sum() 直接 KeyError → 整个接口 500，
+                    # 前面已成功的发送结果全部丢失（连接超时/被踢/AuthMe 失败都会走到这里）
+                    results.append({"ip": ip, "port": port, "success": False,
+                                    "messages_sent": 0, "error": str(e)})
+        sent = sum(r.get("messages_sent", 0) for r in results)
         _log(f"批量警告完成，成功发送 {sent} 条消息")
         return jsonify({"total": len(results), "messages_sent": sent, "results": results})
 
@@ -119,20 +153,26 @@ def register(app):
         bot_count = int(data.get("bot_count", 5))
         name_prefix = data.get("name_prefix", "SecurityBot")
         messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
-        message_delay = float(data.get("message_delay", 0.5))
+        message_delay = _to_float(data.get("message_delay"), 0.5)
         authme_password = data.get("authme_password")
-        workers = int(data.get("workers", 20))
+        workers = _clamp_workers(data.get("workers"), 20)
         use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
 
         # 解析目标列表
         targets = []
         for t in targets_raw:
-            if isinstance(t, dict):
-                targets.append((t["ip"], int(t.get("port", 25565)), t.get("proto", 0)))
-            elif isinstance(t, str) and ":" in t:
-                ip, port = t.rsplit(":", 1)
-                targets.append((ip, int(port), 0))
+            try:
+                if isinstance(t, dict):
+                    targets.append((t["ip"], int(t.get("port", 25565)), t.get("proto", 0)))
+                elif isinstance(t, str) and ":" in t:
+                    ip, port = t.rsplit(":", 1)
+                    targets.append((ip, int(port), 0))
+            except (KeyError, TypeError, ValueError):
+                # 单条坏数据（port=abc / 缺 ip）跳过，不让整个请求 500
+                continue
+        if len(targets) > MAX_WARN_TARGETS:
+            return jsonify({"error": f"单次最多警告 {MAX_WARN_TARGETS} 个服务器"}), 400
         if not targets:
             return jsonify({"error": "请先选择要警告的服务器"}), 400
         max_bots = int(config.get("warn_bot_max", 20))
@@ -159,7 +199,9 @@ def register(app):
                 return {"ip": ip, "port": port, "name": name, "success": r.success,
                         "messages_sent": r.messages_sent, "error": r.error}
             except Exception as e:
-                return {"ip": ip, "port": port, "name": name, "success": False, "error": str(e)[:100]}
+                # 同样必须带 messages_sent，否则 warn_multi 的汇总 sum() 会 KeyError
+                return {"ip": ip, "port": port, "name": name, "success": False,
+                        "messages_sent": 0, "error": str(e)[:100]}
 
         with ThreadPoolExecutor(max_workers=min(workers, 50)) as ex:
             futures = []
@@ -170,7 +212,7 @@ def register(app):
                 results.append(fut.result())
 
         success_count = sum(1 for r in results if r["success"])
-        total_messages = sum(r["messages_sent"] for r in results)
+        total_messages = sum(r.get("messages_sent", 0) for r in results)
         _log(f"多机器人警告完成：{success_count}/{len(results)}成功，共{total_messages}条消息")
 
         return jsonify({
@@ -194,18 +236,23 @@ def register(app):
         username = data.get("username", "SecurityBot")
         messages = data.get("messages") or DEFAULT_WARNING_MESSAGES
         authme_password = data.get("authme_password")
-        workers = int(data.get("workers", 5))
-        message_delay = float(data.get("message_delay", 0.8))
+        workers = _clamp_workers(data.get("workers"), 5)
+        message_delay = _to_float(data.get("message_delay"), 0.8)
         use_premium = bool(data.get("use_premium", False))
         premium_uuid = data.get("premium_uuid") or None
 
         targets = []
         for t in targets_raw:
-            if isinstance(t, dict):
-                targets.append((t["ip"], int(t.get("port", 25565))))
-            elif isinstance(t, str) and ":" in t:
-                ip, port = t.rsplit(":", 1)
-                targets.append((ip, int(port)))
+            try:
+                if isinstance(t, dict):
+                    targets.append((t["ip"], int(t.get("port", 25565))))
+                elif isinstance(t, str) and ":" in t:
+                    ip, port = t.rsplit(":", 1)
+                    targets.append((ip, int(port)))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if len(targets) > MAX_WARN_TARGETS:
+            return jsonify({"error": f"单次最多警告 {MAX_WARN_TARGETS} 个服务器"}), 400
         if not targets:
             return jsonify({"error": "请先选择要警告的服务器"}), 400
 
@@ -225,8 +272,11 @@ def register(app):
                                     "messages_sent": r.messages_sent, "error": r.error})
                 except Exception as e:
                     ip, port = futures[fut]
-                    results.append({"ip": ip, "port": port, "success": False, "error": str(e)})
-        sent = sum(r["messages_sent"] for r in results)
+                    # 补 messages_sent=0：否则下面 sum() 直接 KeyError → 整个接口 500，
+                    # 前面已成功的发送结果全部丢失（连接超时/被踢/AuthMe 失败都会走到这里）
+                    results.append({"ip": ip, "port": port, "success": False,
+                                    "messages_sent": 0, "error": str(e)})
+        sent = sum(r.get("messages_sent", 0) for r in results)
         _log(f"数据库批量警告完成: 成功发送 {sent} 条消息")
         return jsonify({"total": len(results), "messages_sent": sent, "results": results})
 

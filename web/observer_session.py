@@ -35,7 +35,8 @@ class ObserverSession:
         self.bot = None
         self.thread = None
         self.stop_event = threading.Event()
-        self.lock = threading.Lock()
+        # RLock：_next_seq/_ensure_log_file/_append_log 会互相嵌套取锁
+        self.lock = threading.RLock()
         self.status = "connecting"  # connecting / connected / reconnecting / disconnected / stopped / error
         self.error = ""
         self.auth_mode = "unknown"
@@ -51,34 +52,41 @@ class ObserverSession:
         self._log_file_path = None
 
     def _next_seq(self):
-        self._seq += 1
-        return self._seq
+        # bot 回调线程与主循环并发调用，无锁时 seq 会重复，前端增量拉取（since）会漏消息
+        with self.lock:
+            self._seq += 1
+            return self._seq
 
     @staticmethod
     def _ts():
         return datetime.now().strftime("%H:%M:%S")
 
     def _ensure_log_file(self):
-        """确保日志文件打开，实时追加写入"""
-        if self._log_file is not None:
-            return
-        try:
-            os.makedirs('observer_logs', exist_ok=True)
-            safe_id = self.session_id.replace('/', '_').replace('\\', '_')
-            self._log_file_path = f'observer_logs/{safe_id}.jsonl'
-            self._log_file = open(self._log_file_path, 'a', encoding='utf-8')
-        except Exception:
-            self._log_file = None
+        """确保日志文件打开，实时追加写入。
+
+        加锁：多线程同时进来会重复 open 同一路径，泄漏文件句柄。
+        """
+        with self.lock:
+            if self._log_file is not None:
+                return
+            try:
+                os.makedirs('observer_logs', exist_ok=True)
+                safe_id = self.session_id.replace('/', '_').replace('\\', '_')
+                self._log_file_path = f'observer_logs/{safe_id}.jsonl'
+                self._log_file = open(self._log_file_path, 'a', encoding='utf-8')
+            except Exception:
+                self._log_file = None
 
     def _append_log(self, event_type, data):
-        """实时追加一条事件到日志文件"""
+        """实时追加一条事件到日志文件（加锁：并发写会行交错、JSON 半截）"""
         try:
-            self._ensure_log_file()
-            if self._log_file:
-                record = {"time": self._ts(), "type": event_type}
-                record.update(data)
-                self._log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
-                self._log_file.flush()
+            with self.lock:
+                self._ensure_log_file()
+                if self._log_file:
+                    record = {"time": self._ts(), "type": event_type}
+                    record.update(data)
+                    self._log_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    self._log_file.flush()
         except Exception:
             pass
 
@@ -124,30 +132,32 @@ class ObserverSession:
     def _save_final(self):
         """会话结束时保存完整JSON快照（0条聊天消息不存）"""
         try:
-            if not self.chat_log:
-                return  # 空会话不保存
-            os.makedirs('observer_logs', exist_ok=True)
-            safe_id = self.session_id.replace('/', '_').replace('\\', '_')
-            with open(f'observer_logs/{safe_id}.json', 'w', encoding='utf-8') as f:
-                json.dump({
-                    'session_id': self.session_id,
-                    'host': self.host, 'port': self.port,
-                    'username': self.username,
-                    'status': self.status,
-                    'chat_log': list(self.chat_log),
-                    'events': list(self.events),
-                    'reconnect_count': self.reconnect_count,
-                    'saved_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }, f, ensure_ascii=False)
+            with self.lock:
+                if not self.chat_log:
+                    return  # 空会话不保存
+                os.makedirs('observer_logs', exist_ok=True)
+                safe_id = self.session_id.replace('/', '_').replace('\\', '_')
+                with open(f'observer_logs/{safe_id}.json', 'w', encoding='utf-8') as f:
+                    json.dump({
+                        'session_id': self.session_id,
+                        'host': self.host, 'port': self.port,
+                        'username': self.username,
+                        'status': self.status,
+                        'chat_log': list(self.chat_log),
+                        'events': list(self.events),
+                        'reconnect_count': self.reconnect_count,
+                        'saved_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }, f, ensure_ascii=False)
         except Exception:
             pass
         finally:
-            if self._log_file:
-                try:
-                    self._log_file.close()
-                except Exception:
-                    pass
-                self._log_file = None
+            with self.lock:
+                if self._log_file:
+                    try:
+                        self._log_file.close()
+                    except Exception:
+                        pass
+                    self._log_file = None
 
     def run(self):
         """运行主循环，断开后自动指数退避重连"""

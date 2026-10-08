@@ -11,11 +11,50 @@ try:
 except ImportError:
     import state  # type: ignore
     from observer_session import ObserverSession  # type: ignore
+try:
+    from web import services_scan
+except ImportError:
+    import services_scan  # type: ignore
+
 _ai_bots = state._ai_bots
 scan_state = state.scan_state
 health_monitor = state.health_monitor
 observer_lock = state.observer_lock
 observer_sessions = state.observer_sessions
+
+
+def _db_path():
+    """Web 全局数据库路径（原实现硬编码 'mcscanner.db'，从别的目录启动会读到另一个库）。"""
+    return config.get("db_path", "mcscanner.db")
+
+
+def _deny_reason(tool):
+    """工具级门禁：自然语言入口必须与对应 HTTP 接口用同一套只读/能力开关，
+    否则一句"扫1.2.3.4"或"托管1.2.3.4:25565"就绕过了 /api/scan/start、/api/ai_bot/start 的全部校验。"""
+    if tool == "scan":
+        if state.is_read_only():
+            return "错误：只读模式下禁止扫描"
+        if not state.capability_enabled("scan"):
+            return "错误：扫描能力未启用（config.capabilities.scan=false）"
+    elif tool in ("ai_host", "multi_ai", "observer"):
+        if state.is_read_only():
+            return "错误：只读模式下禁止进服交互"
+        if not state.capability_enabled("login_interact"):
+            return "错误：进服交互能力未启用，请在config中设置 capabilities.login_interact=true"
+    return None
+
+
+def _scan_snapshot():
+    """读取全局扫描视图快照。字段名与 /api/scan/status 对齐：
+    原实现读的 "done"/"found" 从未被任何写入点写过，所以进度永远是 0。"""
+    with state.scan_lock:
+        return {
+            "running": bool(scan_state.get("running")),
+            "total": scan_state.get("total", 0) or 0,
+            "scanned": scan_state.get("scanned", 0) or 0,
+            "open_count": scan_state.get("open_count", 0) or 0,
+            "task_id": scan_state.get("task_id"),
+        }
 
 def _handle_assistant_command(msg):
     """AI助手：优先用API做意图识别+工具调用+结果总结，没key时fallback关键词匹配"""
@@ -124,6 +163,9 @@ def _parse_tool_call(text):
 
 def _execute_tool(tool, args):
     """执行工具，返回结果字符串"""
+    deny = _deny_reason(tool)
+    if deny:
+        return deny
     scan_state = state.scan_state
     health_monitor = state.health_monitor
     api_key = config.get("ai_api_key", "")
@@ -136,51 +178,50 @@ def _execute_tool(tool, args):
         if not target:
             return "错误：没有指定扫描目标"
         try:
-            from scanner.engine import ScanEngine
-            scan_state["stop_event"].clear()
-            scan_state["results"] = []
-            scan_state["total"] = 0
-            scan_state["done"] = 0
-            scan_state["found"] = 0
-            scan_state["running"] = True
-            scan_state["start_time"] = time.time()
-            def _worker():
-                try:
-                    engine = ScanEngine(
-                        targets=[target], ports=ports, db_path="mcscanner.db",
-                        concurrency=200, timeout=4.0,
-                        result_callback=lambda r: (scan_state["results"].append(r), scan_state.__setitem__("found", scan_state["found"]+1)),
-                        progress_callback=lambda d, t: (scan_state.__setitem__("done", d), scan_state.__setitem__("total", t)),
-                        stop_event=scan_state["stop_event"],
-                    )
-                    engine.run()
-                except Exception as e:
-                    print(f"[扫描错误] {e}")
-                finally:
-                    scan_state["running"] = False
-            scan_state["thread"] = threading.Thread(target=_worker, daemon=True)
-            scan_state["thread"].start()
-            return f'扫描已启动：目标={target}，端口={ports}。说"进度"查看扫描状态。'
+            # 统一走 services_scan 任务队列：原实现自建线程、访问不存在的
+            # scan_state["stop_event"]/["thread"]，并调用不存在的 ScanEngine(...).run()，
+            # 结果恒为"启动扫描失败: 'stop_event'"，整条自然语言扫描链路从未跑起来。
+            from scanner.targets import parse_targets
+            port_list = state.parse_ports_spec(ports)
+            if not port_list:
+                return "错误：端口格式无效"
+            parsed = list(parse_targets([str(target)], port_list))
+            if not parsed:
+                return "错误：没有解析出有效目标"
+            scan_cfg = {
+                "workers": 32, "timeout": 4.0,
+                "scan_threads": 200, "scan_timeout": 2.5,
+                "rate": 0, "auth_check": True,
+                "db_path": _db_path(),
+                "use_masscan": "auto", "portscan_only": False, "masscan_rate": 5000,
+                "ports": port_list, "continuous": False,
+                "async_mode": True, "scan_mode": "balanced",
+            }
+            task_id = services_scan.start_scan_task(parsed, scan_cfg, scan_type="assistant")
+            return f'扫描已启动（任务#{task_id}）：目标={target}，端口={port_list}。说"进度"查看扫描状态。'
         except Exception as e:
             return f"启动扫描失败: {e}"
 
     elif tool == "stop_scan":
         try:
-            if scan_state["thread"] and scan_state["thread"].is_alive():
-                scan_state["stop_event"].set()
-                return "扫描已停止"
-            return "当前没有在运行的扫描"
+            # 原实现读 scan_state["thread"]（从未定义）→ 恒返回"停止失败: 'thread'"
+            running = [t for t in services_scan.list_tasks() if t.get("running")]
+            if not running:
+                return "当前没有在运行的扫描"
+            for t in running:
+                services_scan.stop_task(t["task_id"])
+            state.scan_stop_event.set()  # 兼容旧引擎
+            return f"扫描已停止（任务#{running[0]['task_id']}）"
         except Exception as e:
             return f"停止失败: {e}"
 
     elif tool == "scan_status":
         try:
-            total = scan_state.get("total", 0)
-            done = scan_state.get("done", 0)
-            found = scan_state.get("found", 0)
+            snap = _scan_snapshot()
+            total, done, found = snap["total"], snap["scanned"], snap["open_count"]
             pct = (done / total * 100) if total else 0
-            if scan_state.get("running"):
-                return f"扫描中：{done}/{total} ({pct:.1f}%)，已发现 {found} 个MC服务器"
+            if snap["running"]:
+                return f"扫描中（任务#{snap['task_id']}）：{done}/{total} ({pct:.1f}%)，已发现 {found} 个MC服务器"
             elif done > 0:
                 return f"扫描完成：共扫 {total} 个目标，发现 {found} 个MC服务器"
             else:
@@ -206,7 +247,7 @@ def _execute_tool(tool, args):
 
     elif tool == "live_servers":
         try:
-            conn = sqlite3.connect('mcscanner.db')
+            conn = sqlite3.connect(_db_path())
             rows = conn.execute(
                 "SELECT ip, port, players_online, version FROM servers WHERE players_online > 0 ORDER BY players_online DESC LIMIT 20"
             ).fetchall()
@@ -222,7 +263,7 @@ def _execute_tool(tool, args):
 
     elif tool == "db_stats":
         try:
-            conn = sqlite3.connect('mcscanner.db')
+            conn = sqlite3.connect(_db_path())
             total = conn.execute("SELECT COUNT(*) FROM servers").fetchone()[0]
             online = conn.execute("SELECT COUNT(*) FROM servers WHERE players_online > 0").fetchone()[0]
             cracked = conn.execute("SELECT COUNT(*) FROM servers WHERE auth_mode='offline'").fetchone()[0]
@@ -266,8 +307,7 @@ def _execute_tool(tool, args):
             return "错误：没有指定服务器地址"
         try:
             from core.ai_bot import AIBotSession
-            state._ai_bot_seq += 1
-            sid = f"assistant_{state._ai_bot_seq}"
+            sid = f"assistant_{state.next_ai_bot_seq()}"
             session = AIBotSession(
                 host=host, port=port, username="AssistantBot",
                 authme_password=config.get("authme_password", ""), timeout=20, duration=0,
@@ -350,22 +390,25 @@ def _assistant_keyword_match(msg):
 🤖 AI托管：说"托管1.2.3.4:25565"
 （配置API key后我能更聪明地理解你的话）"""
 
-    if low in ["停", "stop"] or (any(k in msg for k in ["停止", "停下", "别扫了", "停一下"]) and scan_state.get("thread") and scan_state["thread"].is_alive()):
+    if low in ["停", "stop"] or any(k in msg for k in ["停止", "停下", "别扫了", "停一下"]):
         try:
-            if scan_state["thread"] and scan_state["thread"].is_alive():
-                scan_state["stop_event"].set()
-                return "好，已停止扫描"
-            return "没在扫啊"
+            # scan_state 从来没有 "thread"/"stop_event" 键，原来这段要么 AttributeError 要么永远"没在扫啊"
+            running = [t for t in services_scan.list_tasks() if t.get("running")]
+            if not running:
+                return "没在扫啊"
+            for t in running:
+                services_scan.stop_task(t["task_id"])
+            state.scan_stop_event.set()  # 兼容旧引擎
+            return "好，已停止扫描"
         except Exception as e:
             return f"停止失败: {e}"
 
     if any(k in msg for k in ["进度", "怎么样", "状态", "扫完没"]):
         try:
-            total = scan_state.get("total", 0)
-            done = scan_state.get("done", 0)
-            found = scan_state.get("found", 0)
+            snap = _scan_snapshot()
+            total, done, found = snap["total"], snap["scanned"], snap["open_count"]
             pct = (done / total * 100) if total else 0
-            if scan_state.get("running"):
+            if snap["running"]:
                 return f"扫描中... {done}/{total} ({pct:.1f}%)，已发现 {found} 个MC服"
             elif done > 0:
                 return f"扫描完成！共扫 {total} 个目标，发现 {found} 个MC服"
@@ -392,7 +435,7 @@ def _assistant_keyword_match(msg):
 
     if any(k in msg for k in ["有人", "活人", "玩家多的"]):
         try:
-            conn = sqlite3.connect('mcscanner.db')
+            conn = sqlite3.connect(_db_path())
             rows = conn.execute("SELECT ip, port, players_online, version FROM servers WHERE players_online > 0 ORDER BY players_online DESC LIMIT 15").fetchall()
             conn.close()
             if not rows:
@@ -406,7 +449,7 @@ def _assistant_keyword_match(msg):
 
     if any(k in msg for k in ["数据库", "多少个服", "统计"]):
         try:
-            conn = sqlite3.connect('mcscanner.db')
+            conn = sqlite3.connect(_db_path())
             total = conn.execute("SELECT COUNT(*) FROM servers").fetchone()[0]
             online = conn.execute("SELECT COUNT(*) FROM servers WHERE players_online > 0").fetchone()[0]
             cracked = conn.execute("SELECT COUNT(*) FROM servers WHERE auth_mode='offline'").fetchone()[0]
@@ -442,39 +485,25 @@ def _assistant_keyword_match(msg):
             target = ip_match.group()
             port_match = re.search(r'端口\s*([0-9, ]+)', msg)
             ports = [int(p.strip()) for p in port_match.group(1).split(',') if p.strip()] if port_match else [25565]
-            from scanner.engine import ScanEngine
-            scan_state["stop_event"].clear()
-            scan_state["results"] = []
-            scan_state["total"] = 0
-            scan_state["done"] = 0
-            scan_state["found"] = 0
-            scan_state["running"] = True
-            def _worker():
-                try:
-                    engine = ScanEngine(targets=[target], ports=ports, db_path="mcscanner.db", concurrency=200, timeout=4.0,
-                        result_callback=lambda r: (scan_state["results"].append(r), scan_state.__setitem__("found", scan_state["found"]+1)),
-                        progress_callback=lambda d, t: (scan_state.__setitem__("done", d), scan_state.__setitem__("total", t)),
-                        stop_event=scan_state["stop_event"])
-                    engine.run()
-                except Exception as e:
-                    print(f"[扫描错误] {e}")
-                finally:
-                    scan_state["running"] = False
-            scan_state["thread"] = threading.Thread(target=_worker, daemon=True)
-            scan_state["thread"].start()
+            # 统一走 _execute_tool：只读/能力门禁与任务队列都在那里
+            result = _execute_tool("scan", {"target": target, "ports": ports})
+            if result.startswith("错误") or result.startswith("启动扫描失败"):
+                return result
             return f'好，开始扫 {target} 端口 {",".join(map(str,ports))}，说"进度"查看'
         except Exception as e:
             return f"启动失败: {e}"
 
     if any(k in msg for k in ["托管", "ai进", "bot进"]) and re.search(r'[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}', msg):
+        deny = _deny_reason("ai_host")
+        if deny:
+            return deny
         try:
             ip_match = re.search(r'([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}):([0-9]+)', msg)
             if not ip_match:
                 return "格式：托管1.2.3.4:25565"
             host, port = ip_match.group(1), int(ip_match.group(2))
             from core.ai_bot import AIBotSession
-            state._ai_bot_seq += 1
-            sid = f"assistant_{state._ai_bot_seq}"
+            sid = f"assistant_{state.next_ai_bot_seq()}"
             session = AIBotSession(host=host, port=port, username="AssistantBot",
                 authme_password=config.get("authme_password", ""), timeout=20, duration=0,
                 ai_config={"api_key": config.get("ai_api_key",""), "base_url": config.get("ai_base_url","https://api.openai.com/v1"),

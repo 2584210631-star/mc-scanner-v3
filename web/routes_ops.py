@@ -10,6 +10,7 @@ except ImportError:
 
 def register(app):
     health_monitor = state.health_monitor
+    health_lock = state.health_lock
     def _log(msg):
         state.log_scan(msg)
     def _safe_db_path(path):
@@ -28,24 +29,28 @@ def register(app):
 
     @app.route('/api/health/status')
     def health_status():
-        return jsonify({
-            "running": health_monitor["running"],
-            "once_running": health_monitor.get("once_running", False),
-            "interval": health_monitor["interval"],
-            "last_check": health_monitor["last_check"],
-            "monitored": len(health_monitor["status"]),
-            "online_servers": sum(1 for s in health_monitor["status"].values() if s.get("online")),
-            "events": health_monitor["events"][:30],
-            "status": health_monitor["status"]
-        })
+        # 持锁快照：监控线程会在同一批 dict 里 del/insert，无锁遍历 values()/切片
+        # 会抛 RuntimeError: dictionary changed size during iteration → 间歇性 500
+        with health_lock:
+            return jsonify({
+                "running": health_monitor["running"],
+                "once_running": health_monitor.get("once_running", False),
+                "interval": health_monitor["interval"],
+                "last_check": health_monitor["last_check"],
+                "monitored": len(health_monitor["status"]),
+                "online_servers": sum(1 for s in health_monitor["status"].values() if s.get("online")),
+                "events": health_monitor["events"][:30],
+                "status": {k: dict(v) for k, v in health_monitor["status"].items()}
+            })
 
     @app.route('/api/health/toggle', methods=['POST'])
     def health_toggle():
-        if health_monitor["running"]:
-            health_monitor["stop_event"].set()
-            health_monitor["running"] = False
-            return jsonify({"success": True, "running": False})
-        else:
+        # 与监控线程共享 running/thread，加锁避免并发 toggle 起两个监控线程
+        with health_lock:
+            if health_monitor["running"]:
+                health_monitor["stop_event"].set()
+                health_monitor["running"] = False
+                return jsonify({"success": True, "running": False})
             health_monitor["stop_event"].clear()
             health_monitor["thread"] = threading.Thread(target=_health_monitor_loop, daemon=True)
             health_monitor["thread"].start()

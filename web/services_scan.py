@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Scan background worker with task queue support."""
+import os
 import time
 import threading
 from datetime import datetime
@@ -20,6 +21,34 @@ def _log(msg, task_id=None):
 def _get_task_state(task_id):
     """获取任务状态，不存在返回None"""
     return state.scan_tasks.get(task_id)
+
+
+# 已完成任务保留上限：scan_tasks 原来只增不减，每个任务长期持有全量 results 和 500 条日志
+MAX_FINISHED_TASKS = 20
+FINISHED_TASK_TTL = 3600.0  # 秒
+
+
+def _prune_tasks():
+    """淘汰已结束的老任务，防止 scan_tasks 内存单调增长。
+
+    只清理 done/stopped/error 且不在运行的任务；正在运行/排队中的任务不受影响。
+    """
+    now = time.time()
+    with scan_lock:
+        # 先按 TTL 淘汰
+        for tid in list(state.scan_tasks.keys()):
+            t = state.scan_tasks.get(tid)
+            if not t or t.get("running") or t.get("status") not in ("done", "stopped", "error"):
+                continue
+            end = t.get("end_time") or t.get("start_time") or now
+            if now - end > FINISHED_TASK_TTL:
+                state.scan_tasks.pop(tid, None)
+        # 再按数量淘汰最旧的
+        finished = sorted(tid for tid, t in state.scan_tasks.items()
+                          if not t.get("running") and t.get("status") in ("done", "stopped", "error"))
+        if len(finished) > MAX_FINISHED_TASKS:
+            for tid in finished[:-MAX_FINISHED_TASKS]:
+                state.scan_tasks.pop(tid, None)
 
 
 def _update_current_view(task_id):
@@ -250,14 +279,30 @@ def _scan_worker(task_id, targets_list, scan_cfg):
             # targets_list 是 [(ip,port),...]，提取去重IP给masscan（masscan不认元组字符串）
             masscan_targets = ",".join(sorted(set(ip for ip, _ in targets_list)))
             masscan_ports = ",".join(str(p) for p in scan_cfg.get("ports", [25565]))
-            output_file = run_masscan(masscan_targets, ports=masscan_ports,
-                                      rate=scan_cfg.get("masscan_rate", 1000))
-            open_ports = list(parse_masscan_json(output_file))
+            # 显式传 output_file/timeout/stop_event：不传的话 masscan 的临时 NDJSON 只能靠
+            # 进程退出时清理，且卡住的 masscan 无法被"停止扫描"中断
+            import tempfile
+            _fd, output_file = tempfile.mkstemp(suffix=".ndjson", prefix="masscan_")
+            os.close(_fd)
+            try:
+                run_masscan(masscan_targets, ports=masscan_ports,
+                            rate=scan_cfg.get("masscan_rate", 1000),
+                            output_file=output_file,
+                            timeout=float(scan_cfg.get("masscan_timeout", 600)),
+                            stop_event=stop_evt)
+                open_ports = list(parse_masscan_json(output_file))
+            finally:
+                # 自己传的 output_file 不会被 scanner.masscan 的临时表回收，必须在这里删
+                try:
+                    os.remove(output_file)
+                except OSError:
+                    pass
             # parse_masscan_json 返回 (ip,port,banner) 三元组，probe_list 要 (ip,port) 二元组
             open_pairs = [(ip, port) for ip, port, _ in open_ports]
             _log(f"masscan 发现 {len(open_pairs)} 个开放端口，开始SLP探测")
             if not portscan_only:
                 from scanner.engine import ScanEngine
+                from storage import db
                 engine = ScanEngine(stop_event=stop_evt,
                     db_path=scan_cfg.get("db_path", "mcscanner.db"),
                     workers=scan_cfg.get("workers", 32),
@@ -265,6 +310,10 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     auth_check=scan_cfg.get("auth_check", True),
                 )
                 results = engine.probe_list(open_pairs, progress_callback=_on_progress)
+                # probe_list 的 docstring 明确"不存数据库"：masscan 分支原来跑完显示成功，
+                # 库里却一条没有（与 Python 分支行为不一致），这里显式落库
+                if results:
+                    db.upsert_many(scan_cfg.get("db_path", "mcscanner.db"), results)
             else:
                 results = [{"ip": ip, "port": port, "state": "open",
                             "version": "", "motd": "", "players_online": 0, "players_max": 0,
@@ -278,6 +327,9 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                 from scanner.async_probe import has_simdjson
                 _log(f"异步流水线扫描（uvloop: {'启用' if has_uvloop() else '未安装'}, "
                      f"simdjson: {'启用' if has_simdjson() else '未安装'}）", task_id=task_id)
+                # 语义对照（勿互换）：scan_threads（UI: scanThreads）= 端口扫描并发 → concurrency；
+                # workers（UI: probeWorkers，config.py 注释"SLP探测线程数"）= SLP 并发 → slp_concurrency。
+                # scanner 侧还会按扫描模式对 SLP 并发封顶（safe 模式压到 20）并打提示。
                 async_engine = AsyncScanEngine(
                     db_path=scan_cfg.get("db_path", "mcscanner.db"),
                     concurrency=scan_cfg.get("scan_threads", 1000),
@@ -350,3 +402,5 @@ def _scan_worker(task_id, targets_list, scan_cfg):
             task["running"] = False
         # 从队列启动后续任务（可能同时启动多个，直到达到并发上限）
         _start_queued_workers()
+        # 任务结束后回收老任务状态，避免长时间运行内存单调增长
+        _prune_tasks()
