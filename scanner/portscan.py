@@ -108,8 +108,15 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
         target_seq, _resumed = progress_store.begin(targets)
         total = len(target_seq)
     else:
+        # 传入迭代器时物化（带200万上限），否则total=0导致进度永不更新、
+        # 进度步长退化为500，小扫描看起来像卡死。列表/元组直接用len()。
+        if not hasattr(targets, '__len__'):
+            targets = list(targets)
+            if len(targets) > 2_000_000:
+                print(f"[!] 目标数超过200万，截断到200万（实际{len(targets)}）")
+                targets = targets[:2_000_000]
         target_seq = targets
-        total = len(target_seq) if hasattr(target_seq, '__len__') else 0
+        total = len(target_seq)
     if do_shuffle:
         target_seq = iter_shuffled_chunks(target_seq, seed=seed)
 
