@@ -4,7 +4,10 @@ AI 内容生成模块。
 支持 OpenAI 兼容 API，可生成小说故事、名人简介、自定义主题文本。
 生成长文本自动按 MC 聊天长度限制（256字符）分段。
 """
+import ipaddress
 import json
+import socket
+import urllib.parse
 import urllib.request
 import urllib.error
 from typing import Optional
@@ -67,6 +70,73 @@ PRESETS = {
 # MC 聊天单条最大长度（留余量）
 MC_CHAT_MAX = 240
 
+# AI API 主机白名单（按域名后缀匹配）。
+# 目的：ai_base_url 可通过 /api/config/save 被改动，若不限制，把 base_url 指向
+# 攻击者服务器或内网地址（含云元数据 169.254.169.254）即可拿到请求头里的
+# Authorization: Bearer <api_key> —— 典型的 SSRF + 凭据外泄。
+# 需要接入白名单外的自建/中转端点时，可在配置里加 ai_base_url_allowlist（逗号分隔域名）。
+ALLOWED_BASE_URL_SUFFIXES = (
+    "openai.com", "deepseek.com", "moonshot.cn", "bigmodel.cn", "aliyuncs.com",
+    "siliconflow.cn", "volces.com", "baidubce.com", "anthropic.com", "googleapis.com",
+    "x.ai", "groq.com", "mistral.ai", "cohere.ai", "together.xyz", "openrouter.ai",
+    "perplexity.ai", "minimaxi.com", "stepfun.com", "sensenova.cn", "hunyuan.tencent.com",
+)
+
+# 响应体上限（1MiB）：恶意/被劫持的 API 端点可用超大响应造成内存放大
+MAX_RESPONSE_BYTES = 1024 * 1024
+
+
+def _is_forbidden_ip(ip: str) -> bool:
+    """内网/回环/链路本地/保留地址一律拒绝。"""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return (a.is_private or a.is_loopback or a.is_link_local or a.is_reserved
+            or a.is_multicast or a.is_unspecified)
+
+
+def validate_base_url(base_url: str):
+    """校验 AI API 地址，返回 (ok, 规范化地址 或 错误信息)。
+
+    规则：必须 https；主机（含解析结果）不能是内网/回环/链路本地地址；
+    主机必须在白名单后缀内（可用配置 ai_base_url_allowlist 追加自定义域名）。
+    """
+    url = (base_url or "").strip()
+    if not url:
+        return False, "未配置 AI API 地址"
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except Exception as e:
+        return False, f"AI API 地址无法解析: {e}"
+    if parsed.scheme != "https":
+        return False, "AI API 地址必须使用 https（拒绝明文 http，避免 API Key 被窃听）"
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        return False, "AI API 地址缺少主机名"
+    if _is_forbidden_ip(host):
+        return False, f"拒绝访问内网/保留地址: {host}"
+    # 域名解析结果也要检查，避免用域名指向内网（SSRF）
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        for info in infos:
+            if _is_forbidden_ip(info[4][0]):
+                return False, f"域名解析到内网/保留地址: {host}"
+    except Exception as e:
+        return False, f"AI API 地址无法解析: {host} ({e})"
+    # 白名单后缀匹配
+    allowed = [s for s in ALLOWED_BASE_URL_SUFFIXES if s]
+    try:
+        import config as _cfg
+        extra = str(_cfg.get("ai_base_url_allowlist", "") or "").replace(",", " ")
+        allowed += [d.strip().lower().lstrip(".") for d in extra.split() if d.strip()]
+    except Exception:
+        pass
+    if not any(host == s or host.endswith("." + s) for s in allowed):
+        return False, (f"AI API 主机不在白名单: {host}"
+                       "（如需自定义端点，请在配置 ai_base_url_allowlist 中添加该域名）")
+    return True, url
+
 
 def split_for_minecraft(text: str, max_len: int = MC_CHAT_MAX) -> list:
     """把长文本按 MC 聊天长度限制分段，尽量在句号/换行处断开。"""
@@ -96,11 +166,12 @@ def split_for_minecraft(text: str, max_len: int = MC_CHAT_MAX) -> list:
             else:
                 if current:
                     result.append(current)
-                # 单句超长，硬切
-                while len(s) > max_len:
-                    result.append(s[:max_len])
-                    s = s[max_len:]
-                current = s
+                # 单句超长，硬切（用下标步进，替代反复 s = s[max_len:] 的 O(n^2) 拷贝）
+                start = 0
+                while len(s) - start > max_len:
+                    result.append(s[start:start + max_len])
+                    start += max_len
+                current = s[start:]
     if current:
         result.append(current)
     return [r for r in result if r.strip()]
@@ -124,6 +195,12 @@ def generate_content(
     """
     if not api_key:
         return {"success": False, "text": "", "segments": [], "error": "未配置 API Key，请在设置中填写 ai_api_key", "truncated": False}
+
+    # 请求发出前先校验地址：只有白名单内的 https 公网主机才会带上 Authorization 头
+    _ok, _info = validate_base_url(base_url)
+    if not _ok:
+        return {"success": False, "text": "", "segments": [], "error": _info, "truncated": False}
+    base_url = _info
 
     preset_cfg = PRESETS.get(preset, PRESETS["custom"])
     system = custom_system or preset_cfg["system"]
@@ -160,7 +237,12 @@ def generate_content(
 
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            # 限长读取：不设上限时恶意/被劫持端点的超大响应会造成内存放大
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+        if len(raw) > MAX_RESPONSE_BYTES:
+            return {"success": False, "text": "", "segments": [],
+                    "error": f"AI 响应体超过 {MAX_RESPONSE_BYTES} 字节上限，已丢弃", "truncated": False}
+        data = json.loads(raw.decode("utf-8"))
         choice = data["choices"][0]
         text = choice["message"]["content"].strip()
         finish_reason = choice.get("finish_reason", "stop")

@@ -6,11 +6,14 @@
 吸收自 MCScanner (Sandelslover/MCScanner) 的 whitelist_check.js 中
 进服后发 /plugins 抓插件列表的思路，用自研协议栈实现。
 """
+import logging
 import re
 import time
 from dataclasses import dataclass, field
 
 from .bot import MCBot
+
+logger = logging.getLogger(__name__)
 
 
 # 常见插件列表响应格式
@@ -93,7 +96,8 @@ def capture_plugins(bot: MCBot, wait_time: float = 2.0) -> ServerIntel:
     intel.has_factions = any("faction" in n or "factions" in n for n in plugin_names)
     intel.has_economy = any("economy" in n or "essentials" in n for n in plugin_names)
     intel.has_worldguard = any("worldguard" in n for n in plugin_names)
-    intel.has_coreprotect = any("coreprotect" in n or "co i" in n for n in plugin_names)
+    # n 是插件名（不含空格命令），原先的 "co i" 子条件永远不会命中
+    intel.has_coreprotect = any("coreprotect" in n for n in plugin_names)
     intel.has_luckperms = any("luckperms" in n or "permissions" in n for n in plugin_names)
     intel.has_vault = any("vault" in n for n in plugin_names)
 
@@ -124,20 +128,47 @@ def capture_plugins(bot: MCBot, wait_time: float = 2.0) -> ServerIntel:
 
 
 def _send_and_capture(bot: MCBot, command: str, wait_time: float) -> str:
-    """发送命令并捕获聊天响应（通过 bot 的聊天消息监听）"""
-    # 记录发送前的消息数量，只捕获新消息
-    before = len(bot.chat_messages)
+    """发送命令并捕获聊天响应（通过 bot 的聊天消息监听）。
+
+    用单调序号做增量基准（chat_messages 头部截断后长度基准会错位/丢消息），
+    并轮询等待：收到响应即返回，否则最多等 wait_time（原先固定 sleep 白等且无失败判定）。
+    """
+    try:
+        if hasattr(bot, "chat_seq"):
+            baseline = ("seq", bot.chat_seq())
+        else:
+            baseline = ("len", len(bot.chat_messages))
+    except Exception:
+        baseline = ("len", 0)
     try:
         bot.send_command(command)
-    except Exception:
-        pass
-    time.sleep(wait_time)
-    # 收集发送后收到的新消息
-    new_messages = bot.chat_messages[before:]
-    if not new_messages:
+    except Exception as e:
+        # 原先静默吞掉异常，调用方只拿到空字符串，无从诊断
+        logger.warning(f"发送命令失败 {command}: {e}")
         return ""
-    # 合并多条消息（插件列表可能分多条发送）
-    return "\n".join(new_messages)
+
+    def _collect_new() -> list:
+        kind, mark = baseline
+        try:
+            if kind == "seq":
+                messages, _ = bot.chat_since(mark)
+                return list(messages)
+            return list(bot.chat_messages[mark:])
+        except Exception:
+            return []
+
+    deadline = time.time() + max(0.0, float(wait_time))
+    while True:
+        new_messages = _collect_new()
+        if new_messages:
+            # 插件列表可能分多条发送：再等一个短收敛窗口收集后续分包
+            settle_end = time.time() + 0.3
+            while time.time() < settle_end:
+                time.sleep(0.1)
+            return "\n".join(_collect_new() or new_messages)
+        if time.time() >= deadline:
+            return ""
+        time.sleep(0.1)
 
 
 def _parse_plugins(text: str) -> list[PluginInfo]:

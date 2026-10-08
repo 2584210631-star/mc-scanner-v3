@@ -16,6 +16,15 @@ from scanner.async_probe import async_slp_probe
 class AutoScanner:
     """自动扫描+警告调度器，支持多种任务类型"""
 
+    # 安全上限：targets/ports 来自面板请求，必须做规模上限。
+    # 否则 targets=["0.0.0.0/0"] + ports="1-65535" 会展开出千亿级元组 → 内存耗尽。
+    MAX_TARGETS = 200000        # 展开后的 (ip, port) 总数上限
+    MAX_PORTS = 1024            # 单次扫描的端口数上限
+    MIN_INTERVAL = 5            # 任务间隔下限（秒），避免 interval=1 变成持续全量扫描
+    MAX_WARN_PER_ROUND = 20     # 每轮最多警告的服务器数
+    MAX_OBSERVE_PER_ROUND = 20  # 每轮最多挂观察者的服务器数
+    MAX_AI_BOTS = 6             # 自动任务同时托管的 AI bot 数上限
+
     # 任务类型说明
     TASK_TYPES = {
         "scan_warn": "扫描IP段+发现有人自动警告/观察",
@@ -34,6 +43,7 @@ class AutoScanner:
         self.logs = {}  # task_id -> deque
         self._known_servers = {}  # task_id -> set of "ip:port" 用于发现新服务器
         self._last_status = {}  # task_id -> {"ip:port": bool} 用于状态变化检测
+        self._ai_bots = {}  # "ip:port" -> AIBotSession，保留句柄以便去重/停止
         self._lock = threading.Lock()
         self._seq = 0
 
@@ -46,9 +56,11 @@ class AutoScanner:
         return datetime.now().strftime("%H:%M:%S")
 
     def _log(self, task_id, msg):
-        if task_id not in self.logs:
-            self.logs[task_id] = deque(maxlen=500)
-        self.logs[task_id].append(f"[{self._ts()}] {msg}")
+        # 多个任务线程会并发读写 self.logs，加锁避免竞态（注意：调用方不得已持有 _lock）
+        with self._lock:
+            if task_id not in self.logs:
+                self.logs[task_id] = deque(maxlen=500)
+            self.logs[task_id].append(f"[{self._ts()}] {msg}")
 
     def add_task(self, config):
         """添加自动扫描任务
@@ -69,6 +81,8 @@ class AutoScanner:
             ai_hijack: ai_config（AI配置）, min_players
         """
         task_id = self._next_id()
+        # 拷贝一份，避免把 task_id/created_at 等内部字段写回调用方的 dict
+        config = dict(config)
         config["task_id"] = task_id
         config.setdefault("task_type", "scan_warn")
         config["created_at"] = datetime.now().isoformat()
@@ -83,18 +97,37 @@ class AutoScanner:
             self._last_status[task_id] = {}
         ttype = config.get("task_type", "scan_warn")
         self._log(task_id, f"任务已创建 [{self.TASK_TYPES.get(ttype, ttype)}]: {config.get('targets')} 间隔={config.get('interval')}s")
+        # 端口规格提前校验并记日志：非法/超大的配置在创建时就能被看到，而不是等扫描时炸内存
+        try:
+            self._parse_ports(config.get("ports", "25565"))
+        except ValueError as e:
+            self._log(task_id, f"⚠ 端口配置非法，任务将不会执行扫描: {e}")
         return task_id
 
     def remove_task(self, task_id):
         self.stop_task(task_id)
+        bots = self._stop_ai_bots(task_id)
         with self._lock:
             self.tasks.pop(task_id, None)
             self.logs.pop(task_id, None)
             self._known_servers.pop(task_id, None)
             self._last_status.pop(task_id, None)
+            # 原先漏了 running/stop_events：线程对象常驻、stop_events 永远回收不掉
+            self.running.pop(task_id, None)
+            self.stop_events.pop(task_id, None)
+        for b in bots:
+            try:
+                b.stop()
+            except Exception:
+                pass
 
     def start_task(self, task_id):
-        if task_id in self.running and self.running[task_id].is_alive():
+        if task_id not in self.tasks:
+            return False
+        old = self.running.get(task_id)
+        if old is not None and old.is_alive():
+            # 旧线程还在跑（例如上次 join 超时）：不要覆盖它的 stop_event，
+            # 否则旧循环读的是被替换的 Event，之后 stop_task 永远停不掉它
             return False
         self.stop_events[task_id] = threading.Event()
         t = threading.Thread(target=self._run_loop, args=(task_id,), daemon=True)
@@ -106,47 +139,67 @@ class AutoScanner:
     def stop_task(self, task_id):
         if task_id in self.stop_events:
             self.stop_events[task_id].set()
-        if task_id in self.running:
-            self.running[task_id].join(timeout=5)
-        self._log(task_id, "任务已停止")
+        stopped = True
+        t = self.running.get(task_id)
+        if t is not None:
+            t.join(timeout=5)
+            stopped = not t.is_alive()
+        # 原先后 join 超时也照旧打印「任务已停止」，日志有误导性
+        if stopped:
+            self._log(task_id, "任务已停止")
+        else:
+            self._log(task_id, "已请求停止，但线程 5 秒内未退出（可能正在扫描），结束后不会再执行下一轮")
 
     def _parse_targets(self, targets, ports_spec):
-        """解析目标列表为(ip, port)元组列表。支持 ip:port 格式"""
+        """解析目标列表为(ip, port)元组列表。支持 ip:port 格式。
+
+        展开规模超过 MAX_TARGETS（或端口数超过 MAX_PORTS）时抛 ValueError，
+        由任务循环捕获并记日志——绝不把 0.0.0.0/0 这类目标真的展开。
+        """
         import ipaddress
         result = []
         ports = self._parse_ports(ports_spec)
         for target in targets:
-            target = target.strip()
+            target = str(target).strip()
             if not target:
                 continue
             # 支持 ip:port 格式
             if ':' in target and target.count('.') == 3:
+                ip, port_str = target.rsplit(':', 1)
                 try:
-                    ip, port_str = target.rsplit(':', 1)
-                    result.append((ip.strip(), int(port_str.strip())))
-                    continue
-                except Exception:
-                    pass
+                    port = int(port_str.strip())
+                except ValueError:
+                    raise ValueError(f"目标端口格式错误: {target}")
+                if not (1 <= port <= 65535):
+                    raise ValueError(f"目标端口超出 1-65535: {target}")
+                result.append((ip.strip(), port))
+                continue
             if '/' in target:
                 try:
                     network = ipaddress.ip_network(target, strict=False)
-                    for ip in network.hosts():
-                        for p in ports:
-                            result.append((str(ip), p))
-                except Exception:
-                    pass
+                except Exception as e:
+                    raise ValueError(f"非法的网段目标 {target}: {e}")
+                for ip in network.hosts():
+                    if len(result) + len(ports) > self.MAX_TARGETS:
+                        raise ValueError(
+                            f"展开后的目标数超过上限 {self.MAX_TARGETS}（{target} × {ports_spec}），已中止")
+                    for p in ports:
+                        result.append((str(ip), p))
             elif '-' in target and target.count('.') == 3:
                 try:
                     start, end = target.split('-')
                     start_ip = ipaddress.ip_address(start.strip())
                     end_ip = ipaddress.ip_address(end.strip())
-                    current = start_ip
-                    while current <= end_ip:
-                        for p in ports:
-                            result.append((str(current), p))
-                        current = ipaddress.ip_address(int(current) + 1)
-                except Exception:
-                    pass
+                except Exception as e:
+                    raise ValueError(f"非法的地址区间 {target}: {e}")
+                current = start_ip
+                while current <= end_ip:
+                    if len(result) + len(ports) > self.MAX_TARGETS:
+                        raise ValueError(
+                            f"展开后的目标数超过上限 {self.MAX_TARGETS}（{target} × {ports_spec}），已中止")
+                    for p in ports:
+                        result.append((str(current), p))
+                    current = ipaddress.ip_address(int(current) + 1)
             else:
                 for p in ports:
                     result.append((target, p))
@@ -154,33 +207,60 @@ class AutoScanner:
 
     @staticmethod
     def _parse_ports(ports_spec):
+        """解析端口规格。非法值或数量超限抛 ValueError（不再静默忽略）。"""
         if not ports_spec:
             return [25565]
         if isinstance(ports_spec, int):
-            return [ports_spec]
+            ports_spec = str(ports_spec)
         result = []
         for part in str(ports_spec).split(','):
             part = part.strip()
+            if not part:
+                continue
             if '-' in part:
                 try:
-                    s, e = part.split('-')
-                    result.extend(range(int(s), int(e) + 1))
+                    s, e = part.split('-', 1)
+                    s, e = int(s), int(e)
                 except Exception:
-                    pass
+                    raise ValueError(f"端口区间格式错误: {part}")
+                if not (1 <= s <= 65535 and 1 <= e <= 65535):
+                    raise ValueError(f"端口超出 1-65535: {part}")
+                if e < s:
+                    raise ValueError(f"端口区间起止颠倒: {part}")
+                if e - s + 1 > AutoScanner.MAX_PORTS:
+                    raise ValueError(f"端口区间过大（{e - s + 1} > {AutoScanner.MAX_PORTS}）: {part}")
+                result.extend(range(s, e + 1))
             else:
                 try:
-                    result.append(int(part))
+                    p = int(part)
                 except Exception:
-                    pass
+                    raise ValueError(f"端口格式错误: {part}")
+                if not (1 <= p <= 65535):
+                    raise ValueError(f"端口超出 1-65535: {part}")
+                result.append(p)
+            if len(set(result)) > AutoScanner.MAX_PORTS:
+                raise ValueError(f"端口数量超过上限 {AutoScanner.MAX_PORTS}")
         return sorted(set(result)) if result else [25565]
 
     def _run_loop(self, task_id):
-        config = self.tasks[task_id]
-        stop_event = self.stop_events[task_id]
-        interval = int(config.get("interval", 300))
+        # 原先直接下标取 tasks[task_id]、int(interval) 都在 try 之外：
+        # 并发 remove_task 或非法 interval 会让线程抛未捕获异常静默死亡，
+        # 面板却仍显示任务在运行。这里全部改为安全读取。
+        config = self.tasks.get(task_id)
+        stop_event = self.stop_events.get(task_id)
+        if config is None or stop_event is None:
+            return
+        try:
+            interval = int(config.get("interval", 300))
+        except (TypeError, ValueError):
+            self._log(task_id, f"interval 非法（{config.get('interval')!r}），回退为 300 秒")
+            interval = 300
+        interval = max(self.MIN_INTERVAL, interval)
 
         while not stop_event.is_set():
             try:
+                if self.tasks.get(task_id) is not config:
+                    break  # 任务已被删除/重建，直接退出，避免继续用过期配置
                 ttype = config.get("task_type", "scan_warn")
                 if ttype == "scan_warn":
                     self._run_scan_warn(task_id, config)
@@ -198,6 +278,8 @@ class AutoScanner:
                     self._log(task_id, f"未知任务类型: {ttype}")
             except Exception as e:
                 self._log(task_id, f"执行出错: {e}")
+            if self.tasks.get(task_id) is not config:
+                break
             config["last_run"] = datetime.now().isoformat()
             config["run_count"] += 1
             # 等待间隔，可被中断
@@ -213,9 +295,17 @@ class AutoScanner:
             return []
 
         self._log(task_id, f"开始扫描: {len(targets)} 个目标")
-        stop_event = asyncio.Event()
+        # 上层 stop_task 用的是 threading.Event，而扫描内部用 asyncio.Event。
+        # 原先这里创建 asyncio.Event 后全文件没有任何 .set()，stop_task 无法中断扫描；
+        # 这里用轮询线程事件的 watcher 把两者桥接起来。
+        thread_stop = self.stop_events.get(task_id) or threading.Event()
 
-        async def scan():
+        async def _watch_stop(stop_event):
+            while not thread_stop.is_set():
+                await asyncio.sleep(0.2)
+            stop_event.set()
+
+        async def scan(stop_event):
             results = await scan_ports_async(
                 targets, concurrency=concurrency, timeout=timeout,
                 stop_event=stop_event,
@@ -257,7 +347,16 @@ class AutoScanner:
                     mc_servers.append(r)
             return mc_servers
 
-        return asyncio.run(scan())
+        async def scan_with_stop():
+            # asyncio.Event 必须在运行中的事件循环里创建（3.8/3.9 在循环外创建会绑定错误的循环）
+            stop_event = asyncio.Event()
+            watcher = asyncio.create_task(_watch_stop(stop_event))
+            try:
+                return await scan(stop_event)
+            finally:
+                watcher.cancel()
+
+        return asyncio.run(scan_with_stop())
 
     def _run_scan_warn(self, task_id, config):
         """类型1: 扫描IP段+发现有人自动警告/观察"""
@@ -355,7 +454,7 @@ class AutoScanner:
             self._log(task_id, f"  🆕 {s['ip']}:{s['port']} {s['version']} 玩家={s['players_online']} MOTD={s['motd']}")
 
         if config.get("auto_favorite") and new_servers:
-            self._favorite_servers(new_servers)
+            self._favorite_servers(new_servers, task_id)
             self._log(task_id, f"已自动加入收藏 {len(new_servers)} 个")
 
     def _run_ai_hijack(self, task_id, config):
@@ -370,15 +469,22 @@ class AutoScanner:
 
         if alive:
             ai_cfg = config.get("ai_config", {})
+            started = 0
             for s in alive[:3]:  # 最多同时启动3个AI，避免资源耗尽
-                self._start_ai_bot(s, ai_cfg)
-                self._log(task_id, f"  🤖 已启动AI托管: {s['ip']}:{s['port']}")
+                if self._start_ai_bot(s, ai_cfg, task_id=task_id):
+                    started += 1
+                    self._log(task_id, f"  🤖 已启动AI托管: {s['ip']}:{s['port']}")
+            self._log(task_id, f"AI托管本轮新增 {started} 个，当前在管 {len(self._ai_bots)}/{self.MAX_AI_BOTS}")
 
     def _warn_servers(self, servers, message):
-        """对服务器列表发警告"""
+        """对服务器列表发警告。
+
+        每轮数量受限（MAX_WARN_PER_ROUND），避免一次扫到上千服务器时自动向陌生服群发消息；
+        ⚠ 向第三方服务器发消息必须获得服务器所有者授权。
+        """
         from core.bot import MCBot
         warned = 0
-        for s in servers:
+        for s in servers[:self.MAX_WARN_PER_ROUND]:
             try:
                 bot = MCBot(host=s['ip'], port=s['port'],
                             username="SecurityBot", timeout=15,
@@ -394,9 +500,13 @@ class AutoScanner:
         return warned
 
     def _observe_servers(self, servers, duration):
-        """对服务器列表挂观察者"""
+        """对服务器列表挂观察者。
+
+        每轮数量受限：原先每个命中服务器都新建 MCBot + 常驻线程持有连接，
+        扫到上千个"有人"的服务器就是上千连接/线程，本机直接被拖垮。
+        """
         from core.bot import MCBot
-        for s in servers:
+        for s in servers[:self.MAX_OBSERVE_PER_ROUND]:
             try:
                 bot = MCBot(host=s['ip'], port=s['port'],
                             username="Observer", timeout=15,
@@ -415,7 +525,7 @@ class AutoScanner:
             except Exception:
                 pass
 
-    def _favorite_servers(self, servers):
+    def _favorite_servers(self, servers, task_id=None):
         """自动加入收藏（写入数据库）"""
         try:
             from storage.db import upsert_many
@@ -424,15 +534,35 @@ class AutoScanner:
                 records.append({
                     'ip': s['ip'], 'port': s['port'],
                     'version': s['version'], 'players': s['players_online'],
-                    'max_players': s['max'], 'motd': s['motd'],
+                    # _probe_servers 产出的键是 players_max；原先读 s['max'] 会 KeyError，
+                    # 又被下面的 except 吞掉 → discover_new+auto_favorite 永远收藏 0 个且无日志
+                    'max_players': s.get('players_max', 0), 'motd': s.get('motd', ''),
                     'protocol': s.get('proto', 0),
                 })
             upsert_many(records)
-        except Exception:
-            pass
+        except Exception as e:
+            # 不再静默失败：收藏功能坏掉要能在任务日志里看到
+            if task_id:
+                self._log(task_id, f"自动加入收藏失败: {e}")
 
-    def _start_ai_bot(self, server, ai_config):
-        """启动AI托管bot"""
+    def _start_ai_bot(self, server, ai_config, task_id=None):
+        """启动AI托管bot。
+
+        原先只 start() 而不保存返回对象：每个 interval 都会为同一批服务器重复启动，
+        线程/socket/AI 费用无界增长，而且面板拿不到句柄无法停止。
+        这里按 ip:port 去重、保留引用并设全局上限。
+        """
+        key = f"{server['ip']}:{server['port']}"
+        with self._lock:
+            existing = self._ai_bots.get(key)
+            if (existing is not None and getattr(existing, "thread", None) is not None
+                    and existing.thread.is_alive()):
+                return False
+            too_many = len(self._ai_bots) >= self.MAX_AI_BOTS
+        if too_many:
+            if task_id:
+                self._log(task_id, f"AI托管数量已达上限 {self.MAX_AI_BOTS}，跳过 {key}")
+            return False
         try:
             from core.ai_bot import AIBotSession
             bot = AIBotSession(
@@ -441,10 +571,22 @@ class AutoScanner:
                 protocol_version=server.get('proto'),
                 ai_config=ai_config,
             )
-            bot.session_id = f"auto_{server['ip']}_{server['port']}"
+            bot.session_id = f"auto_{key}"
             bot.start()
-        except Exception:
-            pass
+        except Exception as e:
+            if task_id:
+                self._log(task_id, f"启动AI托管失败 {key}: {e}")
+            return False
+        with self._lock:
+            self._ai_bots[key] = bot
+        return True
+
+    def _stop_ai_bots(self, task_id=None):
+        """取出并清空已托管的 AI bot（真正的 stop 由调用方在锁外执行）。"""
+        with self._lock:
+            bots = list(self._ai_bots.values())
+            self._ai_bots.clear()
+        return bots
 
     def list_tasks(self):
         with self._lock:

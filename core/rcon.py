@@ -19,6 +19,9 @@ RCON_TYPE_AUTH_RESPONSE = 2
 # 特殊请求 ID（用于检测多包响应结束）
 RCON_END_MARKER = 0x42424242
 
+# 口令尝试的最小间隔（秒）：避免对目标造成连接洪水/触发风控
+MIN_BRUTE_DELAY = 0.5
+
 
 class RCONError(Exception):
     pass
@@ -89,6 +92,12 @@ class RCONClient:
                 resp_id, resp_type, resp_body = self._recv_packet()
             except socket.timeout:
                 break
+            except RCONError:
+                raise
+            except OSError as e:
+                # _recv_exact 抛出的 ConnectionError 不属于 RCONError 体系，
+                # 会让调用方的 except RCONError 漏接断连异常；这里统一包装。
+                raise RCONError(f"RCON 连接中断: {e}") from e
             if resp_id == marker_id:
                 break
             if resp_id == req_id and resp_type == RCON_TYPE_RESPONSE:
@@ -176,10 +185,17 @@ def rcon_execute(host: str, port: int, password: str, command: str,
 
 
 def rcon_bruteforce(host: str, port: int, passwords: list[str],
-                     timeout: float = 5.0, delay: float = 0.5) -> tuple[bool, str]:
-    """RCON 密码暴力破解（仅用于授权测试）。
+                     timeout: float = 5.0, delay: float = 0.5,
+                     allow_bruteforce: bool = False) -> tuple[bool, str]:
+    """RCON 密码暴力破解（仅用于已获得明确授权的安全测试）。
     返回 (是否成功, 找到的密码或空字符串)
+
+    ⚠ 授权边界：必须显式传 allow_bruteforce=True 才会执行（避免被面板/脚本误触发）；
+    尝试间隔有下限 MIN_BRUTE_DELAY，避免对目标造成连接洪水。
     """
+    if not allow_bruteforce:
+        raise RCONError("rcon_bruteforce 需显式 allow_bruteforce=True，且仅限已获授权的测试目标")
+    delay = max(float(delay), MIN_BRUTE_DELAY)
     for pwd in passwords:
         try:
             client = RCONClient(host, port, pwd, timeout)

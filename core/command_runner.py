@@ -8,6 +8,7 @@
 import time
 import re
 from dataclasses import dataclass, field
+from typing import Optional
 
 from .bot import MCBot
 
@@ -27,7 +28,8 @@ class CommandScript:
     """命令脚本：按顺序执行的命令列表"""
     commands: list[str] = field(default_factory=list)
     delay: float = 1.0  # 命令间延迟
-    timeout: float = 10.0  # 单条命令超时
+    # 单条命令等待响应的超时；None 表示沿用 CommandRunner.timeout
+    timeout: Optional[float] = None
     stop_on_error: bool = False  # 出错时是否停止
 
     @classmethod
@@ -63,35 +65,72 @@ class CommandRunner:
     def run_script(self, script: CommandScript) -> list[CommandResult]:
         """执行命令脚本"""
         for cmd in script.commands:
-            result = self.execute(cmd)
+            result = self.execute(cmd, script.timeout)
             self.results.append(result)
             if not result.success and script.stop_on_error:
                 break
             time.sleep(script.delay)
         return self.results
 
-    def execute(self, command: str) -> CommandResult:
-        """执行单条命令"""
+    def execute(self, command: str, timeout: Optional[float] = None) -> CommandResult:
+        """执行单条命令。timeout 为等待响应的秒数，None 时用 self.timeout。"""
+        eff_timeout = float(timeout if timeout is not None else (self.timeout or 10.0))
         result = CommandResult(command=command)
         start = time.time()
         try:
             # 条件命令处理
             if command.upper().startswith("IF "):
-                result = self._execute_conditional(command)
+                result = self._execute_conditional(command, eff_timeout)
             else:
-                before = len(self.bot.chat_messages)
+                if self.bot is None:
+                    raise RuntimeError("未提供 bot 实例")
+                before = self._chat_baseline()
                 self.bot.send_command(command)
-                # 等待响应
-                time.sleep(self.delay)
-                result.success = True
-                result.response = self._get_recent_chat(before)
+                # 等到收到响应或超时：原先固定 time.sleep(delay) 且无条件 success=True，
+                # 既没有超时保护，stop_on_error 也永远不生效（结果全是假成功）。
+                result.response = self._wait_for_response(before, eff_timeout)
+                if result.response:
+                    result.success = True
+                else:
+                    result.error = f"等待 {eff_timeout:.1f}s 未捕获到命令响应"
         except Exception as e:
             result.error = str(e)
             result.success = False
         result.duration = time.time() - start
         return result
 
-    def _execute_conditional(self, command: str) -> CommandResult:
+    def _chat_baseline(self):
+        """增量读取基准：优先用单调序号（不受 chat_messages 头部截断影响），旧 bot 退回长度。"""
+        if hasattr(self.bot, "chat_seq"):
+            return ("seq", self.bot.chat_seq())
+        return ("len", len(self.bot.chat_messages))
+
+    def _chat_since(self, baseline) -> list:
+        """按基准取新增聊天。"""
+        kind, mark = baseline
+        try:
+            if kind == "seq":
+                messages, _ = self.bot.chat_since(mark)
+                return list(messages)
+            return list(self.bot.chat_messages[mark:])
+        except Exception:
+            return []
+
+    def _wait_for_response(self, baseline, timeout: float, settle: float = 0.4) -> str:
+        """轮询等待命令响应。收到首条后再等 settle 秒收集同一条响应的后续分包。"""
+        deadline = time.time() + max(0.0, timeout)
+        while True:
+            messages = self._chat_since(baseline)
+            if messages:
+                settle_end = time.time() + settle
+                while time.time() < settle_end:
+                    time.sleep(0.1)
+                return "\n".join(self._chat_since(baseline) or messages)
+            if time.time() >= deadline:
+                return ""
+            time.sleep(0.1)
+
+    def _execute_conditional(self, command: str, timeout: Optional[float] = None) -> CommandResult:
         """执行条件命令：IF <关键词> THEN <命令>"""
         result = CommandResult(command=command)
         match = re.match(r'IF\s+(.+?)\s+THEN\s+(.+)', command, re.IGNORECASE)
@@ -102,7 +141,7 @@ class CommandRunner:
         # 检查最近聊天中是否包含条件关键词
         recent = self._get_recent_chat(0).lower()
         if condition.lower() in recent:
-            result = self.execute(actual_cmd)
+            result = self.execute(actual_cmd, timeout)
             result.command = command
         else:
             result.success = True
@@ -110,9 +149,12 @@ class CommandRunner:
         return result
 
     def _get_recent_chat(self, since: int = 0) -> str:
-        """获取最近聊天（从 bot.chat_messages 的 since 索引开始）"""
+        """获取最近聊天（since>0 时按单调序号取增量，0 表示全部）"""
         try:
-            messages = self.bot.chat_messages[since:]
+            if since and hasattr(self.bot, "chat_seq"):
+                messages, _ = self.bot.chat_since(since)
+            else:
+                messages = self.bot.chat_messages
             return "\n".join(messages) if messages else ""
         except Exception:
             return ""
@@ -139,21 +181,6 @@ PRESET_SCRIPTS = {
         delay=1.5,
         stop_on_error=False,
     ),
-    "grief": CommandScript(
-        commands=[
-            "plugins",
-            "version",
-            "help",
-            "list",
-            "co i",
-            "rg list",
-            "bal",
-            "money",
-            "pay",
-        ],
-        delay=1.0,
-        stop_on_error=False,
-    ),
     # ⚠ 占位示例：password 不是真实密码！实际使用请用命令行 --authme 你的密码
     # （走 bot.authme_login 处理，无需手写此脚本），或修改下面的命令为真实密码
     "auth": CommandScript(
@@ -175,7 +202,6 @@ def run_commands_on_server(host: str, port: int, username: str,
     便捷函数：连接服务器并执行命令列表。
     吸收自 MCPTool 的 "send a bot that will execute a list of commands upon login"。
     """
-    from .bot import MCBot
     bot = MCBot(host, port, username=username, timeout=timeout)
     results = []
     try:
@@ -186,8 +212,9 @@ def run_commands_on_server(host: str, port: int, username: str,
                 bot.authme_login(authme_password, mode="auto")
             except Exception:
                 pass
-        runner = CommandRunner(bot, delay=delay)
-        script = CommandScript(commands=commands, delay=delay)
+        # timeout 必须真正透传到执行器：原先只存在形参里，从未生效
+        runner = CommandRunner(bot, delay=delay, timeout=timeout)
+        script = CommandScript(commands=commands, delay=delay, timeout=timeout)
         results = runner.run_script(script)
     except Exception as e:
         results.append(CommandResult(command="connect", error=str(e)))

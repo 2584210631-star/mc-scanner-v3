@@ -13,6 +13,7 @@ import os
 import random
 import socket
 import struct
+import threading
 import time
 import logging
 from typing import Optional
@@ -84,6 +85,9 @@ def parse_proxy_line(line: str) -> Optional[Proxy]:
         port = int(parts[1])
     except ValueError:
         return None
+    # 端口合法性校验：非法端口会在连接时才炸，且 0/负数无意义
+    if not (1 <= port <= 65535):
+        return None
 
     # 支持 host:port:user:pass 格式
     if len(parts) >= 4 and not username:
@@ -104,7 +108,8 @@ class ProxyManager:
         self.max_fail = max_fail
         self.current: Optional[Proxy] = None
         self.last_rotation = 0.0
-        self._lock = __import__("threading").Lock()
+        # RLock：mark_failed 持锁时会调用 _remove_from_file，需要可重入
+        self._lock = threading.RLock()
 
         if auto_fetch:
             self.fetch_from_api(fetch_socks5=fetch_socks5)
@@ -133,41 +138,47 @@ class ProxyManager:
         if not new_proxies:
             return 0
 
-        # 合并到现有文件
-        existing = set()
-        if os.path.exists(self.proxy_file):
-            try:
-                with open(self.proxy_file, "r", encoding="utf-8") as f:
-                    existing = {line.strip() for line in f if line.strip()}
-            except Exception:
-                pass
+        # 合并到现有文件（读改写全程持锁，避免与 add_proxy/_remove_from_file 并发丢更新）
+        with self._lock:
+            existing = set()
+            if os.path.exists(self.proxy_file):
+                try:
+                    with open(self.proxy_file, "r", encoding="utf-8") as f:
+                        existing = {line.strip() for line in f if line.strip()}
+                except Exception:
+                    pass
 
-        all_proxies = existing | new_proxies
-        try:
-            with open(self.proxy_file, "w", encoding="utf-8") as f:
-                f.write("\n".join(sorted(all_proxies)))
-        except Exception as e:
-            logger.warning(f"写入代理文件失败: {e}")
+            all_proxies = existing | new_proxies
+            try:
+                with open(self.proxy_file, "w", encoding="utf-8") as f:
+                    f.write("\n".join(sorted(all_proxies)))
+            except Exception as e:
+                logger.warning(f"写入代理文件失败: {e}")
 
         logger.info(f"API 获取 {len(new_proxies)} 个代理，文件总计 {len(all_proxies)} 个")
         return len(new_proxies)
 
     def load_from_file(self) -> int:
-        """从文件加载代理"""
-        if not os.path.exists(self.proxy_file):
-            return 0
-        count = 0
-        try:
-            with open(self.proxy_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    p = parse_proxy_line(line)
-                    if p:
-                        self.proxies.append(p)
-                        count += 1
-        except Exception as e:
-            logger.warning(f"加载代理文件失败: {e}")
-        logger.info(f"从文件加载 {count} 个代理")
-        return count
+        """从文件加载代理。先清空并按 key 去重：原先纯 append，
+        重复调用（例如 health_check 前后）会产生重复条目。"""
+        with self._lock:
+            self.proxies = []
+            if not os.path.exists(self.proxy_file):
+                return 0
+            count = 0
+            seen = set()
+            try:
+                with open(self.proxy_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        p = parse_proxy_line(line)
+                        if p and p.key() not in seen:
+                            seen.add(p.key())
+                            self.proxies.append(p)
+                            count += 1
+            except Exception as e:
+                logger.warning(f"加载代理文件失败: {e}")
+            logger.info(f"从文件加载 {count} 个代理")
+            return count
 
     def get_proxy(self, force_rotate: bool = False) -> Optional[Proxy]:
         """获取当前代理，必要时轮换"""
@@ -223,44 +234,93 @@ class ProxyManager:
             self._rotate_unlocked()
 
     def _remove_from_file(self, proxy: Proxy):
-        """从代理文件中移除失效代理"""
+        """从代理文件中移除失效代理（持锁，允许被 mark_failed 重入调用）"""
         if not os.path.exists(self.proxy_file):
             return
-        try:
-            with open(self.proxy_file, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            with open(self.proxy_file, "w", encoding="utf-8") as f:
-                for line in lines:
-                    p = parse_proxy_line(line)
-                    if p and p.key() != proxy.key():
-                        f.write(line)
-        except Exception:
-            pass
+        with self._lock:
+            try:
+                with open(self.proxy_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                with open(self.proxy_file, "w", encoding="utf-8") as f:
+                    for line in lines:
+                        p = parse_proxy_line(line)
+                        if p and p.key() != proxy.key():
+                            f.write(line)
+            except Exception:
+                pass
 
     def add_proxy(self, proxy_str: str):
-        """手动添加代理"""
+        """手动添加代理（持锁，避免与 fetch/remove 并发写同一文件）"""
         p = parse_proxy_line(proxy_str)
-        if p and not any(existing.key() == p.key() for existing in self.proxies):
+        if not p:
+            return
+        with self._lock:
+            if any(existing.key() == p.key() for existing in self.proxies):
+                return
             self.proxies.append(p)
-            with open(self.proxy_file, "a", encoding="utf-8") as f:
-                f.write(proxy_str.strip() + "\n")
+            try:
+                with open(self.proxy_file, "a", encoding="utf-8") as f:
+                    f.write(proxy_str.strip() + "\n")
+            except Exception as e:
+                logger.warning(f"写入代理文件失败: {e}")
 
-    def health_check(self, test_host: str = "mc.hypixel.net", test_port: int = 25565,
-                     timeout: float = 5.0) -> tuple[int, int]:
-        """对所有代理做健康检查，返回 (存活数, 总数)"""
-        alive = 0
-        total = len(self.proxies)
-        for p in self.proxies[:]:
+    def health_check(self, test_host: str = None, test_port: int = 25565,
+                     timeout: float = 5.0, max_workers: int = 32,
+                     max_check: int = 500) -> tuple[int, int]:
+        """对所有代理做健康检查，返回 (存活数, 总数)。
+
+        修复三点：
+        1) 原先串行遍历全部代理，N 个代理就是 N×timeout 的阻塞（占住 Flask 工作线程）；
+           这里改为有界并发 + 单次检查数量上限。
+        2) 原先在循环里不持锁直接 self.proxies.remove(p)，与 get_proxy/mark_failed 并发
+           会丢/错删条目；现在统一在锁内按 key 批量剔除。
+        3) 原先默认测试目标是第三方生产服 mc.hypixel.net，无授权就产生流量；
+           现在必须由调用方显式指定自己有权测试的目标。
+        """
+        if not test_host:
+            raise ValueError("health_check 需要显式指定 test_host（请使用你已获授权测试的目标地址）")
+        with self._lock:
+            total = len(self.proxies)
+            targets = self.proxies[:max_check]
+        if not targets:
+            return 0, total
+
+        def _check(p):
+            s = None
+            ok = False
             try:
                 s = create_proxy_socket(p, timeout)
                 s.connect((test_host, test_port))
-                s.close()
-                p.fail_count = 0
-                alive += 1
+                ok = True
             except Exception:
-                p.fail_count += 1
-                if p.fail_count >= self.max_fail:
-                    self.proxies.remove(p)
+                ok = False
+            finally:
+                # 原先失败路径不关闭 socket，会泄漏 fd
+                if s is not None:
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
+            return p, ok
+
+        from concurrent.futures import ThreadPoolExecutor
+        alive = 0
+        dead = []
+        with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(targets)))) as ex:
+            for p, ok in ex.map(_check, targets):
+                if ok:
+                    p.fail_count = 0
+                    alive += 1
+                else:
+                    p.fail_count += 1
+                    if p.fail_count >= self.max_fail:
+                        dead.append(p)
+        if dead:
+            with self._lock:
+                dead_keys = {p.key() for p in dead}
+                self.proxies = [x for x in self.proxies if x.key() not in dead_keys]
+                if self.current is not None and self.current.key() in dead_keys:
+                    self.current = None
         return alive, total
 
     def __len__(self):
@@ -376,6 +436,16 @@ class _HttpConnectSocket(socket.socket):
 
     def connect(self, address):
         host, port = address
+        # host 来自扫描目标字符串（不可信输入）：过滤 CR/LF/空白，防止 CONNECT 头注入
+        host = str(host).strip()
+        if not host or any(c in host for c in "\r\n\t "):
+            raise ConnectionError(f"HTTP 代理 CONNECT 目标非法: {host!r}")
+        try:
+            port = int(port)
+        except Exception:
+            raise ConnectionError(f"HTTP 代理 CONNECT 端口非法: {port!r}")
+        if not (1 <= port <= 65535):
+            raise ConnectionError(f"HTTP 代理 CONNECT 端口超出范围: {port}")
         req = f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n"
         if self._proxy.username:
             import base64
@@ -386,13 +456,20 @@ class _HttpConnectSocket(socket.socket):
         req += "\r\n"
         self.sendall(req.encode())
 
-        # 读取响应头
+        # 读取响应头：必须有总量上限与总超时。
+        # 恶意/被劫持代理可以持续输出却永远不发 CRLFCRLF → 循环挂死 + 内存放大。
+        # 上限与 core/conn.py 的同类实现保持一致（64KB）。
         response = b""
+        header_deadline = time.time() + 60
         while b"\r\n\r\n" not in response:
+            if time.time() > header_deadline:
+                raise ConnectionError("HTTP 代理 CONNECT 响应超时")
             chunk = self.recv(4096)
             if not chunk:
                 raise ConnectionError("HTTP 代理连接关闭")
             response += chunk
+            if len(response) > 65536:
+                raise ConnectionError("HTTP代理响应头过大")
 
         status_line = response.split(b"\r\n")[0].decode("utf-8", errors="replace")
         if "200" not in status_line:
@@ -415,17 +492,19 @@ def _is_ip(host: str) -> bool:
 
 # 全局代理管理器单例
 _global_manager: Optional[ProxyManager] = None
+_manager_lock = threading.Lock()
 
 
 def get_proxy_manager(proxy_file: str = "proxies.txt", auto_fetch: bool = False,
                       **kwargs) -> Optional[ProxyManager]:
-    """获取全局代理管理器单例"""
+    """获取全局代理管理器单例（初始化加锁，避免并发创建出两个 manager 实例）"""
     global _global_manager
-    if _global_manager is None:
-        if not os.path.exists(proxy_file) and not auto_fetch:
-            return None
-        _global_manager = ProxyManager(proxy_file=proxy_file, auto_fetch=auto_fetch, **kwargs)
-        if len(_global_manager) == 0:
-            _global_manager = None  # 空管理器不缓存，允许后续重新创建
-            return None
-    return _global_manager
+    with _manager_lock:
+        if _global_manager is None:
+            if not os.path.exists(proxy_file) and not auto_fetch:
+                return None
+            mgr = ProxyManager(proxy_file=proxy_file, auto_fetch=auto_fetch, **kwargs)
+            if len(mgr) == 0:
+                return None  # 空管理器不缓存，允许后续重新创建
+            _global_manager = mgr
+        return _global_manager
