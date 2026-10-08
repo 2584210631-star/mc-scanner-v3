@@ -146,17 +146,20 @@
 
 ## 🚀 快速开始
 
-### 安装
+### 安装 / Installation
 
 ```bash
 git clone https://github.com/2584210631-star/mc-scanner-v3.git
 cd mc-scanner-v3
-# 扫描/SLP探测/离线服警告：依赖已自带在 libs/，无需 pip install
-# 以正版账号登录进服（可选）：需额外安装 pycryptodome
-#   pip install pycryptodome
-# 如需其他额外依赖（如 masscan）可执行：pip install -r requirements.txt
-cp config.example.json config.json   # 可选
+
+# 安装依赖（必需 flask + 正版登录用 pycryptodome）
+pip install -r requirements.txt
+
+# 可选：复制配置模板
+cp config.example.json config.json
 ```
+
+> **依赖说明**：v3.6.4 起不再 vendor 第三方库，全部通过 pip 安装。`flask` 是 Web 面板必需，`pycryptodome` 是正版账号登录必需。`uvloop` / `pysimdjson` 是可选加速，不装自动降级不影响功能。
 
 ### 启动 Web 面板
 
@@ -209,6 +212,167 @@ MC_AUTHME_PASSWORD=your_password
 | 2 | 高速模式未确认 |
 | 3 | 参数错误（缺参数 / 缺 `--yes`） |
 | 4 | 能力开关拒绝 |
+
+---
+
+## 📖 从零开始教程 / Beginner's Guide
+
+### 1. 环境要求 / Requirements
+
+| 项目 | 要求 |
+|------|------|
+| Python | 3.10+（3.12 推荐） |
+| 系统 | Linux / macOS / Windows / Termux(Android) |
+| 网络 | 能访问目标服务器和 GitHub |
+| 可选 | masscan（大范围高速扫描） |
+
+### 2. 安装 / Installation
+
+```bash
+# 克隆仓库
+git clone https://github.com/2584210631-star/mc-scanner-v3.git
+cd mc-scanner-v3
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 验证安装
+python3 cli.py --help
+```
+
+如果 `pip install` 失败（常见于 Termux/手机）：
+```bash
+pkg install python python-pip openssl
+pip install flask pycryptodome
+```
+
+### 3. 第一次启动 Web 面板 / First Run
+
+```bash
+python3 cli.py web --port 8090 --host 127.0.0.1
+```
+
+浏览器打开 `http://127.0.0.1:8090`，你会看到深色面板。底部导航有：扫描、结果、收藏、观察、AI、自动、库、历史。
+
+> **手机 Termux 用户**：在 Termux 里运行上面的命令，然后用手机浏览器打开 `http://127.0.0.1:8090`。面板已适配移动端。
+
+### 4. 扫描你的第一个服务器 / First Scan
+
+在 Web 面板的「扫描」页：
+1. 目标输入框填 IP 或域名（如 `1.2.3.4` 或 `mc.example.com`）
+2. 端口默认 `25565`，可填范围 `25565-25570`
+3. 模式选 `safe`（公网用）或 `balanced`（默认）
+4. 点「开始扫描」
+
+扫描分两阶段：
+- **阶段1**：端口扫描，找开放端口
+- **阶段2**：SLP 探测 + 认证检测，判断离线/正版/白名单
+
+扫完后在「结果」页查看，可按认证模式、版本、关键词筛选。
+
+命令行等效：
+```bash
+python3 cli.py scan 1.2.3.4 --mode safe
+python3 cli.py scan 192.168.1.0/24 --mode balanced
+```
+
+### 5. 观察者模式 / Observer
+
+观察者 = 以机器人身份登录服务器，实时看聊天、玩家进出，可发消息。
+
+在「观察」页或「结果」页点某台服务器的「观察」按钮：
+- 用户名填你想用的名字（如 `WatchDog`）
+- 离线服直接进，正版服需先配置微软账号（见第6节）
+- 进服后可在输入框发消息，聊天记录自动保存
+- 点「断开」退出，记录可导出 TXT/HTML
+
+命令行等效：
+```bash
+python3 cli.py bot 1.2.3.4:25565 -u WatchDog -m "你好" --hold 10
+```
+
+### 6. 正版账号登录 / Premium Account (Microsoft)
+
+要用正版账号进正版服，需先完成 Microsoft OAuth：
+
+1. Web 面板 → 右上角设置 → 正版账号 →「获取设备码」
+2. 终端会显示一串设备码和网址 `microsoft.com/link`
+3. 浏览器打开网址，输入设备码，登录你的微软账号
+4. 成功后账号自动保存，观察者进服时勾选「正版验证」即可
+
+> 正版登录需要 `pycryptodome`（已在 requirements.txt 中）。聊天签名用 RSA-2048+SHA256，Mojang 签发证书。
+
+### 7. 安全警告 / Security Warning
+
+对离线服自动发友好安全提醒：
+
+```bash
+# 扫描后自动给所有离线服发警告
+python3 cli.py warn 192.168.1.0/24 -u SecurityBot \
+  -m "你好，我是安全扫描机器人" \
+  -m "检测到您的服务器是离线模式，建议启用 online-mode=true"
+
+# 从数据库已存结果发警告（不重新扫描）
+python3 cli.py warn-db --auth cracked --limit 10
+```
+
+有 AuthMe 的服务器用 `--authme 密码` 自动注册/登录。
+
+### 8. 收藏与健康监控 / Favorites & Health Monitor
+
+- 在「结果」页点星标收藏服务器
+- 「收藏」页管理收藏，支持按认证方式、有人/没人筛选
+- 健康监控自动周期探测收藏服务器，记录人数变化，可邮件通知
+- 人数趋势图在收藏页，点 📈 查看
+
+### 9. 配置说明 / Configuration
+
+`config.json`（首次运行自动生成）主要字段：
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `username` | `Herobrine` | 机器人默认用户名 |
+| `messages` | `[]` | 默认警告消息列表 |
+| `ports` | `[25565]` | 默认扫描端口 |
+| `scan_threads` | `200` | 扫描并发线程数 |
+| `scan_timeout` | `2.5` | 单目标超时（秒） |
+| `bot_threads` | `10` | 机器人并发数 |
+| `authme_password` | `""` | AuthMe 自动登录密码 |
+| `db_path` | `mcscanner.db` | SQLite 数据库路径 |
+| `health_interval` | `300` | 健康监控轮询间隔（秒） |
+
+也可用环境变量覆盖敏感配置：`MC_AI_API_KEY`、`MC_DISCORD_WEBHOOK` 等。
+
+### 10. 常见问题 / FAQ
+
+**Q: 提示 `ModuleNotFoundError: No module named 'flask'`**
+A: 没装依赖，执行 `pip install -r requirements.txt`
+
+**Q: 正版服进不去，报 `authservers_down`**
+A: Mojang 认证服务器临时不可用，等几分钟重试；或检查网络是否能访问 `authserver.mojang.com`
+
+**Q: 发消息被踢 `chat.disabled.missingProfileKey`**
+A: 服务器强制安全档案，需用正版账号登录（第6节），离线账号无法在强制签名服发消息
+
+**Q: 发消息被踢 `Packet chat was larger than expected`**
+A: 部分服务器版本的聊天包格式兼容问题，正在排查中，可换台服务器测试
+
+**Q: NeoForge/Forge 模组服连不上**
+A: 强制模组校验的服要求客户端装对应模组，纯原版客户端无法进入。开了「允许原版客户端」的模组服可以进
+
+**Q: 扫描进度条不动**
+A: 小目标（<100台）扫描很快，进度条可能直接跳到100%；大目标用 `--workers` 调大并发
+
+**Q: Termux 上 `pip install` 编译失败**
+A: 用 `pkg install python openssl` 后只装纯 Python 包：`pip install flask pycryptodome`，跳过 `cryptography`（用 pycryptodome 兜底）
+
+### 11. 卸载 / Uninstall
+
+```bash
+# 停止服务后直接删除目录
+rm -rf mc-scanner-v3
+# 数据库和配置在目录内，一并删除
+```
 
 ---
 
@@ -294,7 +458,7 @@ python3 tools/gen_packets.py --download
 - **人数趋势图不显示**：一个低级错误——图表容器是 `<div>` 不是 `<canvas>`，无数据时塞进去的 `<p>` 标签残留导致 Chart.js 初始化失败。现在先清空再建 canvas
 - **扫描进度条不动**：自适应限速器初始速率被 profile 默认值覆盖了用户配置，初始批次 200 太大导致小目标一次性提交完才进循环。改了初始速率取 min(用户配置, 上限)，批次改 max_workers*2，进度步长动态化
 - **配置路径叠层**：config.json 在子目录时，保存一次路径多一层。已统一以配置文件所在目录为基准
-- **删了两个空壳依赖**：libs/uvloop 和 libs/simdjson 只有源码没有编译产物，从来没真正工作过，白占 8MB。run.py 里的自动 pip install 也一并删了
+- **不再 vendor 依赖**：删除整个 `libs/` 目录（Flask 及其依赖，约 2.6MB），全部通过 `pip install -r requirements.txt` 安装。之前的 uvloop/simdjson 空壳也一并删了
 - **代码卫生**：8 处 raise 补了 from e，补了一个测试断言，测试结束清理 observer_logs，清了 21 个 unused import，PWA 缓存加了版本号
 
 **还没修好的 / Still broken**

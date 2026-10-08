@@ -2,7 +2,7 @@
 """
 Discord Webhook 通知（v3.2.1 新增，融合 matscan 特性）。
 支持：玩家上下线通知、新服务器发现通知、离线服发现通知。
-纯 urllib 实现，不依赖第三方库（与原版 vendored 依赖风格一致）。
+纯 urllib 实现，不依赖第三方库。
 """
 import json
 import time

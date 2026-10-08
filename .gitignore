@@ -63,7 +63,6 @@ rescan*.py
 *.txt
 !requirements.txt
 !targets.txt
-libs/bin/
 
 # 聊天记录 / 观察者导出（勿提交）
 chat_log_*.html
