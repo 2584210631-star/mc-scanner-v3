@@ -7,6 +7,11 @@ import sys
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _base_dir)
 
+# release 包自带依赖时自动加载（源码仓库无 libs/ 时走 pip 安装的依赖）
+_libs_dir = os.path.join(_base_dir, 'libs')
+if os.path.isdir(_libs_dir):
+    sys.path.insert(0, _libs_dir)
+
 if __name__ == "__main__":
     try:
         import flask  # noqa: F401
