@@ -96,7 +96,7 @@ class TestFailurePaths(unittest.TestCase):
     def test_probe_list_with_progress(self):
         """测试probe_list的progress_callback"""
         progress_calls = []
-        def on_progress(done, total):
+        def on_progress(done, total, open_count=0):
             progress_calls.append((done, total))
 
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:

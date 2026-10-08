@@ -94,35 +94,53 @@ class AsyncScanResult:
 
 
 async def _check_port(ip: str, port: int, timeout: float,
-                      semaphore: asyncio.Semaphore, retries: int = 2) -> AsyncScanResult:
-    """异步检查单个端口，带重试。"""
+                      semaphore: asyncio.Semaphore,
+                      per_ip_sems: dict = None,
+                      per_ip_lock: asyncio.Lock = None,
+                      retries: int = 2) -> AsyncScanResult:
+    """异步检查单个端口，带重试和按IP并发限制。"""
+    # 按IP限速：同一IP最多3个并发连接，防止单IP被打封
+    per_ip_sem = None
+    if per_ip_sems is not None and per_ip_lock is not None:
+        async with per_ip_lock:
+            per_ip_sem = per_ip_sems.get(ip)
+            if per_ip_sem is None:
+                per_ip_sem = asyncio.Semaphore(3)
+                per_ip_sems[ip] = per_ip_sem
     async with semaphore:
-        last_error = ""
-        for attempt in range(retries + 1):
-            start = time.time()
+        if per_ip_sem is not None:
+            async with per_ip_sem:
+                return await _do_check_port(ip, port, timeout, retries)
+        else:
+            return await _do_check_port(ip, port, timeout, retries)
+
+
+async def _do_check_port(ip: str, port: int, timeout: float, retries: int = 2) -> AsyncScanResult:
+    """实际端口检查逻辑。"""
+    last_error = ""
+    for attempt in range(retries + 1):
+        start = time.time()
+        try:
+            reader, writer = await _open_connection(ip, port, timeout)
+            latency = (time.time() - start) * 1000
+            writer.close()
             try:
-                reader, writer = await _open_connection(ip, port, timeout)
-                latency = (time.time() - start) * 1000
-                writer.close()
-                try:
-                    await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
-                except Exception:
-                    pass
-                return AsyncScanResult(ip=ip, port=port, is_open=True, latency_ms=latency)
-            except asyncio.TimeoutError:
-                last_error = "timeout"
-                # 超时不重试：重试只是把超时窗口翻倍，且始终占着 semaphore 名额
+                await asyncio.wait_for(writer.wait_closed(), timeout=1.0)
+            except Exception:
+                pass
+            return AsyncScanResult(ip=ip, port=port, is_open=True, latency_ms=latency)
+        except asyncio.TimeoutError:
+            last_error = "timeout"
+            break
+        except (ConnectionRefusedError, OSError) as e:
+            last_error = str(e)[:80]
+            if isinstance(e, ConnectionRefusedError):
                 break
-            except (ConnectionRefusedError, OSError) as e:
-                last_error = str(e)[:80]
-                # ConnectionRefused 不需要重试
-                if isinstance(e, ConnectionRefusedError):
-                    break
-            except Exception as e:
-                last_error = str(e)[:80]
-            if attempt < retries:
-                await asyncio.sleep(0.05 * (attempt + 1))
-        return AsyncScanResult(ip=ip, port=port, is_open=False, error=last_error)
+        except Exception as e:
+            last_error = str(e)[:80]
+        if attempt < retries:
+            await asyncio.sleep(0.05 * (attempt + 1))
+    return AsyncScanResult(ip=ip, port=port, is_open=False, error=last_error)
 
 
 async def _scan_async(targets, concurrency: int, timeout: float,
@@ -134,6 +152,9 @@ async def _scan_async(targets, concurrency: int, timeout: float,
                       controller=None) -> list:
     """异步扫描核心逻辑。"""
     semaphore = asyncio.Semaphore(concurrency)
+    # 按IP并发限制：同一IP最多3个并发连接
+    per_ip_sems = {}
+    per_ip_lock = asyncio.Lock()
     results = []
     done = 0
     open_count = 0
@@ -164,7 +185,9 @@ async def _scan_async(targets, concurrency: int, timeout: float,
         if stop_event and stop_event.is_set():
             return AsyncScanResult(ip=ip, port=port, is_open=False, error="stopped")
         try:
-            r = await _check_port(ip, port, timeout, semaphore, retries=1)
+            r = await _check_port(ip, port, timeout, semaphore,
+                                   per_ip_sems=per_ip_sems, per_ip_lock=per_ip_lock,
+                                   retries=1)
         except Exception as e:
             r = AsyncScanResult(ip=ip, port=port, is_open=False, error=str(e)[:80])
         results.append(r)
