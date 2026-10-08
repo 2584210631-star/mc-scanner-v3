@@ -1,5 +1,9 @@
 # MC Scanner v3.2.1 更新日志
 
+> **归档文档 / Archived**：本文记录 v3.2.1 的历史变更。文中「零依赖（vendored libs）」指当时的
+> `libs/` 目录，该目录已在后续版本删除（改为 `pip install -r requirements.txt`），
+> 原文保留仅作历史记录，不代表当前版本。
+
 ## 概述
 在原版 mc-scanner-v3 基础上的增量优化版，融合 matscan（mat-1）的核心特性。
 **不重写原有代码**，所有新功能以模块化方式集成，保持原版开箱即用、零依赖（vendored libs）的特性。
@@ -98,4 +102,5 @@
 
 - 完全向后兼容：所有新功能默认关闭，不影响原有行为
 - 数据库自动迁移：`init_db()` 自动创建新表，旧数据库无需手动升级
-- 零新增依赖：所有新模块使用标准库（sqlite3/urllib/hashlib/ipaddress），与原版 vendored libs 风格一致
+- 零新增依赖（当时）：所有新模块使用标准库（sqlite3/urllib/hashlib/ipaddress）。
+  注：`libs/` vendored 方式已废弃，现统一走 pip 安装

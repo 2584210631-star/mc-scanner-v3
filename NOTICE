@@ -19,6 +19,11 @@ This project incorporates design ideas from multiple open-source projects. Credi
 **重要说明 / Important**：v2 采用 GPL-3.0。v3 为独立重新实现，不包含 v2 的任何代码文件，因此不构成 GPL 衍生作品。如对许可边界有疑问，建议咨询法律专业人士。
 v2 used GPL-3.0. v3 is an independent reimplementation containing no v2 code, so it is not a GPL derivative work. If in doubt, consult legal counsel.
 
+> **边界声明 / Scope of this claim**：上述"不构成衍生作品"是项目方的自述结论，仓库本身无法自证
+> （shallow clone 仅 1 个 commit，无 v2 历史可逐文件比对）。若日后发现有 v2 代码残留，
+> 该部分不受本项目 MIT 声明覆盖，需按 GPL-3.0 处理。
+> The statement above is the project's own assertion and cannot be proven from this repository alone.
+
 ## 设计思路参考 / Design References (non-code)
 
 | 来源 / Source | 参考内容 / Reference | 对应模块 / Module |
@@ -27,6 +32,17 @@ v2 used GPL-3.0. v3 is an independent reimplementation containing no v2 code, so
 | **mdberkey/minecraft-protocol** | Minecraft 协议握手流程、加密握手思路 / Protocol handshake, encryption handshake | `core/bot.py`, `core/conn.py` |
 | **PrismarineJS/minecraft-data** | 协议数据包 ID 数据源 / Packet ID data source | `tools/gen_packets.py` (auto-download, MIT) |
 | **Fold Craft Launcher (FCL)** | 微软 OAuth 设备码流程的 client_id / Microsoft OAuth device-code client_id | `core/microsoft_auth.py` (public client_id only) |
+| **a4v3l1/minecraft-server-scanner** | 收藏管理体验、核心类型细分等设计思路（`UPGRADE_v3.2-Fusion.md` 自述"融合其优点"）/ Favorites UX, core-type classification ideas | `storage/favorites.py`, `core/probe.py` |
+| **persona.md / SillyTavern / persona-spec** | AI 人格文档结构（Character Card / Scene Contracts / 分层描述）/ AI persona document structure | `docs/AI_PERSONAS_DETAILED.md`, `core/ai_personas.py` |
+
+### 参考来源的许可状态 / License status of references
+
+- **a4v3l1/minecraft-server-scanner**：本次审计未能在其仓库内确认许可证声明，**许可状态未知**。
+  本项目仅借鉴设计思路、未复制其代码；若上游另有署名或许可要求，需在此补充。
+- **persona.md / SillyTavern 角色卡结构 / persona-spec**：属社区文档与格式约定，其许可与是否允许
+  搬运文本**需人工核对**。`docs/AI_PERSONAS_DETAILED.md` 的人格提示词文本为本项目自写。
+- **FCL 的 client_id**：为公开 client_id，用于微软设备码登录流程；该 client_id 属于他人应用，
+  以它发起登录是否符合上游项目与 Microsoft 的使用条款**需自行核对**，本仓库不声明已获授权。
 
 ## 直接依赖 / Direct Dependencies
 
@@ -37,8 +53,8 @@ v2 used GPL-3.0. v3 is an independent reimplementation containing no v2 code, so
 | cryptography | Apache-2.0/BSD | AES/CFB8 加密（推荐后端）/ AES/CFB8 encryption (recommended backend) |
 | pytest | MIT | 测试框架 / Testing framework |
 
-> **注意 / Note**：v3.6.4 起不再 vendor 任何第三方依赖，全部通过 `pip install -r requirements.txt` 安装。异步扫描降级为标准库 asyncio，不影响功能。
-> Since v3.6.4, no third-party dependencies are vendored. Install all dependencies via `pip install -r requirements.txt`. Async scanning falls back to stdlib asyncio with no functional loss.
+> **注意 / Note**：本项目不再 vendor 任何第三方依赖（`libs/` 目录已删除），全部通过 `pip install -r requirements.txt` 安装。异步扫描降级为标准库 asyncio，不影响功能。
+> No third-party dependencies are vendored any more (the `libs/` directory was removed). Install all dependencies via `pip install -r requirements.txt`. Async scanning falls back to stdlib asyncio with no functional loss.
 
 ## 代码中的参考标注 / Reference Annotations in Code
 

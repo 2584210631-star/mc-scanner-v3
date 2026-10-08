@@ -1,13 +1,17 @@
 @echo off
 cd /d "%~dp0"
-title MC Scanner v3.6.3
 
-echo Starting MC Scanner v3.6.3...
+REM 版本号单一来源：config.__version__
+set MCVER=unknown
+for /f "delims=" %%v in ('python -c "import config;print(config.__version__)" 2^>nul') do set MCVER=%%v
+title MC Scanner v%MCVER%
+
+echo Starting MC Scanner v%MCVER%...
 echo.
 
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo Python not found! Please install Python 3.8+
+    echo Python not found! Please install Python 3.10+
     echo Download: https://www.python.org/downloads/
     echo Check "Add Python to PATH" during install
     pause

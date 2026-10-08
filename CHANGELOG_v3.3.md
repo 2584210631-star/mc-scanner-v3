@@ -1,11 +1,14 @@
 # MC Scanner v3.3 更新日志
 
+> **归档文档 / Archived**：本文记录 v3.3 的历史变更。文中「asyncio+uvloop+pysimdjson」指当时的
+> 依赖形态，后续版本已改为「零 vendor + uvloop/pysimdjson 可选加速」，原文保留仅作历史记录。
+
 ## 版本
 v3.3 (2026-09-03)
 
 ## 新增功能（4大模块 + 3个CLI命令 + 5个Web API）
 
-### 1. 代理支持模块 (`core/proxy.py`, 431行)
+### 1. 代理支持模块（`core/proxy.py`）
 - 纯 Python 实现 SOCKS5 和 HTTP CONNECT 代理协议，无额外依赖
 - 启动时从 ProxyScrape API 自动获取新鲜代理（HTTP + SOCKS5）
 - 智能轮换：优先选失败次数少、最近没用过的代理
@@ -13,19 +16,19 @@ v3.3 (2026-09-03)
 - 健康检查：批量测试代理可用性
 - 支持格式：`host:port`、`host:port:user:pass`、`socks5://host:port`、`http://user:pass@host:port`
 
-### 2. 插件抓取模块 (`core/plugins.py`, 189行)
+### 2. 插件抓取模块（`core/plugins.py`）
 - 进服后自动发送 `/plugins`、`/version` 等探测命令
 - 解析插件列表（名称+版本）、服务端软件、版本号
 - 自动识别常见插件：AuthMe、Factions、Economy、WorldGuard、CoreProtect、LuckPerms、Vault
 - 反作弊检测：NCP、Vulcan、Matrix、Spartan、AAC、Sparky、Intave、Horizon、Karhu 等12种
 
-### 3. RCON 客户端 (`core/rcon.py`, 185行)
+### 3. RCON 客户端（`core/rcon.py`）
 - 纯 Python 实现 Minecraft RCON 协议
 - 支持认证、单命令执行、批量命令执行
 - 多包响应正确处理（用空命令标记响应结束）
 - 便捷函数 `rcon_execute()` 一行调用
 
-### 4. 命令执行器 (`core/command_runner.py`, 191行)
+### 4. 命令执行器（`core/command_runner.py`）
 - Bot 登录服务器后自动执行预设命令列表
 - 支持从文件加载命令脚本（每行一条，`#` 开头为注释）
 - 条件命令：`IF <关键词> THEN <命令>`
@@ -54,5 +57,5 @@ v3.3 (2026-09-03)
 - 全部 144 个测试通过
 
 ## 基础
-- 基于 mc-scanner-v3 最新版（含异步扫描引擎 asyncio+uvloop+pysimdjson）
+- 基于 mc-scanner-v3 最新版（当时的异步扫描引擎 asyncio+uvloop+pysimdjson；现已改为标准库 asyncio 兜底 + 可选加速）
 - 保留 v3.2.1 全部功能（指纹/玩家历史/重扫/重复检测/Discord/分布式）

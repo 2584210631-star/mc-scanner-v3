@@ -1,20 +1,14 @@
 @echo off
 cd /d "%~dp0"
-title MC Scanner v3.6.3
 color 0A
 cls
-
-echo ========================================
-echo   MC Scanner v3.6.3 - Web Control Panel
-echo ========================================
-echo.
 
 REM Check Python
 where python >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Python not found!
     echo.
-    echo Please install Python 3.8 or higher:
+    echo Please install Python 3.10 or higher:
     echo   Download: https://www.python.org/downloads/
     echo   Check "Add Python to PATH" during installation
     echo.
@@ -22,14 +16,26 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Version: single source of truth is config.__version__
+set MCVER=unknown
+for /f "delims=" %%v in ('python -c "import config;print(config.__version__)" 2^>nul') do set MCVER=%%v
+title MC Scanner v%MCVER%
+
+echo ========================================
+echo   MC Scanner v%MCVER% - Web Control Panel
+echo ========================================
+echo.
+
 REM Show Python version
 for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
 echo [*] Python: %PYVER%
 
-REM Check local dependencies
-if not exist "libs\flask\__init__.py" (
-    echo [!] Missing libs directory, installing dependencies...
-    pip install flask -i https://pypi.tuna.tsinghua.edu.cn/simple
+REM Check dependencies. libs/ is no longer shipped, so test the real import
+REM instead of looking for libs\flask\__init__.py (that path never existed -> always reinstalled, and only flask was installed, pycryptodome missing).
+python -c "import flask" >nul 2>&1
+if errorlevel 1 (
+    echo [!] Missing dependencies, installing from requirements.txt...
+    pip install -r requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
         pause
