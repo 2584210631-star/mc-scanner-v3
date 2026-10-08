@@ -218,35 +218,37 @@ def test_observer_flow():
         assert wait_until(lambda: obs.status == "connected"), f"未连接成功, status={obs.status} err={obs.error}"
         assert obs.auth_mode == "offline", obs.auth_mode
 
-        # 2. 推送聊天与玩家信息
-        time.sleep(0.5)
+        # 2. 推送聊天与玩家信息（用轮询等待事件，替代固定 sleep：
+        #    sleep 式同步在高负载机器上会 flaky）
         server.push_system_chat("hello observer")
         server.push_player_add("Steve")
         server.push_player_add("Alex")
-        time.sleep(1.0)
+        assert wait_until(lambda: {"chat", "join"} <= {e[2] for e in obs.events}), \
+            f"未捕获聊天/加入: {[e[2] for e in obs.events]}"
         server.push_player_remove("Alex")
-        time.sleep(0.5)
+        assert wait_until(lambda: "leave" in {e[2] for e in obs.events}), \
+            f"未捕获离开: {[e[2] for e in obs.events]}"
 
         # 3. 事件被捕获
         types = [e[2] for e in obs.events]
         assert "chat" in types, f"未捕获聊天: {types}"
         assert "join" in types, f"未捕获加入: {types}"
         assert "leave" in types, f"未捕获离开: {types}"
+        assert wait_until(lambda: "Steve" in obs._players() and "Alex" not in obs._players()), \
+            f"玩家列表异常: {obs._players()}"
         players = obs._players()
-        assert "Steve" in players and "Alex" not in players, f"玩家列表异常: {players}"
         print("[OK] 聊天/进出事件与玩家列表正确:", types, players)
 
         # 4. 观察中发消息
         assert obs.status == "connected"
         obs.bot.send_chat("still alive")
-        time.sleep(0.5)
-        assert any("still alive" in m for m in server.received_messages), f"服务器未收到: {server.received_messages}"
+        assert wait_until(lambda: any("still alive" in m for m in server.received_messages)), \
+            f"服务器未收到: {server.received_messages}"
 
-        # 5. 停止
+        # 5. 停止：轮询到状态变更「且」底层连接标记已复位（play 线程异步收尾）
         obs.stop()
-        time.sleep(1.0)
-        assert obs.status in ("stopped", "disconnected"), obs.status
-        assert not getattr(obs.bot, "connected", True), "连接应已关闭"
+        assert wait_until(lambda: obs.status in ("stopped", "disconnected")), obs.status
+        assert wait_until(lambda: not getattr(obs.bot, "connected", True)), "连接应已关闭"
         print("[OK] 观察中发消息 + 停止正常")
 
         # 6. full() 输出结构完整
@@ -264,3 +266,5 @@ if __name__ == "__main__":
         print("\n=== 观察者 e2e 测试通过 ===")
     except Exception as e:
         print(f"\n=== 测试失败: {e} ===")
+        # 原实现吞掉异常且退出码恒为 0，CI 用它当脚本会假绿
+        sys.exit(1)

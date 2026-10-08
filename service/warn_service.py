@@ -167,9 +167,12 @@ def warn_multi_bots(ip: str, port: int = 25565, bot_count=5, name_prefix="Securi
                 results.append({"name": name, "success": r.success,
                                 "messages_sent": r.messages_sent, "error": r.error})
             except Exception as e:
-                results.append({"name": name, "success": False, "error": str(e)[:100]})
+                # 必须补齐 messages_sent：下面按此键求和，缺键会让整个多机器人接口 500
+                # （触发路径真实存在：join_and_warn 的 finally 里 bot.close() 抛出时异常会穿透）
+                results.append({"name": name, "success": False,
+                                "messages_sent": 0, "error": str(e)[:100]})
     success_count = sum(1 for r in results if r["success"])
-    total_messages = sum(r["messages_sent"] for r in results)
+    total_messages = sum(r.get("messages_sent", 0) for r in results)
     logger.info(f"多机器人警告完成: {success_count}/{bot_count}成功, 共{total_messages}条消息")
     return results
 

@@ -81,7 +81,8 @@ class TestCommandRunner(unittest.TestCase):
     def test_get_summary_empty(self):
         runner = CommandRunner(bot=None)
         summary = runner.get_summary()
-        self.assertIn("0", summary)
+        # 精确断言摘要格式：原来 assertIn("0", summary) 任何含 0 的输出都能通过
+        self.assertEqual(summary, "命令执行摘要: 共 0 条, 成功 0, 失败 0")
 
     def test_execute_without_bot(self):
         """没有 bot 时执行应失败但不崩溃"""
@@ -108,8 +109,12 @@ class TestCommandRunner(unittest.TestCase):
             CommandResult("/b", False, "", error="fail"),
         ]
         summary = runner.get_summary()
-        self.assertIn("1", summary)  # 成功数
-        self.assertIn("1", summary)  # 失败数
+        # 断言具体的统计字段而不是裸 "1"（"共 1 条"、"成功 11" 里也都含 1）
+        self.assertIn("共 2 条", summary)
+        self.assertIn("成功 1", summary)
+        self.assertIn("失败 1", summary)
+        self.assertIn("✓ /a", summary)
+        self.assertIn("✗ /b", summary)
 
 
 if __name__ == "__main__":

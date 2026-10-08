@@ -41,6 +41,8 @@ def update_players(db_path: str, ip: str, port: int, player_list: list):
         return
     now = datetime.now(timezone.utc).isoformat()
     conn = get_conn(db_path)
+    # 同一批里同名玩家只算一次：否则一次扫描的重复名单会让 seen_count 虚高
+    seen_names = set()
     for player in player_list:
         if isinstance(player, dict):
             name = player.get("name", "")
@@ -48,8 +50,9 @@ def update_players(db_path: str, ip: str, port: int, player_list: list):
         else:
             name = str(player)
             uuid = ""
-        if not name:
+        if not name or name in seen_names:
             continue
+        seen_names.add(name)
         conn.execute(
             """INSERT INTO player_history (ip, port, player_name, player_uuid, first_seen, last_seen, seen_count)
                VALUES (?, ?, ?, ?, ?, ?, 1)
@@ -69,8 +72,16 @@ def get_player_history(db_path: str, player_name: str = None,
     查询玩家历史。
     可按玩家名、服务器IP:Port过滤。
     """
+    # 显式列名：schema 增列时 SELECT * 会与下面的手写列顺序列表错位
+    cols = ["id", "ip", "port", "player_name", "player_uuid", "first_seen", "last_seen", "seen_count"]
+    # 分页边界：limit<=0 时 SQLite 的 LIMIT -1 表示无上限
+    limit = int(limit)
+    offset = max(0, int(offset))
+    if limit <= 0:
+        limit = 100
+    limit = min(limit, 10000)
     conn = get_conn(db_path)
-    sql = "SELECT * FROM player_history WHERE 1=1"
+    sql = "SELECT " + ", ".join(cols) + " FROM player_history WHERE 1=1"
     args = []
     if player_name:
         sql += " AND player_name LIKE ?"
@@ -84,7 +95,6 @@ def get_player_history(db_path: str, player_name: str = None,
     sql += " ORDER BY last_seen DESC LIMIT ? OFFSET ?"
     args.extend([limit, offset])
     rows = conn.execute(sql, args).fetchall()
-    cols = ["id", "ip", "port", "player_name", "player_uuid", "first_seen", "last_seen", "seen_count"]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -113,6 +123,19 @@ def get_server_players(db_path: str, ip: str, port: int, limit: int = 50) -> lis
         (ip, port, limit)
     ).fetchall()
     return [{"name": r[0], "seen_count": r[1], "last_seen": r[2], "first_seen": r[3]} for r in rows]
+
+
+def clean_old_players(db_path: str, retention_days: int = 90) -> int:
+    """清理长期未再出现的玩家记录（表原本只增不减）。retention_days<=0 时不清。"""
+    if retention_days <= 0:
+        return 0
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+    conn = get_conn(db_path)
+    cursor = conn.execute("DELETE FROM player_history WHERE last_seen < ?", (cutoff,))
+    deleted = cursor.rowcount
+    conn.commit()
+    return deleted
 
 
 def get_stats(db_path: str) -> dict:

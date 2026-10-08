@@ -39,13 +39,24 @@ class TestBot(unittest.TestCase):
             bot.close()
 
     def test_bot_send_chat(self):
-        """测试发送聊天消息"""
+        """测试发送聊天消息：必须真的通过协议层发出携带该消息的聊天包"""
         bot = MCBot("127.0.0.1", self.server.port, protocol_version=767,
                     username="TestBot", timeout=5.0)
         try:
             bot.connect()
-            bot.send_chat("Hello from test")
-            # 如果没抛异常就算成功
+            chat_id = bot.play_packets.get("sb_chat")
+            self.assertIsNotNone(chat_id, "协议 767 缺少 sb_chat 包ID")
+            sent = []
+            orig = bot.conn.send_packet
+            # 拦截底层发送：断言「消息确实被编码进聊天包」，而不是「没抛异常」
+            bot.conn.send_packet = lambda pid, payload=b"": sent.append((pid, payload))
+            try:
+                bot.send_chat("Hello from test")
+            finally:
+                bot.conn.send_packet = orig
+            chat_pkts = [(pid, payload) for pid, payload in sent if pid == chat_id]
+            self.assertEqual(len(chat_pkts), 1, f"应只发出一个聊天包，实际 {sent!r}")
+            self.assertIn(b"Hello from test", chat_pkts[0][1], "聊天包载荷不含所发消息")
         finally:
             bot.close()
 

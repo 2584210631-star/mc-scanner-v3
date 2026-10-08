@@ -9,6 +9,12 @@ import time
 import urllib.request
 import urllib.error
 
+import logger
+
+# 冷却状态是「key -> 时间戳」的字典：长驻进程里必须淘汰，否则内存缓增
+_COOLDOWN_TTL = 7 * 86400      # 最长冷却期是 1 天，超过 7 天的记录已无意义
+_MAX_COOLDOWN_KEYS = 10000     # 键数量硬上限，超出按时间戳砍最旧的
+
 
 class DiscordNotifier:
     """Discord Webhook 通知器。"""
@@ -24,6 +30,10 @@ class DiscordNotifier:
     def send(self, content: str = None, embed: dict = None) -> bool:
         """发送 Discord 消息。"""
         if not self.enabled or not self.webhook_url:
+            return False
+        # Discord webhook 只支持 https，挡掉 http 可避免明文外发凭证/内容
+        if not self.webhook_url.startswith("https://"):
+            logger.warning("Discord webhook 非 https 地址，已跳过发送")
             return False
         payload = {
             "username": self.username,
@@ -44,7 +54,9 @@ class DiscordNotifier:
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return resp.status in (200, 204)
-        except (urllib.error.URLError, urllib.error.HTTPError, Exception):
+        except (urllib.error.URLError, OSError, ValueError, TypeError) as e:
+            # 原来写成 except (..., Exception) 等于吞掉一切且零日志，通知失败完全不可观测
+            logger.warning(f"Discord 通知发送失败: {e}")
             return False
 
     def notify_new_server(self, server: dict):
@@ -69,7 +81,7 @@ class DiscordNotifier:
             "timestamp": _iso_now(),
         }
         if self.send(embed=embed):
-            self._last_notify[key] = time.time()
+            self._mark_notified(key)
 
     def notify_cracked_server(self, server: dict):
         """发现离线/破解服通知。"""
@@ -87,7 +99,7 @@ class DiscordNotifier:
             "timestamp": _iso_now(),
         }
         if self.send(embed=embed):
-            self._last_notify[key] = time.time()
+            self._mark_notified(key)
 
     def notify_player_join(self, server: dict, player_name: str):
         """玩家上线通知。"""
@@ -105,7 +117,7 @@ class DiscordNotifier:
             "timestamp": _iso_now(),
         }
         if self.send(embed=embed):
-            self._last_notify[key] = time.time()
+            self._mark_notified(key)
 
     def notify_player_leave(self, server: dict, player_name: str):
         """玩家下线通知。"""
@@ -122,7 +134,19 @@ class DiscordNotifier:
             "timestamp": _iso_now(),
         }
         if self.send(embed=embed):
-            self._last_notify[key] = time.time()
+            self._mark_notified(key)
+
+    def _mark_notified(self, key: str):
+        """记录冷却时间戳，并淘汰过期/超量项，避免 _last_notify 只增不减。"""
+        self._last_notify[key] = time.time()
+        now = time.time()
+        for k in [k for k, ts in self._last_notify.items() if now - ts > _COOLDOWN_TTL]:
+            del self._last_notify[k]
+        overflow = len(self._last_notify) - _MAX_COOLDOWN_KEYS
+        if overflow > 0:
+            oldest = sorted(self._last_notify.items(), key=lambda kv: kv[1])[:overflow]
+            for k, _ in oldest:
+                del self._last_notify[k]
 
     def _should_skip(self, key: str, cooldown: int = 300) -> bool:
         """检查是否在冷却期内（防重复通知）。"""
