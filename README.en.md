@@ -13,7 +13,7 @@ English | [中文](README.md)
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.3
+# 🛠️ MC Scanner v3.6.5
 
 > The single source of truth for the version is `config.__version__` (currently `3.6.3`): CLI `--version`, the Web panel and the launcher scripts all read it. Bump it there only.
 
@@ -482,7 +482,65 @@ python3 tools/gen_packets.py --download
 ## 📜 Changelog
 
 <details>
-<summary><b>v3.6.4 (Unreleased)</b></summary>
+<summary><b>v3.6.5</b></summary>
+
+Security audit maintenance fixes — 8 commits, 101 files, tests 193 → 212.
+
+**Protocol**
+- **Decompression bomb**: `zlib.decompress` replaced with `decompressobj().decompress(data, max_length)`, 8MB cap now actually enforced (previously checked server-reported `data_length`, which can lie)
+- **VarInt**: Limited to 5 bytes (previously 6th byte was accepted before the check), added int32 sign extension (`0xFFFFFFFF` correctly returns -1, not 4294967295)
+- **NBT List count**: Validates count ≤ remaining stream bytes, malicious server sending `count=0x7FFFFFFF` no longer spins for minutes
+- **Packet ID mismatch**: 770-772 hand-written table narrowed to just 770, 771/772 now use auto table (previously 1.21.5 IDs overwrote 1.21.6+, causing wrong keep-alive replies and kicks)
+
+**Scanner**
+- **Safe mode concurrency**: No longer hardcodes `slp_concurrency=400`, uses profile defaults (previously safe mode actually ran at 400 concurrency, 20x the designed value)
+- **Port expansion DoS**: `parse_ports_spec` clamps to 1-65535 first, stops at max_ports, no longer materializes full range (`1-50000000` previously consumed GBs of RAM)
+- **fd leak**: async_probe timeout/exception branches now close writer in finally
+- **Cross-event-loop lock**: `_rate_lock` created per-run, no longer bound to first loop causing silent failure on second `asyncio.run`
+- **Malformed banner crash**: version/players non-dict now has isinstance fallback
+- **Async path exclude table**: cli.py async entry unified through `parse_and_filter_targets`, private/reserved ranges no longer bypassed
+- **masscan results persist**: Previously masscan branch called `probe_list()` (comment explicitly said "don't save to DB"), now explicitly `db.upsert_many`
+
+**Web / Frontend**
+- **Stored XSS**: Auto-scan log `innerHTML` concatenation now uses `escapeHtml` (logs contain server-controlled MOTD/version)
+- **Reflected XSS**: `/auth-response` error/err_desc/name all escaped
+- **SSRF + key leak**: AI request base_url no longer overridable by request, uses config only
+- **services_assistant dead code**: Previously created its own thread calling non-existent `ScanEngine(targets=..., run())` + accessing non-existent `scan_state["stop_event"]`, natural-language scan chain crashed 100%. Now calls `services_scan.start_scan_task`
+- **warn KeyError**: Exception branches now include `messages_sent: 0`, no more `sum(r["messages_sent"])` 500
+- **scan_tasks memory leak**: Tasks evicted after completion, no longer hold full results indefinitely
+- **Capability gates**: `/api/auto_scan/add`, random internet-wide scan now check capability/read_only
+- **Observer log lock**: `_ensure_log_file`/`_append_log`/`_next_seq` locked, prevents concurrent fd leak/seq duplication
+- **Health monitor state race**: `del status[k]` locked, status endpoint uses snapshot
+
+**Bot / AI**
+- **AI `/` interception bypass**: `send_message`/`send_to_all`/opener now all go through `_safe_send_chat`, no longer bypass slash-command interception
+- **SMTP cert verification**: `ssl._create_stdlib_context()` (CERT_NONE) replaced with `ssl.create_default_context()`, prevents MITM stealing email credentials
+- **Ghost players**: AI bot duration/reconnect-limit branches now close() in finally before returning
+- **auto_scanner resource caps**: targets/ports have size limits, `ai_hijack` deduplicated + handles retained + capped
+
+**Storage**
+- **Favorites lost updates**: `_write_atomic` uses `mkstemp` + `os.replace`, no more read-modify-write race across calls
+- **rescan_all lock-held I/O**: Network probing moved out of critical section (previously `add_favorite` blocked for 5.68 seconds)
+- **SQLite connection leak**: Connection pool cap + LRU, db_path fixed not from request
+- **JSON truncation**: Semantically truncated to guarantee valid JSON, no more character-wise 2000 truncation producing invalid JSON
+- **Shard race**: `claim_shard` read-modify-write uses file lock, `job_id` regex validated against path traversal
+
+**CLI / Docs**
+- **Single source version**: run.bat reads from `config.__version__`, no longer hardcoded 3.6.3
+- **run.bat dependency check**: Changed to `import flask` (previously checked `libs\flask\__init__.py` which never existed after libs deletion, causing always-reinstall and only installing flask, missing pycryptodome)
+- **config.example.json**: Aligned with DEFAULT_CONFIG
+
+**Still broken**
+
+- Some offline servers kick with "Packet chat was larger than expected": still under investigation
+- Some protocol versions (e.g. 776) auto-generated table lacks Configuration segment, falls back to hand-written constants
+- Forced-mod-validation Forge/NeoForge servers can't connect (vanilla client hard limit)
+- Auth not restored: `_check_auth` remains a no-op by design — tool is intended for local 127.0.0.1 use; binding to 0.0.0.0 is risky
+
+</details>
+
+<details>
+<summary><b>v3.6.4</b></summary>
 
 This release is mostly bug fixes and cleanup, no new features.
 

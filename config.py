@@ -9,7 +9,7 @@ import tempfile
 import threading
 
 # 版本号单一来源：CLI、Web 面板、启动脚本都从这里取，避免各处写死导致不一致。
-__version__ = "3.6.3"
+__version__ = "3.6.5"
 
 DEFAULT_CONFIG = {
     "username": "SecurityBot",
