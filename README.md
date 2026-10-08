@@ -13,7 +13,7 @@
   ◆──────────────────────────────────────◆
 ```
 
-# 🛠️ MC Scanner v3.6.3
+# 🛠️ MC Scanner v3.6.5
 
 > 版本号唯一来源是 `config.__version__`（当前 `3.6.3`）：CLI `--version`、Web 面板和启动脚本都从这里取。升级版本只改这一处，不要再手写进文档/脚本。
 
@@ -472,7 +472,64 @@ python3 tools/gen_packets.py --download
 ## 📜 更新日志 / Changelog
 
 <details>
-<summary><b>v3.6.4（未发布 / Unreleased）</b>（点击展开 / Click to expand）</summary>
+<summary><b>v3.6.5</b>（点击展开 / Click to expand）</summary>
+
+这版是安全审计维修清单的集中修复，8 个提交 101 个文件，测试 193 → 212。/ Security audit maintenance fixes, 8 commits, 101 files, tests 193 → 212.
+
+**协议层 / Protocol**
+- **解压炸弹**：`zlib.decompress` 改用 `decompressobj().decompress(data, max_length)`，8MB 上限真正生效（之前检查服务器自报的 data_length，可撒谎）
+- **VarInt**：限 5 字节（之前第 6 字节被先收下再判断），加 int32 符号扩展（`0xFFFFFFFF` 正确返回 -1 而非 4294967295）
+- **NBT List 计数**：校验 count ≤ 剩余字节数，恶意服发 `count=0x7FFFFFFF` 不再空转十几分钟
+- **包 ID 错位**：770-772 手写表范围缩到只 770，771/772 交自动表（之前用 1.21.5 的 ID 覆盖 1.21.6+，导致保活回错包被踢）
+
+**扫描器 / Scanner**
+- **safe 模式并发**：不再硬编码 `slp_concurrency=400`，走 profile 默认值（之前 safe 模式实际并发 400，是设计值 20 的 20 倍）
+- **端口展开 DoS**：`parse_ports_spec` 先夹到 1-65535，到 max_ports 即停，不再全量物化 range（`1-50000000` 之前吃几 GB 内存）
+- **fd 泄漏**：async_probe 超时/异常分支加 finally 关 writer
+- **跨 event loop 锁**：`_rate_lock` 按次创建，不再绑定首个 loop 导致第二次 asyncio.run 静默失败
+- **畸形 banner 崩溃**：version/players 非 dict 时 isinstance 兜底
+- **异步路径排除表**：cli.py 异步入口统一走 `parse_and_filter_targets`，私网/保留段不再被绕过
+- **masscan 结果落库**：之前 masscan 分支调 `probe_list()`（注释明写"不存数据库"），现显式 `db.upsert_many`
+
+**Web / 前端**
+- **存储型 XSS**：自动扫描日志 `innerHTML` 拼接加 `escapeHtml`（日志含远端可控 MOTD/版本）
+- **反射型 XSS**：`/auth-response` 的 error/err_desc/name 统一转义
+- **SSRF + 密钥外泄**：AI 请求 base_url 不再可由请求方覆盖，只用配置值
+- **services_assistant 死代码**：原来自建线程调不存在的 `ScanEngine(targets=..., run())` + 访问不存在的 `scan_state["stop_event"]`，自然语言扫描链路 100% 崩溃。现改调 `services_scan.start_scan_task`
+- **warn KeyError**：异常分支补 `messages_sent: 0`，不再 `sum(r["messages_sent"])` 必 500
+- **scan_tasks 内存泄漏**：任务结束后延迟淘汰，不再每任务长期持有全量 results
+- **能力开关门禁**：`/api/auto_scan/add`、随机全网扫描补 capability/read_only 校验
+- **观察者日志锁**：`_ensure_log_file`/`_append_log`/`_next_seq` 加锁，防并发 fd 泄漏/seq 重复
+- **健康监控状态竞态**：`del status[k]` 加锁，状态接口快照遍历
+
+**Bot / AI**
+- **AI `/` 拦截绕过**：`send_message`/`send_to_all`/opener 统一走 `_safe_send_chat`，不再绕过斜杠命令拦截
+- **SMTP 证书校验**：`ssl._create_stdlib_context()`（CERT_NONE）改 `ssl.create_default_context()`，防 MITM 窃取邮箱凭据
+- **幽灵玩家**：AI bot duration/重连上限分支 return 前统一 finally close()
+- **auto_scanner 资源上限**：targets/ports 加规模上限，`ai_hijack` 去重 + 留句柄 + 上限
+
+**存储 / Storage**
+- **收藏夹丢更新**：`_write_atomic` 用 `mkstemp` + `os.replace`，不再读→改→写跨调用无锁
+- **rescan_all 持锁做 I/O**：网络探测移出临界区（之前 `add_favorite` 阻塞 5.68 秒）
+- **SQLite 连接泄漏**：连接池上限 + LRU，db_path 固定不再来自请求
+- **JSON 截断**：按语义裁剪后保证合法，不再按字符截断 2000 导致非法 JSON
+- **分片竞态**：`claim_shard` 读-改-写加文件锁，`job_id` 正则校验防路径穿越
+
+**CLI / 文档**
+- **版本号单一来源**：run.bat 从 `config.__version__` 取，不再写死 3.6.3
+- **run.bat 依赖检查**：改 `import flask` 判依赖（之前查 `libs\flask\__init__.py`，libs 已删所以永远重装且只装 flask 漏 pycryptodome）
+- **config.example.json**：与 DEFAULT_CONFIG 对齐
+
+**还没修好的 / Still broken**
+- 部分离线服发消息被踢 "Packet chat was larger than expected"：仍在排查
+- 个别协议版本（如 776）自动生成的协议表缺 Configuration 段，回退手写常量
+- 强制模组校验的 Forge/NeoForge 服无法连接（纯原版客户端硬限制）
+- 鉴权未恢复：`_check_auth` 仍为空函数，工具定位本地 127.0.0.1 使用，绑 0.0.0.0 有风险
+
+</details>
+
+<details>
+<summary><b>v3.6.4</b>（点击展开 / Click to expand）</summary>
 
 这版主要是修 bug 和清理，没有新功能。/ Mostly bug fixes and cleanup, no new features.
 
