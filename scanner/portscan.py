@@ -137,6 +137,21 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
         if do_shuffle:
             print("[*] 已随机化扫描顺序（防顺序扫描特征）")
 
+    # 按IP并发限制：同一IP最多3个并发连接，防止单IP被打封
+    # 全局并发高但分散在不同IP上时不会触发；单IP多端口时自动收敛
+    _per_ip_sems = {}
+    _per_ip_lock = threading.Lock()
+    MAX_PER_IP = 3
+
+    def _check_port_limited(ip, port, timeout):
+        with _per_ip_lock:
+            sem = _per_ip_sems.get(ip)
+            if sem is None:
+                sem = threading.Semaphore(MAX_PER_IP)
+                _per_ip_sems[ip] = sem
+        with sem:
+            return check_port(ip, port, timeout)
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {}
         target_iter = iter(target_seq)
@@ -154,7 +169,7 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
                 if elapsed < min_interval:
                     time.sleep(min_interval - elapsed)
                 last_submit = time.time()
-            futures[executor.submit(check_port, ip, port, timeout)] = (ip, port)
+            futures[executor.submit(_check_port_limited, ip, port, timeout)] = (ip, port)
 
         # 初始填充一批（用较小批次让主循环尽早开始处理已完成的任务，
         # 避免限速下提交全部目标要等很久才看到进度）

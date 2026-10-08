@@ -192,7 +192,7 @@ class ScanEngine:
                     done += 1
                     self._bump("total")
                     if progress_callback:
-                        progress_callback(done, total)
+                        progress_callback(done, total, 0)
                     if save_callback and done % save_every == 0:
                         save_callback(results[-save_every:])
                         self._print_progress(done)
@@ -203,7 +203,7 @@ class ScanEngine:
                     futures[ex.submit(fn, ip, port)] = (ip, port)
         return results, done
 
-    def scan_targets(self, targets, save_every: int = 50) -> list:
+    def scan_targets(self, targets, save_every: int = 50, progress_callback=None) -> list:
         """批量扫描目标（分批提交，大网段不OOM）
 
         结果增量落库：save_callback 写过的部分不再整体重写，收尾只补最后
@@ -212,7 +212,7 @@ class ScanEngine:
         db.init_db(self.db_path)
         def _save(batch):
             db.upsert_many(self.db_path, batch)
-        results, done = self._run_batch(targets, self.probe_one, _save, save_every)
+        results, done = self._run_batch(targets, self.probe_one, _save, save_every, progress_callback=progress_callback)
         tail = done % save_every if save_every else 0
         if tail:
             db.upsert_many(self.db_path, results[-tail:])
@@ -242,7 +242,7 @@ class ScanEngine:
         if not open_ports:
             return []
         print(f"[*] 阶段2: SLP探测 + 认证检测（{len(open_ports)} 个目标）")
-        return self.scan_targets(iter(open_ports))
+        return self.scan_targets(iter(open_ports), progress_callback=progress_callback)
 
     def warn_targets(self, targets, username: str = "SecurityBot",
                      messages: list = None, message_delay: float = 0.8,
