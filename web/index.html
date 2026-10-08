@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#101010">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -857,9 +857,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   tbody tr td[data-label="操作"] .actions .btn {
     min-height: 38px; font-size: 16px; display: flex; align-items: center; justify-content: center;
   }
-  /* 隐藏空备注行 */
-  tbody tr td[data-label="备注"]:empty,
-  tbody tr td[data-label="备注"]:contains("-") { display: none; }
+  /* 隐藏空备注行：:contains() 非标准会让整条规则被丢弃，空备注在 JS 里渲染为空串，用 :empty 即可 */
+  tbody tr td[data-label="备注"]:empty { display: none; }
   /* 人数行突出 */
   tbody tr td[data-label="人数"] { font-size: 15px; font-weight: 700; }
 
@@ -1230,7 +1229,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
         <button class="btn btn-primary" id="btnStartScan" data-need="scan" onclick="startScan()">开始扫描</button>
-        <button class="btn btn-warning" onclick="startRandomScan()">暴力随机扫描</button>
+        <button class="btn btn-warning" data-need="scan" onclick="startRandomScan()">暴力随机扫描</button>
         <button class="btn btn-danger" id="btnStopScan" onclick="stopScan()" disabled>停止</button>
         <button class="btn btn-secondary" onclick="saveConfig()">保存配置</button>
       </div>
@@ -1240,8 +1239,6 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="stats-grid">
         <div class="stat-card"><div class="value" id="statTotal">0</div><div class="label">总目标</div></div>
         <div class="stat-card"><div class="value" id="statUp">0</div><div class="label">开放端口</div></div>
-        <div class="stat-card"><div class="value" id="statCracked">0</div><div class="label">离线/破解</div></div>
-        <div class="stat-card"><div class="value" id="statOnline">0</div><div class="label">正版</div></div>
         <div class="stat-card"><div class="value" id="statElapsed">0s</div><div class="label">已用时间</div></div>
       </div>
       <div class="progress-bar">
@@ -1300,10 +1297,10 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-success" onclick="exportResults('json')">导出JSON</button>
         <button class="btn btn-success" onclick="exportResults('csv')">导出CSV</button>
         <button class="btn btn-success" onclick="exportResults('html')">HTML报告</button>
-        <button class="btn btn-danger" onclick="openBatchWarnModal()">批量警告选中</button>
-        <button class="btn btn-info" onclick="openBatchObserverModal()">批量观察选中</button>
-        <button class="btn btn-warning" onclick="openMultiWarnModal()">多机器人警告选中</button>
-        <button class="btn btn-violet" onclick="openBatchAiModal()">批量AI托管选中</button>
+        <button class="btn btn-danger" data-need="login" onclick="openBatchWarnModal()">批量警告选中</button>
+        <button class="btn btn-info" data-need="login" onclick="openBatchObserverModal()">批量观察选中</button>
+        <button class="btn btn-warning" data-need="login" onclick="openMultiWarnModal()">多机器人警告选中</button>
+        <button class="btn btn-violet" data-need="login" onclick="openBatchAiModal()">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllServers')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('importFile').click()">导入masscan结果</button>
         <input type="file" id="importFile" accept=".ndjson,.json" style="display:none;" onchange="importMasscanResults(this)">
@@ -1313,12 +1310,12 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
           <thead>
             <tr>
               <th style="width:30px;"><input type="checkbox" id="selectAllServers" onchange="toggleSelectAll(this)"></th>
-              <th class="sortable" onclick="sortResults('ip')">IP:端口<span class="sort-arrow">↕</span></th>
-              <th class="sortable" onclick="sortResults('version')">版本<span class="sort-arrow">↕</span></th>
+              <th class="sortable" data-sort="ip" onclick="sortResults('ip', event)">IP:端口<span class="sort-arrow">↕</span></th>
+              <th class="sortable" data-sort="version" onclick="sortResults('version', event)">版本<span class="sort-arrow">↕</span></th>
               <th>核心</th><th>指纹</th><th>协议</th><th>MOTD</th>
-              <th class="sortable" onclick="sortResults('players')">玩家<span class="sort-arrow">↕</span></th>
-              <th>在线玩家</th><th>认证</th>
-              <th class="sortable" onclick="sortResults('ping')">延迟<span class="sort-arrow">↕</span></th>
+              <th class="sortable" data-sort="players" onclick="sortResults('players', event)">人数<span class="sort-arrow">↕</span></th>
+              <th>玩家</th><th>认证</th>
+              <th class="sortable" data-sort="ping" onclick="sortResults('ping', event)">延迟<span class="sort-arrow">↕</span></th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1358,8 +1355,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-primary" onclick="loadDbResults(1)">查询</button>
         <button class="btn btn-info" onclick="dbRescanSelected()">重新探查选中</button>
         <button class="btn btn-success" onclick="dbFavoriteSelected()">收藏选中</button>
-        <button class="btn btn-danger" onclick="openDbWarnModal()">警告选中</button>
-        <button class="btn btn-violet" onclick="openBatchAiModal('db')">批量AI托管选中</button>
+        <button class="btn btn-danger" data-need="login" onclick="openDbWarnModal()">警告选中</button>
+        <button class="btn btn-violet" data-need="login" onclick="openBatchAiModal('db')">批量AI托管选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'dbSelectAll')">全选</button>
         <button class="btn btn-secondary" onclick="exportDb('txt')">导出TXT</button>
         <button class="btn btn-secondary" onclick="exportDb('csv')">导出CSV</button>
@@ -1432,9 +1429,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <input type="text" id="favSearch" placeholder="搜索 IP/备注/标签..." style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')loadFavorites()">
         <button class="btn btn-primary" onclick="loadFavorites()">搜索</button>
         <button class="btn btn-success" onclick="rescanAllFavorites()">全部重查</button>
-        <button class="btn btn-danger" onclick="openFavBatchWarnModal()">批量警告选中</button>
-        <button class="btn btn-info" onclick="openFavBatchObserverModal()">批量观察选中</button>
-        <button class="btn btn-violet" onclick="openBatchAiModal('fav')">批量AI托管选中</button>
+        <button class="btn btn-danger" data-need="login" onclick="openFavBatchWarnModal()">批量警告选中</button>
+        <button class="btn btn-info" data-need="login" onclick="openFavBatchObserverModal()">批量观察选中</button>
+        <button class="btn btn-violet" data-need="login" onclick="openBatchAiModal('fav')">批量AI托管选中</button>
         <button class="btn btn-danger" onclick="batchDeleteFavorites()">批量删除选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllFav')">全选</button>
         <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
@@ -1480,7 +1477,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <div class="form-group" style="flex:2;"><label>命令（不含 /）</label><input type="text" id="toolCmdCmd" placeholder="例如: op PlayerName 或 gamemode creative"></div>
         <div class="form-group"><label>AuthMe密码（可选）</label><input type="text" id="toolCmdAuthme" placeholder="留空不启用"></div>
       </div>
-      <button class="btn btn-primary" onclick="sendToolCommand()">发送命令</button>
+      <button class="btn btn-primary" data-need="login" onclick="sendToolCommand()">发送命令</button>
       <div id="toolCmdResult" style="margin-top:12px;"></div>
     </div>
     <div class="tool-card">
@@ -1700,7 +1697,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <select id="multiPremiumAccount" style="display:none;font-size:12px;padding:6px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-input);color:var(--text-primary);"><option value="">加载中...</option></select>
     </div>
     <p class="hint" style="color:#00d992">API Key/地址/模型在「设置」页配置，这里直接用</p>
-    <button onclick="startMultiAi()" class="btn-primary">启动多AI群聊</button>
+    <button onclick="startMultiAi()" class="btn-primary" data-need="login">启动多AI群聊</button>
   </div>
   <div class="panel">
     <h4>多AI群聊组</h4>
@@ -2133,7 +2130,7 @@ Protect your server NOW!</textarea></div>
     <div class="form-group"><label>命令（不含 /）</label><input type="text" id="cmdCommand" placeholder="例如: op PlayerName"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeCmdModal()">取消</button>
-      <button class="btn btn-primary" onclick="confirmCmd()">发送</button>
+      <button class="btn btn-primary" data-need="login" onclick="confirmCmd()">发送</button>
     </div>
     <div id="cmdResult" style="margin-top:12px;"></div>
   </div>
@@ -2248,9 +2245,9 @@ if ('serviceWorker' in navigator) {
 </div>
 
 </body>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- 第三方脚本补 SRI 校验（无 SRI 时 CDN 被劫持即前端完全失陷）；gsap 全站未使用，已移除 -->
+<script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js" integrity="sha384-oLmuahJgYYR1aWgZwdMQQ2AClE6A2eEwV2x1Z7cbIHehfkkmommQLH3wX1NDEszb" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <script>
 // ===== 登录会话：fetch 自动带会话token，未登录/需改密时弹出登录遮罩 =====
 const _origFetch = window.fetch.bind(window);
@@ -2998,7 +2995,7 @@ async function checkMasscan() {
     const res = await fetch('/api/masscan/status');
     const data = await res.json();
     const html = data.available
-      ? `<span class="masscan-badge masscan-ok">已就绪</span> 版本: ${data.version}`
+      ? `<span class="masscan-badge masscan-ok">已就绪</span> 版本: ${escapeHtml(data.version)}`
       : `<span class="masscan-badge masscan-no">未找到</span> masscan.exe 不在程序目录或 PATH 中`;
     document.getElementById('masscanStatus').innerHTML = html;
     document.getElementById('masscanCheckResult').innerHTML = html;
@@ -3088,8 +3085,13 @@ async function loadTaskList() {
 }
 
 async function pollStatus() {
-  const res = await fetch('/api/scan/status');
-  const data = await res.json();
+  // 轮询失败（断网 / 429 / 500）时静默跳过，避免未捕获的 Promise 拒绝刷控制台
+  let data;
+  try {
+    const res = await fetch('/api/scan/status');
+    data = await res.json();
+  } catch(e) { return; }
+  if (!data || typeof data !== 'object') return;
   loadTaskList();
   if (data.error) {
     document.getElementById('headerStatus').textContent = '错误: ' + data.error;
@@ -3097,12 +3099,12 @@ async function pollStatus() {
   }
   document.getElementById('statTotal').textContent = (data.scanned || 0) + ' / ' + (data.total || 0);
   document.getElementById('statUp').textContent = data.open_count || 0;
-  document.getElementById('statElapsed').textContent = Math.floor(data.elapsed) + 's';
+  document.getElementById('statElapsed').textContent = Math.floor(data.elapsed || 0) + 's';
   const pct = data.progress || 0;
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('progressFill').textContent = pct + '%';
   const logBox = document.getElementById('logBox');
-  logBox.innerHTML = data.logs.map(l => `<div><span class="time">${escapeHtml(l.time)}</span>${escapeHtml(l.msg)}</div>`).join('');
+  logBox.innerHTML = (data.logs || []).map(l => `<div><span class="time">${escapeHtml(l.time)}</span>${escapeHtml(l.msg)}</div>`).join('');
   logBox.scrollTop = logBox.scrollHeight;
   if (!data.running) {
     clearInterval(statusTimer);
@@ -3111,24 +3113,39 @@ async function pollStatus() {
     document.getElementById('headerStatus').textContent = '就绪';
     document.getElementById('progressPanel').style.display = 'none';
     loadResults(1);
-    document.querySelector('.tab[data-tab="results"]').click();
+    // 只在用户仍停留在扫描页时自动跳到结果页，否则仅提示，避免打断当前操作
+    const scanTab = document.getElementById('tab-scan');
+    if (scanTab && !scanTab.classList.contains('hidden')) {
+      document.querySelector('.tab[data-tab="results"]').click();
+    } else {
+      toast('扫描已完成，可到结果页查看', 'success');
+    }
   }
 }
 
 // 结果排序状态
 let resultSortKey = '';
 let resultSortAsc = true;
-function sortResults(key) {
+function sortResults(key, ev) {
   if (resultSortKey === key) {
     resultSortAsc = !resultSortAsc;
   } else {
     resultSortKey = key;
     resultSortAsc = true;
   }
-  // 更新表头箭头
-  document.querySelectorAll('th.sortable').forEach(th => th.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  event.currentTarget.querySelector('.sort-arrow').textContent = resultSortAsc ? '↑' : '↓';
+  // 更新表头箭头：先把所有表头复位为 ↕，只标记当前列（否则其它表头会残留上次的 ↑/↓）
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('active');
+    const ar = th.querySelector('.sort-arrow');
+    if (ar) ar.textContent = '↕';
+  });
+  // 不依赖非标准的 window.event：onclick 显式传 event，程序化调用时按 data-sort 回落
+  const th = (ev && ev.currentTarget) || document.querySelector('th.sortable[data-sort="' + key + '"]');
+  if (th) {
+    th.classList.add('active');
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = resultSortAsc ? '↑' : '↓';
+  }
   loadResults(currentPage);
 }
 
@@ -3195,10 +3212,10 @@ async function loadResults(page) {
       <td data-label="认证"><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
       <td data-label="延迟">${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
       <td data-label="操作"><div class="actions">
-        <button class="btn btn-success" onclick="toggleFavorite('${ip}',${r.port}, this)" title="收藏">☆</button>
-        <button class="btn btn-primary" onclick="openWarnModal('${ip}',${r.port})">警告</button>
-        <button class="btn btn-info" data-need="login" onclick="quickObserver('${ip}',${r.port})">观察</button>
-        <button class="btn btn-warning" data-need="rcon" onclick="openCmdModal('${ip}',${r.port})">命令</button>
+        <button class="btn btn-success" data-act="fav" title="收藏">☆</button>
+        <button class="btn btn-primary" data-act="warn">警告</button>
+        <button class="btn btn-info" data-need="login" data-act="observe">观察</button>
+        <button class="btn btn-warning" data-need="login" data-act="cmd">命令</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -3206,6 +3223,64 @@ async function loadResults(page) {
   drawVersionChart(results);
   if (typeof applyCapabilityGuards === 'function') applyCapabilityGuards();
 }
+
+// 动态列表里的操作按钮统一走事件委托：可变数据只进 data-* 属性（属性上下文转义即可），
+// 不再把 IP/任务ID 拼进 onclick 的 JS 字符串（HTML 实体在属性解码后仍能突破字符串字面量）
+function _delegate(id, handler) {
+  const host = document.getElementById(id);
+  if (!host) return;
+  host.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const tr = btn.closest('tr');
+    const cb = tr && tr.querySelector('input[type="checkbox"]');
+    const ip = cb && cb.dataset.ip;
+    handler(btn.dataset.act, btn, ip, parseInt((cb && cb.dataset.port) || '0', 10));
+  });
+}
+_delegate('resultsBody', (act, btn, ip, port) => {
+  if (!ip) return;
+  if (act === 'fav') toggleFavorite(ip, port, btn);
+  else if (act === 'warn') openWarnModal(ip, port);
+  else if (act === 'observe') quickObserver(ip, port);
+  else if (act === 'cmd') openCmdModal(ip, port);
+});
+_delegate('dbResultsBody', (act, btn, ip, port) => {
+  if (!ip) return;
+  if (act === 'warn') openWarnModal(ip, port);
+  else if (act === 'observe') quickObserver(ip, port);
+});
+_delegate('favoritesBody', (act, btn, ip, port) => {
+  if (!ip) return;
+  if (act === 'rescan') rescanOneFavorite(ip, port);
+  else if (act === 'warn') openWarnModal(ip, port);
+  else if (act === 'pop') showPopularity(ip, port);
+  else if (act === 'observe') quickObserver(ip, port);
+  else if (act === 'ai') quickAiBot(ip, port);
+  else if (act === 'tag') editFavTags(ip, port);
+  else if (act === 'note') editFavNote(ip, port);
+  else if (act === 'remove') removeFavorite(ip, port);
+});
+_delegate('aiBotList', (act, btn) => {
+  if (act === 'chat') viewAiBotChat(btn.dataset.sid, btn.dataset.name || '');
+  else if (act === 'stop') stopAiBot(btn.dataset.sid);
+});
+_delegate('multiAiList', (act, btn) => {
+  if (act === 'view') viewMultiAiChat(btn.dataset.gid);
+  else if (act === 'stop') stopMultiAi(btn.dataset.gid);
+});
+_delegate('autoScanList', (act, btn) => {
+  const tid = btn.dataset.tid;
+  if (act === 'log') viewAutoScanLog(tid);
+  else if (act === 'start') startAutoScan(tid);
+  else if (act === 'stop') stopAutoScan(tid);
+  else if (act === 'remove') removeAutoScan(tid);
+});
+_delegate('obsHistoryList', (act, btn) => {
+  if (act === 'obs-exp-txt') exportHistoryObserver(btn.dataset.sid, 'txt');
+  else if (act === 'obs-exp-html') exportHistoryObserver(btn.dataset.sid, 'html');
+  else if (act === 'obs-del') deleteObserverHistory(btn.dataset.sid);
+});
 
 function renderPagination(id, page, total, perPage, callback) {
   const totalPages = Math.ceil(total / perPage);
@@ -3350,7 +3425,7 @@ async function confirmMultiWarn() {
     });
     const data = await resp.json();
     if (data.error) {
-      resultDiv.innerHTML = '<div style="color:#ef4444">错误: ' + data.error + '</div>';
+      resultDiv.innerHTML = '<div style="color:#ef4444">错误: ' + escapeHtml(data.error) + '</div>';
       return;
     }
     let html = '<div style="color:#22c55e;font-weight:bold;margin-bottom:8px;">';
@@ -3365,17 +3440,17 @@ async function confirmMultiWarn() {
     });
     Object.entries(byServer).forEach(([server, bots]) => {
       const ok = bots.filter(b => b.success).length;
-      html += '<div style="margin-top:6px;font-weight:600;">' + server + ' (' + ok + '/' + bots.length + '成功)</div>';
+      html += '<div style="margin-top:6px;font-weight:600;">' + escapeHtml(server) + ' (' + ok + '/' + bots.length + '成功)</div>';
       bots.forEach(r => {
         const color = r.success ? '#22c55e' : '#ef4444';
-        html += '<div style="color:' + color + ';padding-left:12px;">[' + (r.success ? 'OK' : 'FAIL') + '] ' + r.name;
-        html += ' (' + r.messages_sent + '条)' + (r.error ? ' - ' + r.error.substring(0, 40) : '') + '</div>';
+        html += '<div style="color:' + color + ';padding-left:12px;">[' + (r.success ? 'OK' : 'FAIL') + '] ' + escapeHtml(r.name);
+        html += ' (' + r.messages_sent + '条)' + (r.error ? ' - ' + escapeHtml(r.error.substring(0, 40)) : '') + '</div>';
       });
     });
     html += '</div>';
     resultDiv.innerHTML = html;
   } catch (e) {
-    resultDiv.innerHTML = '<div style="color:#ef4444">请求失败: ' + e.message + '</div>';
+    resultDiv.innerHTML = '<div style="color:#ef4444">请求失败: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
@@ -3396,8 +3471,8 @@ async function confirmWarn() {
   });
   const data = await res.json();
   document.getElementById('warnResult').innerHTML = data.success
-    ? `<div style="color:#48bb78;">成功！认证模式: ${data.auth_mode}, 发送消息: ${data.messages_sent}条</div>`
-    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+    ? `<div style="color:#48bb78;">成功！认证模式: ${escapeHtml(data.auth_mode)}, 发送消息: ${data.messages_sent}条</div>`
+    : `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`;
 }
 
 function toggleAllVisible(btn, checkboxId) {
@@ -3452,8 +3527,8 @@ async function confirmCmd() {
   });
   const data = await res.json();
   document.getElementById('cmdResult').innerHTML = data.success
-    ? `<div style="color:#48bb78;">命令已发送: ${data.command}</div>`
-    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+    ? `<div style="color:#48bb78;">命令已发送: ${escapeHtml(data.command)}</div>`
+    : `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`;
 }
 
 async function sendToolCommand() {
@@ -3472,8 +3547,8 @@ async function sendToolCommand() {
   });
   const data = await res.json();
   document.getElementById('toolCmdResult').innerHTML = data.success
-    ? `<div style="color:#48bb78;">成功！命令已发送: ${data.command}</div>`
-    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+    ? `<div style="color:#48bb78;">成功！命令已发送: ${escapeHtml(data.command)}</div>`
+    : `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`;
 }
 
 async function genPackets() {
@@ -3481,8 +3556,8 @@ async function genPackets() {
   const res = await fetch('/api/tools/gen_packets', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
   const data = await res.json();
   document.getElementById('genPacketsResult').innerHTML = data.success
-    ? `<div style="color:#48bb78;">${data.message}</div>`
-    : `<div style="color:#f56565;">失败: ${data.error}</div>`;
+    ? `<div style="color:#48bb78;">${escapeHtml(data.message)}</div>`
+    : `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`;
 }
 
 // ===== AI 内容生成 =====
@@ -3510,7 +3585,7 @@ async function aiGenerateOnly() {
       body: JSON.stringify({preset: p.preset, topic: p.topic, api_key: p.api_key})
     });
     const data = await res.json();
-    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${data.error}</div>`; return; }
+    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${escapeHtml(data.error)}</div>`; return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">生成成功，共 ${data.segments.length} 段（自动适配MC聊天长度）</div>`;
     html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text) + '</div>';
     html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">分段预览:</div>';
@@ -3518,7 +3593,7 @@ async function aiGenerateOnly() {
       html += `<div style="font-size:12px;padding:4px 8px;margin:2px 0;background:var(--bg-secondary);border-radius:4px;">[${i+1}] ${escapeHtml(s)}</div>`;
     });
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
 }
 async function aiGenerateAndSend() {
   const p = _aiParams();
@@ -3532,12 +3607,12 @@ async function aiGenerateAndSend() {
       body: JSON.stringify(p)
     });
     const data = await res.json();
-    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${data.error}</div>`; return; }
+    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`; return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
     html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
-    if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${data.error}</div>`;
+    if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${escapeHtml(data.error)}</div>`;
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
 }
 
 // ===== AI讲故事 =====
@@ -3553,7 +3628,7 @@ async function storyGenerate() {
       body: JSON.stringify({preset, topic})
     });
     const data = await res.json();
-    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${data.error}</div>`; return; }
+    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${escapeHtml(data.error)}</div>`; return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">生成成功，共 ${data.segments.length} 段（自动适配MC聊天长度）</div>`;
     html += '<div style="background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(data.text) + '</div>';
     html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">分段预览:</div>';
@@ -3561,7 +3636,7 @@ async function storyGenerate() {
       html += `<div style="font-size:12px;padding:4px 8px;margin:2px 0;background:var(--bg-secondary);border-radius:4px;">[${i+1}] ${escapeHtml(s)}</div>`;
     });
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
 }
 async function storyGenerateAndSend() {
   const preset = document.getElementById('storyType').value;
@@ -3584,24 +3659,29 @@ async function storyGenerateAndSend() {
       })
     });
     const data = await res.json();
-    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${data.error}</div>`; return; }
+    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`; return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
     html += '<div style="background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
-    if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${data.error}</div>`;
+    if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${escapeHtml(data.error)}</div>`;
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${e.message}</div>`; }
+  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
 }
 
 async function loadDbStats() {
-  const res = await fetch('/api/db/stats');
-  const data = await res.json();
-  document.getElementById('dbStats').innerHTML = `
-    <div class="stat-card"><div class="value">${data.total}</div><div class="label">总记录</div></div>
-    <div class="stat-card"><div class="value">${data.by_auth.cracked || 0}</div><div class="label">离线/破解</div></div>
-    <div class="stat-card"><div class="value">${data.by_auth.online || 0}</div><div class="label">正版</div></div>
-    <div class="stat-card"><div class="value">${data.by_auth.whitelist || 0}</div><div class="label">白名单</div></div>
-    <div class="stat-card"><div class="value">${data.online_servers}</div><div class="label">有人在线</div></div>
-  `;
+  // 命中限流 429 / 500 时响应体是 error JSON 而非统计结构：先判 ok，缺字段一律兜底 0
+  try {
+    const res = await fetch('/api/db/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+    const byAuth = data.by_auth || {};
+    document.getElementById('dbStats').innerHTML = `
+      <div class="stat-card"><div class="value">${data.total ?? 0}</div><div class="label">总记录</div></div>
+      <div class="stat-card"><div class="value">${byAuth.cracked || 0}</div><div class="label">离线/破解</div></div>
+      <div class="stat-card"><div class="value">${byAuth.online || 0}</div><div class="label">正版</div></div>
+      <div class="stat-card"><div class="value">${byAuth.whitelist || 0}</div><div class="label">白名单</div></div>
+      <div class="stat-card"><div class="value">${data.online_servers ?? 0}</div><div class="label">有人在线</div></div>
+    `;
+  } catch(e) {}
 }
 
 async function loadDbResults(page) {
@@ -3628,8 +3708,8 @@ async function loadDbResults(page) {
       <td data-label="认证"><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
       <td data-label="更新">${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
       <td data-label="操作"><div class="actions">
-        <button class="btn btn-primary" data-need="login" onclick="openWarnModal('${r.ip}',${r.port})" title="警告">⚠</button>
-        <button class="btn btn-info" data-need="login" onclick="quickObserver('${r.ip}',${r.port})" title="观察">👁</button>
+        <button class="btn btn-primary" data-need="login" data-act="warn" title="警告">⚠</button>
+        <button class="btn btn-info" data-need="login" data-act="observe" title="观察">👁</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -3753,19 +3833,19 @@ async function confirmBatchWarn() {
       })
     });
     const data = await res.json();
-    if (data.error) { resultDiv.innerHTML = '<div style="color:#f56565;">失败: ' + data.error + '</div>'; return; }
+    if (data.error) { resultDiv.innerHTML = '<div style="color:#f56565;">失败: ' + escapeHtml(data.error) + '</div>'; return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">完成：共 ${data.total} 台，成功发送 ${data.messages_sent} 条消息</div>`;
     html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
     html += '<tr><th style="text-align:left;padding:4px;">服务器</th><th style="text-align:left;padding:4px;">状态</th><th style="text-align:left;padding:4px;">消息数</th></tr>';
     data.results.forEach(r => {
       const status = r.success ? '<span style="color:#48bb78;">成功</span>' : '<span style="color:#f56565;">失败</span>';
-      const err = r.error ? ' (' + r.error.substring(0, 40) + ')' : '';
-      html += `<tr><td style="padding:4px;border-top:1px solid var(--hairline);">${r.ip}:${r.port}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${status}${err}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${r.messages_sent}</td></tr>`;
+      const err = r.error ? ' (' + escapeHtml(r.error.substring(0, 40)) + ')' : '';
+      html += `<tr><td style="padding:4px;border-top:1px solid var(--hairline);">${escapeHtml(r.ip)}:${escapeHtml(r.port)}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${status}${err}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${r.messages_sent}</td></tr>`;
     });
     html += '</table>';
     resultDiv.innerHTML = html;
     window._warnSource = null;
-  } catch(e) { resultDiv.innerHTML = '<div style="color:#f56565;">请求失败: ' + e.message + '</div>'; }
+  } catch(e) { resultDiv.innerHTML = '<div style="color:#f56565;">请求失败: ' + escapeHtml(e.message) + '</div>'; }
 }
 
 // ============ 批量AI托管 ============
@@ -3783,7 +3863,7 @@ function openBatchAiModal(source) {
     const sel = document.getElementById('batchAiPersonaSelect');
     sel.innerHTML = '<option value="">随机/自定义</option>';
     if (d.personas) d.personas.forEach(p=>{
-      sel.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+      sel.innerHTML += `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`;
     });
   }).catch(()=>{});
   document.getElementById('batchAiModal').classList.remove('hidden');
@@ -3879,8 +3959,8 @@ async function confirmBatchAi() {
   html += '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
   html += '<tr><th style="text-align:left;padding:4px;">服务器</th><th style="text-align:left;padding:4px;">Bot名</th><th style="text-align:left;padding:4px;">状态</th></tr>';
   results.forEach(r => {
-    const status = r.ok ? '<span style="color:#48bb78;">已启动</span>' : `<span style="color:#f56565;">失败</span> ${r.error?r.error.substring(0,30):''}`;
-    html += `<tr><td style="padding:4px;border-top:1px solid var(--hairline);">${r.ip}:${r.port}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${r.username}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${status}</td></tr>`;
+    const status = r.ok ? '<span style="color:#48bb78;">已启动</span>' : `<span style="color:#f56565;">失败</span> ${r.error?escapeHtml(r.error.substring(0,30)):''}`;
+    html += `<tr><td style="padding:4px;border-top:1px solid var(--hairline);">${escapeHtml(r.ip)}:${escapeHtml(r.port)}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${escapeHtml(r.username)}</td><td style="padding:4px;border-top:1px solid var(--hairline);">${status}</td></tr>`;
   });
   html += '</table>';
   resultDiv.innerHTML = html;
@@ -3893,9 +3973,9 @@ async function loadHistory() {
     ? data.history.map(h => `
       <div style="padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <strong>任务 #${h.id}</strong> - ${h.time}
-          <span class="badge badge-${h.mode === 'masscan' ? 'whitelist' : (h.mode === 'portscan' ? 'unknown' : 'online')}" style="margin-left:8px;">${h.mode || 'full'}</span>
-          <div style="font-size:12px;color:#666;margin-top:4px;">目标: ${h.targets} | 发现: ${h.found} 台</div>
+          <strong>任务 #${escapeHtml(h.id)}</strong> - ${escapeHtml(h.time)}
+          <span class="badge badge-${h.mode === 'masscan' ? 'whitelist' : (h.mode === 'portscan' ? 'unknown' : 'online')}" style="margin-left:8px;">${escapeHtml(h.mode || 'full')}</span>
+          <div style="font-size:12px;color:#666;margin-top:4px;">目标: ${escapeHtml(h.targets)} | 发现: ${escapeHtml(h.found)} 台</div>
         </div>
       </div>
     `).join('')
@@ -4035,7 +4115,7 @@ async function checkMsaStatus() {
     const data = await res.json();
     const el = document.getElementById('msaStatus');
     if (data.logged_in) {
-      el.innerHTML = `✅ 已登录: <b>${data.name}</b>`;
+      el.innerHTML = `✅ 已登录: <b>${escapeHtml(data.name)}</b>`;
       el.style.color = '#48bb78';
     } else {
       el.textContent = '未登录';
@@ -4058,7 +4138,7 @@ async function loadPremiumAccounts(selectEl) {
       return;
     }
     selectEl.innerHTML = accounts.map(a =>
-      `<option value="${a.uuid}" ${a.uuid === activeUuid ? 'selected' : ''}>${a.name}</option>`
+      `<option value="${escapeHtml(a.uuid)}" ${a.uuid === activeUuid ? 'selected' : ''}>${escapeHtml(a.name)}</option>`
     ).join('');
   } catch(e) {
     console.error('加载正版账户失败:', e);
@@ -4094,7 +4174,7 @@ async function selectPremiumAccount(uuid) {
     if (data.success) {
       // 填充用户名
       const selectEl = document.getElementById('obsPremiumAccount');
-      const opt = selectEl.querySelector(`option[value="${uuid}"]`);
+      const opt = Array.from(selectEl.options).find(o => o.value === uuid);
       if (opt) {
         document.getElementById('obsUser').value = opt.textContent;
       }
@@ -4194,8 +4274,13 @@ async function startFclLogin() {
     const res = await fetch('/api/msa/fcl_auth_url');
     const data = await res.json();
     if (!data.url) { alert('获取登录URL失败'); return; }
+    // 只允许 https + 微软官方登录域，避免后端返回被污染的 URL 变成开放重定向/钓鱼跳板
+    let u;
+    try { u = new URL(data.url, location.origin); } catch(e) { alert('登录URL无效'); return; }
+    const trusted = /(^|\.)(microsoftonline\.com|live\.com|microsoft\.com)$/i.test(u.hostname);
+    if (u.protocol !== 'https:' || !trusted) { alert('登录URL不在受信任的微软域名内，已阻止跳转'); return; }
     // 在WebView里打开微软登录页，登录后自动重定向到/auth-response完成认证
-    window.location.href = data.url;
+    window.location.href = u.href;
   } catch(e) { alert('请求失败: ' + e.message); }
 }
 let fclDevicePollTimer = null;
@@ -4209,8 +4294,9 @@ async function startFclDeviceLogin() {
     document.getElementById('fclUri').textContent = data.verification_uri;
     document.getElementById('fclStatus').textContent = '等待输入代码并登录...';
     // 自动复制设备码
-    try { navigator.clipboard.writeText(data.user_code); } catch(e) {}
-    // 开始轮询
+    try { await navigator.clipboard.writeText(data.user_code); } catch(e) {}
+    // 开始轮询：先清掉可能残留的旧定时器，否则重复点击会累积多个 3s 轮询
+    if (fclDevicePollTimer) clearInterval(fclDevicePollTimer);
     fclDevicePollTimer = setInterval(pollFclDevice, 3000);
   } catch(e) { alert('请求失败: ' + e.message); }
 }
@@ -4244,10 +4330,11 @@ function stopFclDevicePoll() {
   }
   document.getElementById('fclDeviceBox').style.display = 'none';
 }
-function copyFclCode() {
+async function copyFclCode() {
   const code = document.getElementById('fclCode').textContent;
   try {
-    navigator.clipboard.writeText(code);
+    // 必须 await：否则 Promise 的异步拒绝不会被这个 try/catch 捕获
+    await navigator.clipboard.writeText(code);
     alert('已复制: ' + code);
   } catch(e) {
     alert('复制失败，请手动复制');
@@ -4270,6 +4357,8 @@ async function startMsaDeviceLogin() {
     document.getElementById('msaDeviceBox').style.display = 'block';
     msaDeviceCode = data.device_code;
     const interval = (data.interval || 5) * 1000;
+    // 同上：先清旧定时器，避免重复点击累积多个轮询
+    if (msaPollTimer) clearInterval(msaPollTimer);
     msaPollTimer = setInterval(() => pollMsaDevice(), interval);
   } catch(e) { alert('请求失败: ' + e.message); }
 }
@@ -4338,10 +4427,10 @@ async function loadHealthStatus() {
         const evDate = new Date(e.time.replace(' ', 'T')).toDateString();
         const timeStr = evDate === today ? e.time.slice(11,16) : e.time.slice(5,16);
         return `<div style="padding:3px 0;border-bottom:1px solid var(--hairline-soft);">
-          <span style="color:var(--mute)">${timeStr}</span>
+          <span style="color:var(--mute)">${escapeHtml(timeStr)}</span>
           <span style="color:${color}">${arrow}</span>
-          <span>${e.ip}:${e.port}</span>
-          <span style="color:var(--mute)">${e.from}→${e.to}人</span>
+          <span>${escapeHtml(e.ip)}:${escapeHtml(e.port)}</span>
+          <span style="color:var(--mute)">${escapeHtml(e.from)}→${escapeHtml(e.to)}人</span>
         </div>`;
       }).join('');
     } else {
@@ -4359,17 +4448,22 @@ async function runHealthOnce() {
   try {
     await fetch('/api/health/run_once', {method:'POST'});
   } catch(e) {}
-  // 轮询直到检查完成（once_running=false）
+  // 轮询直到检查完成（once_running=false）：加最大次数兜底，避免后端异常时永久轮询、按钮永久禁用
+  let tries = 0;
+  const MAX_TRIES = 30; // 30 × 2s = 60s
+  const finish = () => { btn.disabled = false; btn.textContent = '立即检查'; loadHealthStatus(); };
   const timer = setInterval(async () => {
+    tries++;
     try {
       const r = await fetch('/api/health/status');
       const d = await r.json();
-      if (!d.once_running) {
-        clearInterval(timer);
-        btn.disabled = false; btn.textContent = '立即检查';
-        loadHealthStatus();
-      }
+      if (!d.once_running) { clearInterval(timer); finish(); return; }
     } catch(e) {}
+    if (tries >= MAX_TRIES) {
+      clearInterval(timer);
+      finish();
+      toast('健康检查超时，已恢复按钮（可稍后查看状态）', 'error');
+    }
   }, 2000);
 }
 async function saveHealthInterval() {
@@ -4403,13 +4497,13 @@ async function refreshFavoritesRealtime() {
     data.servers.forEach(s => { favRealtimeData[s.ip + ':' + s.port] = s; });
     // 更新表格中的人数列
     document.querySelectorAll('#favoritesBody tr').forEach(tr => {
-      const tds = tr.querySelectorAll('td');
-      if (tds.length < 5) return;
-      const addrTd = tds[1];
+      // 按 data-label 定位单元格，避免列序调整后取错列
+      const addrTd = tr.querySelector('td[data-label="地址"]');
+      const playersTd = tr.querySelector('td[data-label="人数"]');
+      if (!addrTd || !playersTd) return;
       const addr = addrTd.textContent.trim();
       const rt = favRealtimeData[addr];
       if (rt) {
-        const playersTd = tds[4];
         if (rt.online) {
           const delta = rt.players - rt.prev_players;
           const deltaStr = delta > 0 ? ` <span style="color:#e94560;">+${delta}</span>` : (delta < 0 ? ` <span style="color:#4caf50;">${delta}</span>` : '');
@@ -4497,7 +4591,8 @@ async function loadFavorites() {
     const ip = escapeHtml(f.ip);
     const tags = (f.tags || []).map(t => `<span class="badge badge-unknown" style="margin:1px;">${escapeHtml(t)}</span>`).join(' ');
     // 优先用实时监控数据
-    const rt = favRealtimeData[ip + ':' + f.port];
+    // 用原始 ip 作键：favRealtimeData 的键来自接口原始值，转义后的 ip 会匹配不上
+    const rt = favRealtimeData[f.ip + ':' + f.port];
     const disp = good || info;
     let playersHtml;
     const playerNames = (rt && rt.player_names && rt.player_names.length) ? rt.player_names.join(', ')
@@ -4530,17 +4625,17 @@ async function loadFavorites() {
       <td data-label="人数" style="color:${stateColor};" title="${escapeHtml(playerNames || '无玩家')}">${playersHtml}</td>
       <td data-label="认证"><span class="badge badge-${escapeHtml(disp.auth || 'unknown')}">${escapeHtml(disp.auth || '-')}</span></td>
       <td data-label="标签">${tags || '-'}</td>
-      <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '-')}</td>
+      <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '')}</td>
       <td data-label="检查" style="font-size:11px;color:var(--mute);">${rt && rt.last_check ? rt.last_check : (f.last_check ? new Date(f.last_check).toLocaleString() : '-')}</td>
       <td data-label="操作"><div class="actions">
-        <button class="btn btn-success" onclick="rescanOneFavorite('${ip}',${f.port})" title="重查">↻</button>
-        <button class="btn btn-primary" onclick="openWarnModal('${ip}',${f.port})" title="警告">⚠</button>
-        <button class="btn btn-violet" onclick="showPopularity('${ip}',${f.port})" title="人数趋势">📈</button>
-        <button class="btn btn-info" data-need="login" onclick="quickObserver('${ip}',${f.port})" title="观察">👁</button>
-        <button class="btn btn-violet" data-need="login" onclick="quickAiBot('${ip}',${f.port})" title="AI托管">🤖</button>
-        <button class="btn btn-warning" onclick="editFavTags('${ip}',${f.port})" title="标签">🏷</button>
-        <button class="btn btn-warning" onclick="editFavNote('${ip}',${f.port})" title="备注">✎</button>
-        <button class="btn btn-danger" onclick="removeFavorite('${ip}',${f.port})" title="删除">✕</button>
+        <button class="btn btn-success" data-act="rescan" title="重查">↻</button>
+        <button class="btn btn-primary" data-act="warn" title="警告">⚠</button>
+        <button class="btn btn-violet" data-act="pop" title="人数趋势">📈</button>
+        <button class="btn btn-info" data-need="login" data-act="observe" title="观察">👁</button>
+        <button class="btn btn-violet" data-need="login" data-act="ai" title="AI托管">🤖</button>
+        <button class="btn btn-warning" data-act="tag" title="标签">🏷</button>
+        <button class="btn btn-warning" data-act="note" title="备注">✎</button>
+        <button class="btn btn-danger" data-act="remove" title="删除">✕</button>
       </div></td>
     </tr>`;
   }).join('') + favNoteHtml;
@@ -4822,12 +4917,12 @@ function loadObserverHistory() {
       const card = document.createElement('div');
       card.className = 'obs-session-card';
       card.style.opacity = '0.7';
-      card.innerHTML = `<div class="obs-name">${escapeHtml(s.username)} @ ${escapeHtml(s.host)}:${s.port}</div>
-        <div class="obs-status obs-status-offline">已结束 | ${s.msg_count}条 | ${s.saved_at.slice(5,16)}</div>
+      card.innerHTML = `<div class="obs-name">${escapeHtml(s.username)} @ ${escapeHtml(s.host)}:${escapeHtml(s.port)}</div>
+        <div class="obs-status obs-status-offline">已结束 | ${escapeHtml(s.msg_count)}条 | ${escapeHtml((s.saved_at || '').slice(5,16))}</div>
         <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="obs-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();exportHistoryObserver('${s.session_id}','txt')">TXT</button>
-          <button class="obs-btn" style="padding:2px 8px;font-size:10px;" onclick="event.stopPropagation();exportHistoryObserver('${s.session_id}','html')">HTML</button>
-          <button class="obs-btn" style="padding:2px 8px;font-size:10px;background:#dc2626;color:#fff;" onclick="event.stopPropagation();deleteObserverHistory('${s.session_id}')">删</button>
+          <button class="obs-btn" data-act="obs-exp-txt" data-sid="${escapeHtml(s.session_id)}" style="padding:2px 8px;font-size:10px;">TXT</button>
+          <button class="obs-btn" data-act="obs-exp-html" data-sid="${escapeHtml(s.session_id)}" style="padding:2px 8px;font-size:10px;">HTML</button>
+          <button class="obs-btn" data-act="obs-del" data-sid="${escapeHtml(s.session_id)}" style="padding:2px 8px;font-size:10px;background:#dc2626;color:#fff;">删</button>
         </div>`;
       return card;
     };
@@ -4999,13 +5094,13 @@ function loadAiBotList() {
     if (!d.sessions || d.sessions.length===0) { el.innerHTML='<p class="hint">暂无运行中的Bot</p>'; return; }
     el.innerHTML = d.sessions.map(s=>`
       <div class="server-item">
-        <div><strong>${s.username}</strong> @ ${s.host}:${s.port}
-          <span class="badge ${s.status==='connected'?'badge-online':'badge-offline'}">${s.status}</span>
-          <span class="hint">${s.version} | 在线${s.uptime}s | ${s.chat_count}条消息</span>
+        <div><strong>${escapeHtml(s.username)}</strong> @ ${escapeHtml(s.host)}:${escapeHtml(s.port)}
+          <span class="badge ${s.status==='connected'?'badge-online':'badge-offline'}">${escapeHtml(s.status)}</span>
+          <span class="hint">${escapeHtml(s.version)} | 在线${escapeHtml(s.uptime)}s | ${escapeHtml(s.chat_count)}条消息</span>
         </div>
         <div style="margin-top:6px">
-          <button onclick="viewAiBotChat('${s.session_id}','${s.username}')">查看聊天</button>
-          <button onclick="stopAiBot('${s.session_id}')" class="btn-danger">停止</button>
+          <button data-act="chat" data-sid="${escapeHtml(s.session_id)}" data-name="${escapeHtml(s.username)}">查看聊天</button>
+          <button data-act="stop" data-sid="${escapeHtml(s.session_id)}" class="btn-danger">停止</button>
         </div>
       </div>`).join('');
   });
@@ -5065,8 +5160,8 @@ function loadPersonas() {
     window.PERSONA_MAP = {};
     d.personas.forEach(p => { window.PERSONA_MAP[p.name] = p.label || p.name; });
     el.innerHTML = d.personas.map((p,i)=>
-      `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${p.persona}">
-        <input type="checkbox" class="persona-cb" value="${i}" onchange="togglePersonaCb(this)"> ${p.label || p.name}
+      `<label style="display:flex;align-items:center;gap:4px;font-size:12px" title="${escapeHtml(p.persona)}">
+        <input type="checkbox" class="persona-cb" value="${i}" onchange="togglePersonaCb(this)"> ${escapeHtml(p.label || p.name)}
       </label>`
     ).join('');
     updatePersonaCount();
@@ -5208,17 +5303,17 @@ function loadMultiAiList() {
     if (!d.groups || d.groups.length===0) { el.innerHTML='<p class="hint">暂无群聊组</p>'; return; }
     el.innerHTML = d.groups.map(g=>`
       <div class="server-item">
-        <div><strong>${g.group_id}</strong> @ ${g.host}:${g.port}
+        <div><strong>${escapeHtml(g.group_id)}</strong> @ ${escapeHtml(g.host)}:${escapeHtml(g.port)}
           <span class="badge ${g.connected>0?'badge-online':'badge-offline'}">${g.connected}/${g.bot_count}在线</span>
-          <span class="hint">话题: ${g.topic||'随机'}</span>
+          <span class="hint">话题: ${escapeHtml(g.topic||'随机')}</span>
         </div>
         <div class="hint" style="margin-top:4px">${g.bots.map(b=>{
           const lbl = (window.PERSONA_MAP && window.PERSONA_MAP[b.username]) || b.username;
-          return `${lbl}(${b.status})`;
+          return `${escapeHtml(lbl)}(${escapeHtml(b.status)})`;
         }).join(' | ')}</div>
         <div style="margin-top:6px">
-          <button onclick="viewMultiAiChat('${g.group_id}')">查看群聊</button>
-          <button onclick="stopMultiAi('${g.group_id}')" class="btn-danger">全部停止</button>
+          <button data-act="view" data-gid="${escapeHtml(g.group_id)}">查看群聊</button>
+          <button data-act="stop" data-gid="${escapeHtml(g.group_id)}" class="btn-danger">全部停止</button>
         </div>
       </div>`).join('');
   });
@@ -5361,18 +5456,18 @@ function loadAutoScanList() {
     if (!d.tasks || d.tasks.length===0) { el.innerHTML='<p class="hint">暂无任务</p>'; return; }
     el.innerHTML = d.tasks.map(t=>`
       <div class="server-item">
-        <div><strong>${t.task_id}</strong>
-          <span class="badge" style="background:#2a1a0a;color:#ffaa00">${t.task_type_name||t.task_type}</span>
-          <span class="badge ${t.status==='running'?'badge-online':'badge-offline'}">${t.status}</span>
-          <span class="hint">${t.targets.join(',')} :${t.ports} | 间隔${t.interval}s</span>
+        <div><strong>${escapeHtml(t.task_id)}</strong>
+          <span class="badge" style="background:#2a1a0a;color:#ffaa00">${escapeHtml(t.task_type_name||t.task_type)}</span>
+          <span class="badge ${t.status==='running'?'badge-online':'badge-offline'}">${escapeHtml(t.status)}</span>
+          <span class="hint">${escapeHtml((t.targets||[]).join(','))} :${escapeHtml(t.ports)} | 间隔${escapeHtml(t.interval)}s</span>
         </div>
-        <div class="hint" style="margin-top:4px">运行${t.run_count}次 | 发现${t.total_found}服 | 警告${t.total_warned}服 | 上次:${t.last_run||'未运行'}</div>
+        <div class="hint" style="margin-top:4px">运行${t.run_count}次 | 发现${t.total_found}服 | 警告${t.total_warned}服 | 上次:${escapeHtml(t.last_run||'未运行')}</div>
         <div style="margin-top:6px">
-          <button onclick="viewAutoScanLog('${t.task_id}')">日志</button>
+          <button data-act="log" data-tid="${escapeHtml(t.task_id)}">日志</button>
           ${t.status==='running'
-            ? `<button onclick="stopAutoScan('${t.task_id}')" class="btn-danger">停止</button>`
-            : `<button onclick="startAutoScan('${t.task_id}')">启动</button>`}
-          <button onclick="removeAutoScan('${t.task_id}')" class="btn-danger">删除</button>
+            ? `<button data-act="stop" data-tid="${escapeHtml(t.task_id)}" class="btn-danger">停止</button>`
+            : `<button data-act="start" data-tid="${escapeHtml(t.task_id)}">启动</button>`}
+          <button data-act="remove" data-tid="${escapeHtml(t.task_id)}" class="btn-danger">删除</button>
         </div>
       </div>`).join('');
   });
@@ -5391,7 +5486,8 @@ function fetchAutoScanLog() {
   if (!currentAutoScanId) return;
   fetch(`/api/auto_scan/logs?task_id=${currentAutoScanId}`).then(r=>r.json()).then(d=>{
     const el = document.getElementById('autoScanLog');
-    el.innerHTML = d.logs.map(l=>`<div>${l}</div>`).join('');
+    // 日志里内嵌了远端服务器可控的 MOTD/版本串，必须转义后再插入（存储型 XSS）
+    el.innerHTML = (d.logs || []).map(l=>`<div>${escapeHtml(l)}</div>`).join('');
     el.scrollTop = el.scrollHeight;
   });
 }

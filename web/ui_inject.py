@@ -20,13 +20,14 @@ _PERSONA_JS = r"""
         personas.map(function(p,i){return '<option value="'+i+'">'+esc(p.label||p.name)+'</option>';}).join('');
       if (cur) sel.value = cur;
     }
-    var host = document.getElementById('personaCardGrid');
+    // 必须复用主页面已有的 #personaCheckboxes：startMultiAi / toggleAllPersonas /
+    // updatePersonaCount 只读这个容器，另建容器会让用户看得见的多选完全失效（静默回落到随机人格）
+    var host = document.getElementById('personaCheckboxes');
     if (!host) {
       var multiCount = document.getElementById('multiCount');
       if (!multiCount) return;
       host = document.createElement('div');
-      host.id = 'personaCardGrid';
-      host.className = 'persona-grid';
+      host.id = 'personaCheckboxes';
       var row = multiCount.closest('.form-row') || multiCount.parentElement;
       if (row && row.parentElement) row.parentElement.insertBefore(host, row.nextSibling);
       else return;
@@ -35,9 +36,9 @@ _PERSONA_JS = r"""
       tip.textContent = '点选参与互聊的人格（可多选，不选则随机）';
       host.parentElement.insertBefore(tip, host);
     }
-    // 卡片网格已替代原简单复选框，隐藏旧的 #personaCheckboxes，避免两套人格选择重复
-    var oldCb = document.getElementById('personaCheckboxes');
-    if (oldCb) oldCb.style.display = 'none';
+    // 容器原本带内联 flex 样式，这里切成卡片网格的样式（同一容器，两套渲染都写它）
+    host.className = 'persona-grid';
+    host.style.display = '';
     if (!personas || !personas.length) return;
     host.innerHTML = personas.map(function(p,i){
       var label = esc(p.label || p.name || ('人格'+(i+1)));
@@ -105,16 +106,39 @@ _NAV = r"""
 """
 
 
+# serve_index 每次请求都要读 260KB 的 index.html 并做多次全文替换，这里缓存预处理结果；
+# 缓存键包含 web_token，保证运行时改配置后仍会重新注入（不改变原有注入行为）
+_index_cache = {"key": None, "html": None}
+
+
 def serve_index(web_dir: str):
     html_path = os.path.join(web_dir, "index.html")
+    polish_path = os.path.join(web_dir, "ui-polish.css")
+    try:
+        html_mtime = os.path.getmtime(html_path)
+    except OSError:
+        return send_from_directory(web_dir, "index.html")
+    polish_mtime = os.path.getmtime(polish_path) if os.path.isfile(polish_path) else 0
+
+    # 注入web_token（如果配置了），供前端fetch自动带X-API-Token
+    try:
+        import config as _cfg
+        _token = _cfg.get("web_token", "")
+    except Exception:
+        _token = ""
+
+    cache_key = (html_mtime, polish_mtime, _token)
+    if _index_cache["key"] == cache_key and _index_cache["html"] is not None:
+        return Response(_index_cache["html"], mimetype="text/html; charset=utf-8")
+
     try:
         with open(html_path, "r", encoding="utf-8") as f:
             html = f.read()
     except OSError:
         return send_from_directory(web_dir, "index.html")
 
-    polish_path = os.path.join(web_dir, "ui-polish.css")
-    if os.path.isfile(polish_path) and "UI polish v3.4.1" not in html and "persona-grid" not in html:
+    # 只按标记注释判断，原来额外的 "persona-grid" not in html 会让匹配到该词就整体跳过注入
+    if os.path.isfile(polish_path) and "UI polish v3.4.1" not in html:
         try:
             with open(polish_path, "r", encoding="utf-8") as f:
                 polish_css = f.read()
@@ -123,27 +147,25 @@ def serve_index(web_dir: str):
         except OSError:
             pass
 
-    if 'id="mobileBottomNav"' not in html:
+    # 页面自带 #mobileNav（CSS 已在移动端显示），再注入一份会出现两条叠加底栏
+    if 'id="mobileBottomNav"' not in html and 'id="mobileNav"' not in html:
         if "</body>" in html:
             html = html.replace("</body>", _NAV + "</body>", 1)
         elif "</html>" in html:
             html = html.replace("</html>", _NAV + "</html>", 1)
 
-    if "personaCardGrid" not in html:
+    if "upgradePersonaUI" not in html:
         if "</html>" in html:
             html = html.replace("</html>", _PERSONA_JS + "\n</html>", 1)
 
-    # 注入web_token（如果配置了），供前端fetch自动带X-API-Token
-    try:
-        import config as _cfg
-        _token = _cfg.get("web_token", "")
-        if _token:
-            _inject = f'<script>window.__WEB_TOKEN__ = "{_token}";</script>'
-            if "</head>" in html:
-                html = html.replace("</head>", _inject + "</head>", 1)
-            else:
-                html = _inject + html
-    except Exception:
-        pass
+    # web_token 注入行为保持原样（仅把 token 纳入缓存键，改配置后仍会重新生成）
+    if _token:
+        _inject = f'<script>window.__WEB_TOKEN__ = "{_token}";</script>'
+        if "</head>" in html:
+            html = html.replace("</head>", _inject + "</head>", 1)
+        else:
+            html = _inject + html
 
+    _index_cache["key"] = cache_key
+    _index_cache["html"] = html
     return Response(html, mimetype="text/html; charset=utf-8")

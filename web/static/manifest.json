@@ -3,9 +3,11 @@
   "short_name": "MC Scanner",
   "description": "Minecraft 服务器扫描 / 探测 / 观察者 / 安全提醒 控制面板",
   "lang": "zh-CN",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0e0e0e",
   "theme_color": "#101010",
   "icons": [
