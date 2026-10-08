@@ -340,7 +340,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     stop_event=stop_evt,
                     mode=scan_cfg.get("scan_mode", "balanced"),
                 )
-                results = async_engine.scan_with_portscan(iter(targets_list))
+                results = async_engine.scan_with_portscan(targets_list)
             else:
                 from scanner.engine import ScanEngine
                 engine = ScanEngine(stop_event=stop_evt,
@@ -352,7 +352,7 @@ def _scan_worker(task_id, targets_list, scan_cfg):
                     mode=scan_cfg.get("scan_mode", "balanced"),
                 )
                 results = engine.scan_with_portscan(
-                    iter(targets_list),
+                    targets_list,
                     scan_threads=scan_cfg.get("scan_threads", 200),
                     scan_timeout=scan_cfg.get("scan_timeout", 2.5),
                     progress_callback=_on_progress,
