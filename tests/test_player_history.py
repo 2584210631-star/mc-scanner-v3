@@ -11,6 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from storage import db as storage_db
 from storage import player_history as ph
 
 
@@ -24,6 +25,8 @@ class TestPlayerHistory(unittest.TestCase):
         ph.init_player_history(self.db_path)
 
     def tearDown(self):
+        # 先关闭连接池里的连接再删文件，否则会残留 *.db-wal/*.db-shm
+        storage_db.close_conn(self.db_path)
         if os.path.exists(self.db_path):
             os.unlink(self.db_path)
 
@@ -45,6 +48,9 @@ class TestPlayerHistory(unittest.TestCase):
         ph.update_players(self.db_path, "192.168.1.1", 25565, players)
         history = ph.get_player_history(self.db_path, ip="192.168.1.1", port=25565)
         self.assertEqual(len(history), 2)
+        # 同一批内的重复出现只算一次，seen_count 不应虚高
+        p1 = [h for h in history if h["player_name"] == "Player1"][0]
+        self.assertEqual(p1["seen_count"], 1)
 
     def test_get_by_player_name(self):
         ph.update_players(self.db_path, "192.168.1.1", 25565, ["Alice", "Bob"])

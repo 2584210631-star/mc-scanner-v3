@@ -17,12 +17,31 @@ import tempfile
 import shutil
 
 
+# 正常 minecraft-data zip 约 10-20MB；超过上限说明下载异常/被投毒，直接中止
+_MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
+# 生成结果自检门槛：低于此值几乎必定是结构变化或下载损坏，
+# 宁可拒绝写盘，也不能用近乎空表覆盖 core/packets_auto.py
+_MIN_PROTOCOLS = 8
+_MIN_PLAY_SB = 10
+
+
 def download_minecraft_data(dest_dir: str):
     url = "https://github.com/PrismarineJS/minecraft-data/archive/refs/heads/master.zip"
     print(f"[*] 下载 minecraft-data: {url}")
     zip_path = os.path.join(tempfile.gettempdir(), "minecraft-data.zip")
-    urllib.request.urlretrieve(url, zip_path)
-    print(f"[*] 解压到 {dest_dir}")
+    # 原实现 urlretrieve 无超时也无大小限制：下载被截断/中间人投毒都会静默继续
+    req = urllib.request.Request(url, headers={"User-Agent": "mc-scanner-v3-gen_packets"})
+    with urllib.request.urlopen(req, timeout=120) as resp, open(zip_path, "wb") as out:
+        total = 0
+        while True:
+            chunk = resp.read(256 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_DOWNLOAD_BYTES:
+                raise RuntimeError(f"下载超过 {_MAX_DOWNLOAD_BYTES} 字节上限，已中止")
+            out.write(chunk)
+    print(f"[*] 下载完成 {total} 字节，解压到 {dest_dir}")
     with zipfile.ZipFile(zip_path, 'r') as z:
         z.extractall(dest_dir)
     extracted = os.path.join(dest_dir, "minecraft-data-master")
@@ -73,6 +92,21 @@ def extract_packets(protocol_data: dict) -> dict:
     return result
 
 
+def _validate_tables(proto_to_packets: dict) -> list:
+    """生成结果自检，返回问题列表（空列表表示通过）。"""
+    problems = []
+    if len(proto_to_packets) < _MIN_PROTOCOLS:
+        problems.append(f"协议版本数过少: {len(proto_to_packets)} < {_MIN_PROTOCOLS}")
+    if not any(p >= 767 for p in proto_to_packets):
+        problems.append("缺少 >=767 的高版本协议表")
+    for proto, tables in proto_to_packets.items():
+        sb = (tables.get("play") or {}).get("toServer") or {}
+        cb = (tables.get("play") or {}).get("toClient") or {}
+        if len(sb) < _MIN_PLAY_SB or not cb:
+            problems.append(f"协议 {proto} 的 play 包异常少: toServer={len(sb)}, toClient={len(cb)}")
+    return problems
+
+
 def generate_auto_tables(data_dir: str, output_path: str):
     versions_dir = os.path.join(data_dir, "data", "pc")
     if not os.path.exists(versions_dir):
@@ -85,7 +119,6 @@ def generate_auto_tables(data_dir: str, output_path: str):
 
     # 按协议号去重：同一协议号只保留第一个有 protocol.json 的版本
     proto_to_packets = {}
-    proto_to_version = {}
     for version in versions:
         proto = get_proto_version(data_dir, version)
         if proto == 0 or proto < 340 or proto in proto_to_packets:
@@ -98,10 +131,17 @@ def generate_auto_tables(data_dir: str, output_path: str):
         packets = extract_packets(protocol_data)
         if packets and packets.get("play", {}).get("toServer"):
             proto_to_packets[proto] = packets
-            proto_to_version[proto] = version
             print(f"  - 协议 {proto} ({version}): play.toServer={len(packets['play']['toServer'])} 包")
 
     print(f"[*] 共 {len(proto_to_packets)} 个协议版本")
+
+    # 写盘前自检：不合格直接失败退出，绝不用空表覆盖源码
+    problems = _validate_tables(proto_to_packets)
+    if problems:
+        print("[!] 生成结果未通过自检，拒绝写盘:")
+        for p in problems:
+            print(f"    - {p}")
+        return False
 
     content = f'''# -*- coding: utf-8 -*-
 """
@@ -113,8 +153,19 @@ def generate_auto_tables(data_dir: str, output_path: str):
 
 PACKET_TABLES_AUTO = {json.dumps(proto_to_packets, ensure_ascii=False, indent=2)}
 '''
-    with open(output_path, 'w', encoding='utf-8') as f:
+    # 先写临时文件并做语法校验，再备份旧文件后原子替换
+    tmp_path = output_path + ".tmp"
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         f.write(content)
+    try:
+        compile(content, tmp_path, 'exec')
+    except SyntaxError as e:
+        print(f"[!] 生成内容语法检查失败: {e}")
+        os.unlink(tmp_path)
+        return False
+    if os.path.exists(output_path):
+        shutil.copy2(output_path, output_path + ".bak")
+    os.replace(tmp_path, output_path)
     print(f"[*] 已生成: {output_path}")
     return True
 
@@ -128,8 +179,10 @@ def main():
 
     data_dir = args.data
     if args.download or not data_dir:
-        dest = os.path.join(tempfile.gettempdir(), "mcscanner_mcdata")
-        if os.path.exists(dest):
+        dest = os.path.abspath(os.path.join(tempfile.gettempdir(), "mcscanner_mcdata"))
+        tmp_root = os.path.abspath(tempfile.gettempdir())
+        # rmtree 前校验路径确实在临时目录内，避免误删
+        if os.path.exists(dest) and os.path.commonpath([dest, tmp_root]) == tmp_root:
             shutil.rmtree(dest)
         data_dir = download_minecraft_data(dest)
 

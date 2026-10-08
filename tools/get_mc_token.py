@@ -49,23 +49,31 @@ def step1_device_code():
     return resp["device_code"], int(resp["interval"])
 
 
-def step2_poll_token(device_code, interval):
-    """步骤2: 轮询获取 Microsoft access token"""
+def step2_poll_token(device_code, interval, timeout: float = 600):
+    """步骤2: 轮询获取 Microsoft access token。
+
+    返回 (access_token, refresh_token, expires_in)。原实现无总超时（不授权就无限轮询），
+    且只处理 HTTPError，遇到 URLError / 非 JSON 错误页会直接 traceback。
+    """
     print("\n[2/5] 等待浏览器授权...")
     data = {
         "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         "client_id": CLIENT_ID,
         "device_code": device_code,
     }
+    deadline = time.time() + timeout
     while True:
+        if time.time() > deadline:
+            print("  等待授权超时，请重新运行")
+            sys.exit(1)
         time.sleep(interval)
         try:
             resp = http_post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", data)
-            if "access_token" in resp:
-                print("  授权成功!")
-                return resp["access_token"], resp.get("refresh_token", "")
         except urllib.error.HTTPError as e:
-            body = json.loads(e.read().decode())
+            try:
+                body = json.loads(e.read().decode())
+            except Exception:
+                body = {}
             error = body.get("error", "")
             if error == "authorization_pending":
                 print("  等待中... (请在浏览器完成登录)")
@@ -79,6 +87,15 @@ def step2_poll_token(device_code, interval):
             else:
                 print(f"  错误: {error} - {body.get('error_description', '')}")
                 sys.exit(1)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            # 网络抖动 / 返回的不是 JSON 页，重试而不是抛栈退出
+            print(f"  网络错误，稍后重试: {e}")
+            continue
+        if "access_token" in resp:
+            print("  授权成功!")
+            # 原实现硬编码 86400，这里采用服务端返回的 expires_in
+            return (resp["access_token"], resp.get("refresh_token", ""),
+                    int(resp.get("expires_in", 86400)))
 
 
 def step3_xbox_live(ms_access_token):
@@ -141,13 +158,23 @@ def step5_minecraft_token(xsts_token, uhs):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Minecraft 正版 Token 获取工具")
+    parser.add_argument("--out", default="minecraft_token.json", help="token 输出文件")
+    parser.add_argument("--save-refresh", action="store_true",
+                        help="同时保存 refresh_token（默认不落盘：它可长期换取新 access token）")
+    parser.add_argument("--timeout", type=float, default=600,
+                        help="等待浏览器授权的总秒数（默认 600）")
+    args = parser.parse_args()
+
     print("=" * 60)
     print("Minecraft 正版 Token 获取工具")
     print("=" * 60)
     print()
 
     device_code, interval = step1_device_code()
-    ms_token, refresh_token = step2_poll_token(device_code, interval)
+    ms_token, refresh_token, expires_in = step2_poll_token(device_code, interval,
+                                                           timeout=args.timeout)
     xbl_token, uhs = step3_xbox_live(ms_token)
     xsts_token, uhs = step4_xsts(xbl_token)
     mc_token, profile = step5_minecraft_token(xsts_token, uhs)
@@ -165,19 +192,24 @@ def main():
         "username": profile["name"],
         "uuid": profile["id"],
         "access_token": mc_token,
-        "refresh_token": refresh_token,
-        "expires_at": int(time.time()) + 86400,  # 约24小时
+        "expires_at": int(time.time()) + expires_in,   # 采用服务端返回的有效期
     }
-    out_path = "minecraft_token.json"
-    with open(out_path, "w") as f:
+    if args.save_refresh:
+        # 默认不落盘：refresh_token 泄漏等于账号长期失守
+        result["refresh_token"] = refresh_token
+    out_path = args.out
+    # 以 0600 直接创建再写入：原实现先 open() 普通权限、之后才 chmod，存在权限窗口
+    fd = os.open(out_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
-    # 限制文件权限为仅所有者可读写（Unix）
     try:
-        os.chmod(out_path, 0o600)
+        os.chmod(out_path, 0o600)   # 文件已存在且权限较松时纠正
     except Exception:
         pass
     print(f"\n已保存到: {out_path}")
-    print("注意: token 有效期约24小时，refresh_token 可用于刷新")
+    print(f"注意: token 有效期约 {expires_in} 秒")
+    if not args.save_refresh:
+        print("      本次未保存 refresh_token（需要请加 --save-refresh）")
     print("安全提示: 此文件包含敏感凭证，请勿分享或提交到 git")
 
 

@@ -40,24 +40,20 @@ class TestFailurePaths(unittest.TestCase):
             self.assertIn(result.get("state"), ["offline", "error", "unknown"])
 
     def test_bot_connect_timeout(self):
-        """测试Bot连接超时"""
+        """测试Bot连接超时：所有协议尝试失败必须抛 ConnectionError，不能静默通过"""
         bot = MCBot(host="127.0.0.1", port=19996, timeout=1.0, use_premium=False)
         try:
-            result = bot.connect()
-            self.assertFalse(result)
-        except Exception:
-            pass  # 连接失败可能抛异常，这是预期行为
+            with self.assertRaises(ConnectionError):
+                bot.connect()
         finally:
             bot.close()
 
     def test_bot_connect_refused(self):
-        """测试Bot连接被拒绝"""
+        """测试Bot连接被拒绝：同上，失败必须显式抛出"""
         bot = MCBot(host="127.0.0.1", port=19995, timeout=1.0, use_premium=False)
         try:
-            result = bot.connect()
-            self.assertFalse(result)
-        except Exception:
-            pass  # 连接被拒绝可能抛异常，这是预期行为
+            with self.assertRaises(ConnectionError):
+                bot.connect()
         finally:
             bot.close()
 
@@ -131,12 +127,11 @@ class TestFailurePaths(unittest.TestCase):
             self.fail(f"close() without connect raised: {e}")
 
     def test_bot_send_chat_without_connect(self):
-        """测试未连接就发消息不崩溃"""
+        """未进入 play 就发消息必须抛 RuntimeError（而不是悄悄丢弃）"""
         bot = MCBot(host="127.0.0.1", port=25565, use_premium=False)
         try:
-            bot.send_chat("test")
-        except Exception:
-            pass  # 预期会失败，但不应崩溃
+            with self.assertRaises(RuntimeError):
+                bot.send_chat("test")
         finally:
             bot.close()
 

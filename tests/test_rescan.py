@@ -12,6 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from storage import db as storage_db
 from storage import rescan as rescan_db
 
 
@@ -25,6 +26,8 @@ class TestRescanQueue(unittest.TestCase):
         rescan_db.init_rescan_queue(self.db_path)
 
     def tearDown(self):
+        # 先关闭连接池里的连接再删文件，否则会残留 *.db-wal/*.db-shm
+        storage_db.close_conn(self.db_path)
         if os.path.exists(self.db_path):
             os.unlink(self.db_path)
 
@@ -137,6 +140,32 @@ class TestRescanQueue(unittest.TestCase):
         self.assertEqual(stats["total"], 2)
         self.assertIn("new", stats["by_strategy"])
         self.assertIn("due_now", stats)
+
+    def test_custom_strategies_missing_new_key(self):
+        # 只给 default 的自定义策略表不应再抛 KeyError: 'new'
+        result = {"state": "up", "players_online": 5, "auth": "cracked"}
+        strategy = rescan_db.update_rescan(self.db_path, "10.1.1.1", 25565, result,
+                                           strategies={"default": {"interval": 77}})
+        self.assertEqual(strategy, "new")
+        self.assertEqual(rescan_db.get_all_rescans(self.db_path)[0]["strategy"], "new")
+        # 连 default 都没有时给出明确 ValueError，而不是 KeyError
+        with self.assertRaises(ValueError):
+            rescan_db.update_rescan(self.db_path, "10.1.1.2", 25565, result,
+                                    strategies={"cracked": {"interval": 120}})
+
+    def test_claim_due_marks_claimed(self):
+        import sqlite3
+        rescan_db.update_rescan(self.db_path, "10.0.0.9", 25565,
+                                {"state": "up", "players_online": 0, "auth": "cracked"})
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("UPDATE rescan_queue SET next_scan=? WHERE ip=?",
+                     (int(time.time()) - 10, "10.0.0.9"))
+        conn.commit()
+        conn.close()
+        first = rescan_db.claim_due(self.db_path)
+        self.assertEqual([r["ip"] for r in first], ["10.0.0.9"])
+        # 领取后 next_scan 已顺延，不会被重复领取
+        self.assertEqual(rescan_db.claim_due(self.db_path), [])
 
     def test_scan_count_increments(self):
         result = {"ip": "192.168.1.1", "port": 25565, "players_online": 5,

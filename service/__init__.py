@@ -4,6 +4,7 @@
 cli.py 和 web/app.py 都调用这里，消除重复逻辑。
 """
 import os
+from typing import Union
 
 import config
 import logger
@@ -19,10 +20,17 @@ from storage import db
 def _build_engine(db_path=None, workers=None, timeout=None, auth_check=True,
                   rate_limit=0, stop_event=None, fingerprint=False) -> ScanEngine:
     cfg = config.load_config()
+    # 用 is None 判断而不是 or：显式传 workers=0/timeout=0 时不应被静默替换成配置默认值
+    if db_path is None:
+        db_path = cfg["db_path"]
+    if workers is None:
+        workers = cfg["workers"]
+    if timeout is None:
+        timeout = cfg["timeout"]
     return ScanEngine(
-        db_path=db_path or cfg["db_path"],
-        workers=workers or cfg["workers"],
-        timeout=timeout or cfg["timeout"],
+        db_path=db_path,
+        workers=workers,
+        timeout=timeout,
         auth_check=auth_check,
         rate_limit=rate_limit,
         stop_event=stop_event,
@@ -50,7 +58,7 @@ def parse_and_filter_targets(targets_str, ports=None, exclude_file=None):
     return filtered, len(filtered)
 
 
-def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
+def run_full_scan(targets_str: Union[str, list], workers=None, timeout=None, auth_check=True,
                   rate=0, exclude_file=None, db_path=None, stop_event=None,
                   fingerprint=False, mode=None, shuffle=None,
                   batch_cooldown=None, progress_file=None,
@@ -77,11 +85,15 @@ def run_full_scan(targets_str: str, workers=None, timeout=None, auth_check=True,
     return results
 
 
-def run_portscan_only(targets_str: str, scan_threads=None, scan_timeout=None,
+def run_portscan_only(targets_str: Union[str, list], scan_threads=None, scan_timeout=None,
                       rate=0, exclude_file=None, mode=None, shuffle=None,
                       batch_cooldown=None, progress_file=None,
                       respect_mode=False) -> list:
-    """只扫描端口，不做SLP探测"""
+    """只扫描端口，不做SLP探测。
+
+    返回值是 scan_ports 的**全部结果（含未开放端口）**，不是仅开放端口——开放端口
+    只用于日志统计；调用方若只需要开放端口请自行 get_open_ports(results)。
+    """
     cfg = config.load_config()
     targets, total = parse_and_filter_targets(targets_str, exclude_file=exclude_file)
     if not targets:

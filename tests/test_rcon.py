@@ -35,10 +35,9 @@ class TestRCONClient(unittest.TestCase):
         self.assertGreater(id2, id1)
 
     def test_send_packet_constructs(self):
-        """测试 _send_packet 不抛出异常（需要已连接，但我们测试构造逻辑）"""
+        """测试 _send_packet 未连接时抛 RCONError（不能用 Exception 兜住一切）"""
         client = RCONClient("127.0.0.1")
-        # 未连接时调用应该抛出异常
-        with self.assertRaises(Exception):
+        with self.assertRaises(RCONError):
             client._send_packet(RCON_TYPE_COMMAND, "test")
 
     def test_rcon_error(self):
@@ -52,9 +51,9 @@ class TestRCONClient(unittest.TestCase):
         self.assertFalse(client.authenticated)
 
     def test_execute_without_connect(self):
-        """未连接时执行命令应抛出异常"""
+        """未连接时执行命令应抛 RCONError（具体异常类型，不是兜底的 Exception）"""
         client = RCONClient("127.0.0.1")
-        with self.assertRaises(Exception):
+        with self.assertRaises(RCONError):
             client.execute("list")
 
     def test_close_sets_socket_none(self):

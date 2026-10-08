@@ -57,8 +57,9 @@ class TestPacketTableIntegrity:
     def test_common_protocols_required_fields(self):
         for p in COMMON_PROTOCOLS:
             pkts = get_play_packets(p)
-            if pkts is None:
-                continue
+            # 原来这里 if pkts is None: continue —— 协议表整表缺失反而“通过”，
+            # 必须让缺失本身失败。
+            assert pkts is not None, f"常用协议 {p} 无包表"
             missing = [f for f in self.REQUIRED_FIELDS if pkts.get(f) is None]
             assert not missing, f"协议 {p} 缺少必需字段 {missing}"
 

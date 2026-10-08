@@ -68,12 +68,29 @@ class TestPluginParsing(unittest.TestCase):
         self.assertIn("B", text)
 
     def test_anti_cheat_detection_in_capture(self):
-        """反作弊检测逻辑存在于 capture_plugins 中"""
-        import inspect
+        """反作弊检测是行为而非源码文本：用假 bot 喂 /plugins 响应来验证"""
         from core.plugins import capture_plugins
-        source = inspect.getsource(capture_plugins)
-        self.assertIn("anti_cheats", source)
-        self.assertIn("ncp", source.lower())
+
+        class FakeBot:
+            """只实现 capture_plugins 需要的最小接口"""
+
+            def __init__(self, responses):
+                self.chat_messages = []
+                self._responses = responses
+
+            def send_command(self, command):
+                for text in self._responses.get(command, []):
+                    self.chat_messages.append(text)
+
+        bot = FakeBot({"plugins": ["Plugins (2): NoCheatPlus v1.1, Vault v1.7"]})
+        intel = capture_plugins(bot, wait_time=0)
+        self.assertEqual(intel.anti_cheat, "ncp")
+        self.assertTrue(intel.has_vault)
+        self.assertIn("NoCheatPlus", {p.name for p in intel.plugins})
+
+        # 没有任何插件时应判定为 none
+        intel_none = capture_plugins(FakeBot({}), wait_time=0)
+        self.assertEqual(intel_none.anti_cheat, "none")
 
 
 class TestServerIntel(unittest.TestCase):

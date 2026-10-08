@@ -8,6 +8,7 @@ import sys
 import os
 import tempfile
 import shutil
+import threading
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -126,6 +127,68 @@ class TestShardManager(unittest.TestCase):
         status = manager2.get_job_status("persist_job")
         self.assertIsNotNone(status)
         self.assertEqual(status["total_shards"], 2)
+
+
+class TestShardRobustness(unittest.TestCase):
+    """针对审计发现的边界/并发缺陷的回归测试"""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        self.manager = ShardManager(state_dir=self.tmp_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_zero_shards_raises(self):
+        with self.assertRaises(ValueError):
+            shard_cidr("10.0.0.0/24", 0)
+
+    def test_negative_shards_raises(self):
+        with self.assertRaises(ValueError):
+            shard_cidr("10.0.0.0/24", -1)
+
+    def test_invalid_cidr_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            shard_cidr("not-a-cidr/x", 2)
+
+    def test_complete_shard_is_idempotent(self):
+        self.manager.create_job("idem", "10.0.0.0/24", 2, [25565])
+        self.manager.claim_shard("idem", "w1")
+        self.manager.complete_shard("idem", 0, {"found": 1})
+        self.manager.complete_shard("idem", 0, {"found": 1})   # 重复上报
+        status = self.manager.get_job_status("idem")
+        self.assertEqual(status["completed_shards"], 1)
+        self.assertEqual(status["progress"], 50.0)
+
+    def test_job_id_path_traversal_rejected(self):
+        for bad in ("../evil", "a/b", "", "x" * 65):
+            with self.assertRaises(ValueError):
+                self.manager.create_job(bad, "1.2.3.4", 1)
+
+    def test_single_target_is_list(self):
+        self.manager.create_job("single", "1.2.3.4", 1)
+        job = self.manager._load_job("single")
+        self.assertEqual(job["shards"]["0"]["targets"], ["1.2.3.4"])
+
+    def test_concurrent_claim_no_duplicate(self):
+        self.manager.create_job("race", "10.0.0.0/24", 4, [25565])
+        claimed, lock = [], threading.Lock()
+
+        def worker(i):
+            while True:
+                s = self.manager.claim_shard("race", f"w{i}")
+                if not s:
+                    break
+                with lock:
+                    claimed.append(s["shard_id"])
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(sorted(claimed), [0, 1, 2, 3])
+        self.assertEqual(len(claimed), len(set(claimed)), f"分片被重复领取: {claimed}")
 
 
 if __name__ == "__main__":
