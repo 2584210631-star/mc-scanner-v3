@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+# libs/ 里的预编译扩展必须入库（vendored依赖），覆盖上面的 *.so
+!libs/**/*.so
 .Python
 *.egg-info/
 dist/
