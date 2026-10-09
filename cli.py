@@ -29,10 +29,19 @@ import time
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _base_dir)
 
-# release 包自带依赖时自动加载（源码仓库无 libs/ 时走 pip 安装的依赖）
+# 加载 libs/ 依赖，C扩展架构不匹配时自动降级到系统包
 _libs_dir = os.path.join(_base_dir, 'libs')
 if os.path.isdir(_libs_dir):
     sys.path.insert(0, _libs_dir)
+    try:
+        import flask  # noqa: F401
+        for _pkg in ('Crypto', 'cryptography', 'uvloop', 'simdjson', 'cffi'):
+            __import__(_pkg)
+    except (ImportError, OSError):
+        sys.path.remove(_libs_dir)
+        for _mod in list(sys.modules.keys()):
+            if _mod.startswith(('Crypto', 'cryptography', 'uvloop', 'simdjson', 'cffi', 'flask')):
+                del sys.modules[_mod]
 
 import config
 import logger
