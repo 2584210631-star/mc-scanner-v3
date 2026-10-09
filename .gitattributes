@@ -1,3 +1,4 @@
 # android_patches/ 是本项目的 Android/Kivy 补丁（含派生自 python-for-android / SDL 的
 # PythonActivity 实现），不是第三方 vendor 目录。不再标 linguist-vendored，
 # 否则会被排除出语言统计与代码检索，上游版权/许可声明见文件头与 NOTICE。
+libs/* linguist-vendored

@@ -18,6 +18,11 @@ if __name__ == "__main__":
     except ImportError:
         print("[!] 缺少 flask，请先安装依赖：pip install -r requirements.txt")
         sys.exit(1)
+    try:
+        import Crypto  # noqa: F401
+    except ImportError:
+        print("[!] 缺少 pycryptodome，请安装：pip install pycryptodome")
+        sys.exit(1)
 
     from web.app import run
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
