@@ -131,9 +131,10 @@ def scan_ports(targets, max_workers: int = None, timeout: float = 3.0,
     controller = None
     if adaptive and profile.adaptive and rate > 0:
         controller = AdaptiveRateController(profile, event_cb=event_cb)
-        # 从用户配置的速率开始（不超过profile上限），而不是profile.rate
-        # 否则小扫描窗口未满100条时控制器永远不提速，用户配的速率被完全忽略
-        controller._current_rate = min(rate, profile.effective_max_rate())
+        # 从 profile.rate 保守起步，控制器自行提速到 max_rate。
+        # 之前直接设为 min(rate, max_rate) 导致 safe 模式单IP扫描从10/s起步，
+        # 容易触发服务器限流。保守起步 + 自适应提速更安全。
+        # 小扫描（<100条）控制器来不及提速，保持 profile.rate 是预期的安全行为。
 
     if show_progress:
         _eff_rate = controller.rate if controller is not None else rate
