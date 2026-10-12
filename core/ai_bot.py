@@ -17,8 +17,7 @@ from core.ai_personas import get_personas
 _api_lock = threading.Lock()
 _last_api_time = 0.0
 API_MIN_INTERVAL = 1.5
-# 单次 API 调用超时：不设上限时挂起的接口会把回复线程长期占住
-API_TIMEOUT = 30
+# 单次 API 调用超时从 config.ai_request_timeout 读取（本地模型可调大），默认180秒
 # 退避时长（秒）
 API_BACKOFF_SECONDS = 60
 # 同时进行中的 AI 回复线程上限：原先每条触发消息都无脑起线程，
@@ -235,8 +234,7 @@ class AIBotSession:
                 try:
                     result = generate_content(topic=prompt, preset="custom", api_key=self.api_key,
                                               base_url=self.base_url, model=self.model,
-                                              custom_prompt=prompt, max_tokens=512,
-                                              timeout=API_TIMEOUT)
+                                              custom_prompt=prompt, max_tokens=512)
                     # 回复被截断时自动续写一次
                     if result.get("success") and result.get("truncated") and result.get("text"):
                         try:
@@ -244,7 +242,7 @@ class AIBotSession:
                             cont_result = generate_content(topic=cont_prompt, preset="custom",
                                                            api_key=self.api_key, base_url=self.base_url,
                                                            model=self.model, custom_prompt=cont_prompt,
-                                                           max_tokens=256, timeout=API_TIMEOUT)
+                                                           max_tokens=256)
                             if cont_result.get("success") and cont_result.get("text"):
                                 result["text"] = result["text"] + cont_result["text"]
                                 _log.info(f"[AI Bot {self.username}] 回复已自动续写")
@@ -313,8 +311,7 @@ class AIBotSession:
                         prompt = f"{me}{self.persona}{ctx}\n水一句，短一点，像真人摸鱼聊天。"
                     result = generate_content(topic=self.topic or "随机话题", preset="custom", api_key=self.api_key,
                                               base_url=self.base_url, model=self.model,
-                                              custom_prompt=prompt, max_tokens=512,
-                                              timeout=API_TIMEOUT)
+                                              custom_prompt=prompt, max_tokens=512)
                 finally:
                     _release_api_slot()
                 if result.get("success") and result.get("text"):

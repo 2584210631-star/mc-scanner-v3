@@ -92,7 +92,6 @@ def _handle_assistant_command(msg):
         api_key=api_key, base_url=base_url, model=model,
         custom_prompt=f"用户指令：{msg}\n请返回JSON工具调用：",
         custom_system=system_prompt,
-        timeout=30,
     )
     if not result.get("success"):
         # API失败，fallback关键词
@@ -120,7 +119,6 @@ def _handle_assistant_command(msg):
         api_key=api_key, base_url=base_url, model=model,
         custom_prompt=summary_prompt,
         custom_system="你是一个简洁的助手，用中文回复，直接说结果，不要客套。",
-        timeout=30,
     )
     if summary.get("success"):
         return summary.get("text", tool_result)

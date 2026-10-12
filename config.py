@@ -49,6 +49,8 @@ DEFAULT_CONFIG = {
     "ai_model": "deepseek-chat",  # AI 模型名
     "ai_api_keys": [],         # API Key 预设列表: [{"name":"","api_key":"","base_url":"","model":""}]
     "ai_allow_insecure": False,  # 允许HTTP+本地地址（用于Ollama等本地模型，默认关）
+    "ai_request_timeout": 180,   # AI请求超时（秒），本地模型慢可调大
+    "ai_max_tokens": 1024,       # AI生成最大token数，本地模型可调小加快响应
     "ai_reply_cooldown": 2.0,   # AI 回复冷却（秒）
     # 邮件通知
     "email_enabled": False,     # 扫描完成邮件通知开关

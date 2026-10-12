@@ -194,14 +194,24 @@ def generate_content(
     model: str = "gpt-3.5-turbo",
     custom_prompt: Optional[str] = None,
     custom_system: Optional[str] = None,
-    timeout: int = 60,
-    max_tokens: int = 2048,
+    timeout: int = None,
+    max_tokens: int = None,
 ) -> dict:
     """
     调用 AI 生成内容。
     返回: {"success": bool, "text": str, "segments": list, "error": str, "truncated": bool}
     truncated=True表示回复被max_tokens截断，可调用续写
     """
+    # timeout/max_tokens 为 None 时从配置读（本地模型可调大超时/调小token）
+    try:
+        import config as _cfg
+        if timeout is None:
+            timeout = int(_cfg.get("ai_request_timeout", 180))
+        if max_tokens is None:
+            max_tokens = int(_cfg.get("ai_max_tokens", 1024))
+    except Exception:
+        timeout = timeout or 180
+        max_tokens = max_tokens or 1024
     if not api_key:
         return {"success": False, "text": "", "segments": [], "error": "未配置 API Key，请在设置中填写 ai_api_key", "truncated": False}
 

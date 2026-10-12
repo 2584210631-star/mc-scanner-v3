@@ -1831,6 +1831,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group" style="flex:2;"><label>API 地址 (base_url)</label><input type="text" id="setAiBaseUrl" placeholder="https://api.deepseek.com/v1"></div>
       <div class="form-group"><label>模型</label><input type="text" id="setAiModel" placeholder="deepseek-chat"></div>
       <div class="form-group" style="max-width:120px;"><label>回复冷却(秒)</label><input type="number" id="setAiCooldown" placeholder="2" min="0" step="0.5"></div>
+      <div class="form-group" style="max-width:120px;"><label>请求超时(秒)</label><input type="number" id="setAiTimeout" placeholder="180" min="10"></div>
+      <div class="form-group" style="max-width:120px;"><label>最大Token</label><input type="number" id="setAiMaxTokens" placeholder="1024" min="64"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="saveAiConfig()">保存并设为当前</button>
@@ -4023,6 +4025,8 @@ async function loadSettings() {
     document.getElementById('setAiBaseUrl').value = cfg.ai_base_url || '';
     document.getElementById('setAiModel').value = cfg.ai_model || '';
     document.getElementById('setAiCooldown').value = cfg.ai_reply_cooldown ?? 2;
+    document.getElementById('setAiTimeout').value = cfg.ai_request_timeout ?? 180;
+    document.getElementById('setAiMaxTokens').value = cfg.ai_max_tokens ?? 1024;
     document.getElementById('setAiAllowInsecure').checked = !!cfg.ai_allow_insecure;
     document.getElementById('setMsgDelay').value = cfg.message_delay ?? 0.8;
     document.getElementById('setBotTimeout').value = cfg.bot_timeout ?? 12;
@@ -4103,6 +4107,8 @@ async function saveAiConfig() {
         ai_base_url: document.getElementById('setAiBaseUrl').value,
         ai_model: document.getElementById('setAiModel').value,
         ai_reply_cooldown: parseFloat(document.getElementById('setAiCooldown').value) || 0,
+        ai_request_timeout: parseInt(document.getElementById('setAiTimeout').value) || 180,
+        ai_max_tokens: parseInt(document.getElementById('setAiMaxTokens').value) || 1024,
         ai_allow_insecure: document.getElementById('setAiAllowInsecure').checked,
         ai_api_keys: _ai_presets,
       })
