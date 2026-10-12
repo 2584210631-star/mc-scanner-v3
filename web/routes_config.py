@@ -99,7 +99,8 @@ def register(app):
     @app.route('/api/config/get')
     def config_get():
         """读取当前配置（敏感字段打码）"""
-        cfg = config.get_all()
+        import copy
+        cfg = copy.deepcopy(config.get_all())  # 深拷贝，打码不污染内存中的真实配置
         # 敏感字段打码（前缀只露2位，降低定向攻击风险）
         for k in ("ai_api_key", "authme_password", "email_password",
                   "mc_access_token", "msa_access_token", "msa_refresh_token"):
