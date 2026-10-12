@@ -114,6 +114,12 @@ def register(app):
                         if a.get(tk):
                             v = str(a[tk])
                             a[tk] = v[:2] + "****" + v[-2:] if len(v) > 8 else "****"
+        # ai_api_keys预设列表里的api_key也打码
+        if isinstance(cfg.get("ai_api_keys"), list):
+            for p in cfg["ai_api_keys"]:
+                if isinstance(p, dict) and p.get("api_key"):
+                    v = str(p["api_key"])
+                    p["api_key"] = v[:2] + "****" + v[-2:] if len(v) > 8 else "****"
         return jsonify(cfg)
 
     @app.route('/api/config/save', methods=['POST'])
@@ -121,7 +127,7 @@ def register(app):
         """保存配置到文件"""
         data = request.json or {}
         # 只允许保存白名单字段
-        allowed = {"ai_api_key", "ai_base_url", "ai_model", "web_host", "web_port",
+        allowed = {"ai_api_key", "ai_base_url", "ai_model", "ai_api_keys", "web_host", "web_port",
                    "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level",
                    "email_enabled", "email_smtp_host", "email_smtp_port", "email_smtp_ssl",
                    "email_username", "email_password", "email_from", "email_to",
@@ -145,6 +151,17 @@ def register(app):
             del to_save["ai_api_key"]
         if "email_password" in to_save and "****" in str(to_save["email_password"]):
             del to_save["email_password"]
+        # ai_api_keys预设列表里打码的api_key保留原值
+        if isinstance(to_save.get("ai_api_keys"), list):
+            existing = config.get("ai_api_keys", []) or []
+            for i, p in enumerate(to_save["ai_api_keys"]):
+                if isinstance(p, dict) and "****" in str(p.get("api_key", "")):
+                    # 找同名预设保留原key
+                    orig = next((e for e in existing if isinstance(e, dict) and e.get("name") == p.get("name")), None)
+                    if orig and orig.get("api_key"):
+                        p["api_key"] = orig["api_key"]
+                    elif i < len(existing) and isinstance(existing[i], dict):
+                        p["api_key"] = existing[i].get("api_key", "")
         ok = config.save_config(to_save)
         return jsonify({"success": ok, "saved": list(to_save.keys())})
 

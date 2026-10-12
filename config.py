@@ -47,6 +47,7 @@ DEFAULT_CONFIG = {
     "ai_api_key": "",          # AI API Key（OpenAI兼容）
     "ai_base_url": "https://api.deepseek.com/v1",  # AI API 地址
     "ai_model": "deepseek-chat",  # AI 模型名
+    "ai_api_keys": [],         # API Key 预设列表: [{"name":"","api_key":"","base_url":"","model":""}]
     "ai_reply_cooldown": 2.0,   # AI 回复冷却（秒）
     # 邮件通知
     "email_enabled": False,     # 扫描完成邮件通知开关

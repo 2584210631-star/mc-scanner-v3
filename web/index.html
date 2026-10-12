@@ -1813,7 +1813,19 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
 <div id="tab-settings" class="hidden">
   <div class="panel">
     <h2>AI 配置</h2>
-    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">配置后永久保存到 config.json，支持 DeepSeek / OpenAI 等兼容接口。</p>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">配置后永久保存到 config.json，支持 DeepSeek / OpenAI 等兼容接口。可保存多个预设快速切换。</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;"><label>预设</label>
+        <select id="setAiPreset" onchange="selectAiPreset()" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);">
+          <option value="">-- 选择预设 --</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;"><label>预设名称</label><input type="text" id="setAiPresetName" placeholder="如：DeepSeek"></div>
+      <div class="form-group" style="max-width:160px;display:flex;gap:6px;align-items:flex-end;">
+        <button class="btn btn-secondary" onclick="addAiPreset()" style="flex:1;">添加</button>
+        <button class="btn btn-secondary" onclick="deleteAiPreset()" style="flex:1;">删除</button>
+      </div>
+    </div>
     <div class="form-row">
       <div class="form-group" style="flex:2;"><label>API Key</label><input type="password" id="setAiApiKey" placeholder="sk-..."></div>
       <div class="form-group" style="flex:2;"><label>API 地址 (base_url)</label><input type="text" id="setAiBaseUrl" placeholder="https://api.deepseek.com/v1"></div>
@@ -1821,7 +1833,7 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
       <div class="form-group" style="max-width:120px;"><label>回复冷却(秒)</label><input type="number" id="setAiCooldown" placeholder="2" min="0" step="0.5"></div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn btn-primary" onclick="saveAiConfig()">保存配置</button>
+      <button class="btn btn-primary" onclick="saveAiConfig()">保存并设为当前</button>
       <span id="setAiStatus" style="font-size:13px;"></span>
     </div>
     <div style="margin-top:16px;padding:10px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-secondary);line-height:1.6;">
@@ -3983,10 +3995,27 @@ async function loadHistory() {
 }
 
 // ===== 设置页 =====
+let _ai_presets = [];
+
+function _renderAiPresetDropdown() {
+  const sel = document.getElementById('setAiPreset');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- 选择预设 --</option>';
+  _ai_presets.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = p.name || '(未命名)';
+    sel.appendChild(opt);
+  });
+  sel.value = cur;
+}
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/config/get');
     const cfg = await res.json();
+    _ai_presets = Array.isArray(cfg.ai_api_keys) ? cfg.ai_api_keys : [];
+    _renderAiPresetDropdown();
     document.getElementById('setAiApiKey').value = cfg.ai_api_key || '';
     document.getElementById('setAiBaseUrl').value = cfg.ai_base_url || '';
     document.getElementById('setAiModel').value = cfg.ai_model || '';
@@ -4005,10 +4034,63 @@ async function loadSettings() {
     document.getElementById('setEmailTo').value = cfg.email_to || '';
   } catch(e) { console.error('加载配置失败', e); }
 }
+function selectAiPreset() {
+  const sel = document.getElementById('setAiPreset');
+  const idx = sel.value;
+  if (idx === '' || !_ai_presets[idx]) return;
+  const p = _ai_presets[idx];
+  document.getElementById('setAiPresetName').value = p.name || '';
+  document.getElementById('setAiApiKey').value = p.api_key || '';
+  document.getElementById('setAiBaseUrl').value = p.base_url || '';
+  document.getElementById('setAiModel').value = p.model || '';
+}
+
+function addAiPreset() {
+  const name = document.getElementById('setAiPresetName').value.trim();
+  if (!name) { alert('请先填写预设名称'); return; }
+  const preset = {
+    name: name,
+    api_key: document.getElementById('setAiApiKey').value,
+    base_url: document.getElementById('setAiBaseUrl').value,
+    model: document.getElementById('setAiModel').value,
+  };
+  // 同名则覆盖
+  const existing = _ai_presets.findIndex(p => p.name === name);
+  if (existing >= 0) _ai_presets[existing] = preset;
+  else _ai_presets.push(preset);
+  _renderAiPresetDropdown();
+  document.getElementById('setAiPreset').value = existing >= 0 ? existing : _ai_presets.length - 1;
+  document.getElementById('setAiStatus').textContent = '✓ 预设已添加（点"保存并设为当前"写入config.json）';
+  document.getElementById('setAiStatus').style.color = '#48bb78';
+}
+
+function deleteAiPreset() {
+  const sel = document.getElementById('setAiPreset');
+  const idx = sel.value;
+  if (idx === '') { alert('请先选择要删除的预设'); return; }
+  const name = _ai_presets[idx].name;
+  if (!confirm(`确定删除预设"${name}"？`)) return;
+  _ai_presets.splice(idx, 1);
+  _renderAiPresetDropdown();
+  document.getElementById('setAiPresetName').value = '';
+  document.getElementById('setAiStatus').textContent = '✓ 预设已删除（点"保存并设为当前"写入config.json）';
+  document.getElementById('setAiStatus').style.color = '#48bb78';
+}
+
 async function saveAiConfig() {
   const status = document.getElementById('setAiStatus');
   status.textContent = '保存中...';
   status.style.color = 'var(--text-secondary)';
+  // 如果选了预设，同步更新该预设的内容
+  const sel = document.getElementById('setAiPreset');
+  if (sel.value !== '' && _ai_presets[sel.value]) {
+    _ai_presets[sel.value] = {
+      name: document.getElementById('setAiPresetName').value.trim() || _ai_presets[sel.value].name,
+      api_key: document.getElementById('setAiApiKey').value,
+      base_url: document.getElementById('setAiBaseUrl').value,
+      model: document.getElementById('setAiModel').value,
+    };
+  }
   try {
     const res = await fetch('/api/config/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -4017,12 +4099,14 @@ async function saveAiConfig() {
         ai_base_url: document.getElementById('setAiBaseUrl').value,
         ai_model: document.getElementById('setAiModel').value,
         ai_reply_cooldown: parseFloat(document.getElementById('setAiCooldown').value) || 0,
+        ai_api_keys: _ai_presets,
       })
     });
     const data = await res.json();
     if (data.success) {
       status.textContent = '✓ 已保存到 config.json';
       status.style.color = '#48bb78';
+      _renderAiPresetDropdown();
     } else {
       status.textContent = '保存失败';
       status.style.color = '#f56565';
