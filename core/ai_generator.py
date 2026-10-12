@@ -96,11 +96,12 @@ def _is_forbidden_ip(ip: str) -> bool:
             or a.is_multicast or a.is_unspecified)
 
 
-def validate_base_url(base_url: str):
+def validate_base_url(base_url: str, allow_insecure: bool = False):
     """校验 AI API 地址，返回 (ok, 规范化地址 或 错误信息)。
 
     规则：必须 https；主机（含解析结果）不能是内网/回环/链路本地地址；
     主机必须在白名单后缀内（可用配置 ai_base_url_allowlist 追加自定义域名）。
+    allow_insecure=True 时放宽：允许 http + 本地/内网地址（用于 Ollama 等本地模型）。
     """
     url = (base_url or "").strip()
     if not url:
@@ -109,21 +110,29 @@ def validate_base_url(base_url: str):
         parsed = urllib.parse.urlsplit(url)
     except Exception as e:
         return False, f"AI API 地址无法解析: {e}"
-    if parsed.scheme != "https":
-        return False, "AI API 地址必须使用 https（拒绝明文 http，避免 API Key 被窃听）"
+    if parsed.scheme not in ("http", "https"):
+        return False, f"AI API 地址协议不支持: {parsed.scheme}"
+    if parsed.scheme != "https" and not allow_insecure:
+        return False, "AI API 地址必须使用 https（拒绝明文 http，避免 API Key 被窃听；本地模型可在设置开启'允许不安全地址'）"
     host = (parsed.hostname or "").strip().lower()
     if not host:
         return False, "AI API 地址缺少主机名"
-    if _is_forbidden_ip(host):
-        return False, f"拒绝访问内网/保留地址: {host}"
+    is_local = _is_forbidden_ip(host)
+    if is_local and not allow_insecure:
+        return False, f"拒绝访问内网/保留地址: {host}（本地模型可在设置开启'允许不安全地址'）"
     # 域名解析结果也要检查，避免用域名指向内网（SSRF）
-    try:
-        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
-        for info in infos:
-            if _is_forbidden_ip(info[4][0]):
-                return False, f"域名解析到内网/保留地址: {host}"
-    except Exception as e:
-        return False, f"AI API 地址无法解析: {host} ({e})"
+    if not is_local:
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+            for info in infos:
+                if _is_forbidden_ip(info[4][0]) and not allow_insecure:
+                    return False, f"域名解析到内网/保留地址: {host}"
+        except Exception as e:
+            if not allow_insecure:
+                return False, f"AI API 地址无法解析: {host} ({e})"
+    # 本地地址跳过白名单检查；公网地址仍需白名单
+    if is_local:
+        return True, url
     # 白名单后缀匹配
     allowed = [s for s in ALLOWED_BASE_URL_SUFFIXES if s]
     try:
@@ -197,7 +206,12 @@ def generate_content(
         return {"success": False, "text": "", "segments": [], "error": "未配置 API Key，请在设置中填写 ai_api_key", "truncated": False}
 
     # 请求发出前先校验地址：只有白名单内的 https 公网主机才会带上 Authorization 头
-    _ok, _info = validate_base_url(base_url)
+    try:
+        import config as _cfg
+        _allow_insecure = bool(_cfg.get("ai_allow_insecure", False))
+    except Exception:
+        _allow_insecure = False
+    _ok, _info = validate_base_url(base_url, allow_insecure=_allow_insecure)
     if not _ok:
         return {"success": False, "text": "", "segments": [], "error": _info, "truncated": False}
     base_url = _info

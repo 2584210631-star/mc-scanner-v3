@@ -127,7 +127,7 @@ def register(app):
         """保存配置到文件"""
         data = request.json or {}
         # 只允许保存白名单字段
-        allowed = {"ai_api_key", "ai_base_url", "ai_model", "ai_api_keys", "web_host", "web_port",
+        allowed = {"ai_api_key", "ai_base_url", "ai_model", "ai_api_keys", "ai_allow_insecure", "web_host", "web_port",
                    "message_delay", "bot_timeout", "exclude_file", "db_path", "log_level",
                    "email_enabled", "email_smtp_host", "email_smtp_port", "email_smtp_ssl",
                    "email_username", "email_password", "email_from", "email_to",
