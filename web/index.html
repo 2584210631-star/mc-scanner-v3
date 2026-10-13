@@ -97,6 +97,7 @@ body {
 .cap-badge.off { color: var(--red); opacity: .85; }
 .cap-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .cap-badge .lbl-short { display: none; }
+@keyframes aiSpin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) {
   .cap-badges { gap: 4px; }
   .cap-badge { padding: 3px 7px; gap: 3px; font-size: 10px; }
@@ -210,6 +211,7 @@ tbody tr:last-child td { border-bottom: none; }
 .badge-rejected { color: var(--slate); border-color: var(--hairline); background: var(--canvas-soft); }
 .badge-unknown { color: var(--violet); border-color: rgba(167,139,250,0.3); background: rgba(167,139,250,0.05); }
 .badge-offline { color: var(--mute); border-color: var(--hairline); background: var(--canvas-soft); }
+.badge-error { color: var(--orange, #f97316); border-color: rgba(249,115,22,0.3); background: rgba(249,115,22,0.05); }
 .badge-mod { color: var(--violet); border-color: rgba(167,139,250,0.3); background: rgba(167,139,250,0.05); }
 /* ===== Stats ===== */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -1262,6 +1264,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
           <option value="online">正版</option>
           <option value="whitelist">白名单</option>
           <option value="rejected">被拒绝</option>
+          <option value="offline">不可达</option>
+          <option value="error">探测错误</option>
           <option value="unknown">未知</option>
         </select>
         <select id="filterModded" onchange="loadResults(1)">
@@ -1345,6 +1349,9 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
           <option value="online">正版</option>
           <option value="whitelist">白名单</option>
           <option value="rejected">被拒绝</option>
+          <option value="offline">不可达</option>
+          <option value="error">探测错误</option>
+          <option value="unknown">未知</option>
         </select>
         <select id="dbFilterModded" onchange="loadDbResults(1)">
           <option value="">全部类型</option>
@@ -1414,11 +1421,13 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         </select>
         <select id="favFilterAuth" onchange="loadFavorites()">
           <option value="">全部认证</option>
-          <option value="cracked">盗版</option>
+          <option value="cracked">离线/破解</option>
           <option value="online">正版</option>
           <option value="whitelist">白名单</option>
-          <option value="rejected">拒绝</option>
-          <option value="offline">离线</option>
+          <option value="rejected">被拒绝</option>
+          <option value="offline">不可达</option>
+          <option value="error">探测错误</option>
+          <option value="unknown">未知</option>
         </select>
         <select id="favFilterOnline" onchange="loadFavorites()">
           <option value="">全部状态</option>
@@ -2269,6 +2278,8 @@ if ('serviceWorker' in navigator) {
 // ===== 登录会话：fetch 自动带会话token，未登录/需改密时弹出登录遮罩 =====
 const _origFetch = window.fetch.bind(window);
 const AUTH_TOKEN_KEY = 'mcscanner_auth_token';
+const AUTH_LABELS = {cracked:'离线/破解', online:'正版', whitelist:'白名单', rejected:'被拒绝', offline:'不可达', error:'探测错误', unknown:'未知'};
+function authLabel(a) { return AUTH_LABELS[a] || a || '未知'; }
 
 function getAuthToken() {
   try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch(e) { return ''; }
@@ -3226,7 +3237,7 @@ async function loadResults(page) {
       <td data-label="MOTD" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${motdTitle}">${motd}</td>
       <td data-label="人数">${r.players_online || 0}/${r.players_max || 0}</td>
       <td data-label="玩家" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${playersTitle}">${playersDisplay}</td>
-      <td data-label="认证"><span class="badge badge-${auth}">${escapeHtml(r.auth || '未知')}</span></td>
+      <td data-label="认证"><span class="badge badge-${auth}">${authLabel(r.auth)}</span></td>
       <td data-label="延迟">${r.ping_ms ? r.ping_ms + 'ms' : '-'}</td>
       <td data-label="操作"><div class="actions">
         <button class="btn btn-success" data-act="fav" title="收藏">☆</button>
@@ -3578,6 +3589,35 @@ async function genPackets() {
 }
 
 // ===== AI 内容生成 =====
+// 共享：带计时+取消的AI请求，超时给出调参建议
+let _aiAbortController = null;
+function _aiFetch(url, body, resultDiv, loadingText) {
+  if (_aiAbortController) { _aiAbortController.abort(); }
+  _aiAbortController = new AbortController();
+  const start = Date.now();
+  resultDiv.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="display:inline-block;width:14px;height:14px;border:2px solid var(--border-color);border-top-color:var(--accent);border-radius:50%;animation:aiSpin 0.8s linear infinite;"></span>
+    <span style="color:var(--text-secondary);">${loadingText}</span>
+    <span id="aiElapsed" style="color:var(--text-secondary);font-size:12px;">0s</span>
+    <button class="btn btn-secondary" style="padding:3px 10px;font-size:12px;" onclick="_aiAbortController.abort();this.disabled=true;this.textContent='已取消';">取消</button>
+  </div>`;
+  const timer = setInterval(() => {
+    const el = document.getElementById('aiElapsed');
+    if (el) el.textContent = Math.floor((Date.now() - start) / 1000) + 's';
+  }, 1000);
+  return fetch(url, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+    signal: _aiAbortController.signal,
+  }).then(r => r.json()).finally(() => clearInterval(timer));
+}
+function _aiErrorHint(error) {
+  const msg = String(error || '');
+  if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('超时')) {
+    return `<div style="color:#f56565;">超时了。本地模型生成慢，去<b>设置</b>把「请求超时」调大（如300秒），「最大Token」调小（如512）。</div>`;
+  }
+  return `<div style="color:#f56565;">失败: ${escapeHtml(msg)}</div>`;
+}
 function _aiParams() {
   return {
     preset: document.getElementById('aiPreset').value,
@@ -3595,14 +3635,9 @@ async function aiGenerateOnly() {
   const p = _aiParams();
   if (!p.topic && p.preset !== 'custom') { alert('请输入主题'); return; }
   const div = document.getElementById('aiResult');
-  div.innerHTML = '<div style="color:var(--text-secondary);">AI生成中，请稍候...</div>';
   try {
-    const res = await fetch('/api/ai/generate', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({preset: p.preset, topic: p.topic, api_key: p.api_key})
-    });
-    const data = await res.json();
-    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${escapeHtml(data.error)}</div>`; return; }
+    const data = await _aiFetch('/api/ai/generate', {preset: p.preset, topic: p.topic, api_key: p.api_key}, div, 'AI生成中...');
+    if (!data.success) { div.innerHTML = _aiErrorHint(data.error); return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">生成成功，共 ${data.segments.length} 段（自动适配MC聊天长度）</div>`;
     html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text) + '</div>';
     html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">分段预览:</div>';
@@ -3610,26 +3645,21 @@ async function aiGenerateOnly() {
       html += `<div style="font-size:12px;padding:4px 8px;margin:2px 0;background:var(--bg-secondary);border-radius:4px;">[${i+1}] ${escapeHtml(s)}</div>`;
     });
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
+  } catch(e) { div.innerHTML = e.name === 'AbortError' ? '<div style="color:var(--text-secondary);">已取消</div>' : _aiErrorHint(e.message); }
 }
 async function aiGenerateAndSend() {
   const p = _aiParams();
   if (!p.topic && p.preset !== 'custom') { alert('请输入主题'); return; }
   if (!p.ip) { alert('请输入服务器IP'); return; }
   const div = document.getElementById('aiResult');
-  div.innerHTML = '<div style="color:var(--text-secondary);">AI生成中，生成后将自动连接服务器发送...</div>';
   try {
-    const res = await fetch('/api/ai/send', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(p)
-    });
-    const data = await res.json();
-    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`; return; }
+    const data = await _aiFetch('/api/ai/send', p, div, 'AI生成中，生成后自动连接服务器发送...');
+    if (!data.success && data.error) { div.innerHTML = _aiErrorHint(data.error); return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
     html += '<div style="background:var(--bg-secondary);padding:10px;border-radius:6px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
     if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${escapeHtml(data.error)}</div>`;
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
+  } catch(e) { div.innerHTML = e.name === 'AbortError' ? '<div style="color:var(--text-secondary);">已取消</div>' : _aiErrorHint(e.message); }
 }
 
 // ===== AI讲故事 =====
@@ -3638,14 +3668,9 @@ async function storyGenerate() {
   const topic = document.getElementById('storyTopic').value.trim();
   if (!topic && preset !== 'custom') { alert('请输入故事主题'); return; }
   const div = document.getElementById('storyResult');
-  div.innerHTML = '<div style="color:var(--text-secondary);">AI写故事中，请稍候...</div>';
   try {
-    const res = await fetch('/api/ai/generate', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({preset, topic})
-    });
-    const data = await res.json();
-    if (!data.success) { div.innerHTML = `<div style="color:#f56565;">生成失败: ${escapeHtml(data.error)}</div>`; return; }
+    const data = await _aiFetch('/api/ai/generate', {preset, topic}, div, 'AI写故事中...');
+    if (!data.success) { div.innerHTML = _aiErrorHint(data.error); return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">生成成功，共 ${data.segments.length} 段（自动适配MC聊天长度）</div>`;
     html += '<div style="background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(data.text) + '</div>';
     html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">分段预览:</div>';
@@ -3653,7 +3678,7 @@ async function storyGenerate() {
       html += `<div style="font-size:12px;padding:4px 8px;margin:2px 0;background:var(--bg-secondary);border-radius:4px;">[${i+1}] ${escapeHtml(s)}</div>`;
     });
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
+  } catch(e) { div.innerHTML = e.name === 'AbortError' ? '<div style="color:var(--text-secondary);">已取消</div>' : _aiErrorHint(e.message); }
 }
 async function storyGenerateAndSend() {
   const preset = document.getElementById('storyType').value;
@@ -3662,26 +3687,21 @@ async function storyGenerateAndSend() {
   if (!topic && preset !== 'custom') { alert('请输入故事主题'); return; }
   if (!ip) { alert('请输入服务器地址'); return; }
   const div = document.getElementById('storyResult');
-  div.innerHTML = '<div style="color:var(--text-secondary);">AI写故事中，写完自动进服发送...</div>';
   try {
-    const res = await fetch('/api/ai/send', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        preset, topic, ip,
-        port: parseInt(document.getElementById('storyPort').value) || 25565,
-        username: document.getElementById('storyUser').value || 'StoryBot',
-        authme_password: document.getElementById('storyAuthme').value || null,
-        use_premium: document.getElementById('storyPremium').checked,
-        premium_uuid: document.getElementById('storyPremiumAccount').value || undefined,
-      })
-    });
-    const data = await res.json();
-    if (!data.success && data.error) { div.innerHTML = `<div style="color:#f56565;">失败: ${escapeHtml(data.error)}</div>`; return; }
+    const data = await _aiFetch('/api/ai/send', {
+      preset, topic, ip,
+      port: parseInt(document.getElementById('storyPort').value) || 25565,
+      username: document.getElementById('storyUser').value || 'StoryBot',
+      authme_password: document.getElementById('storyAuthme').value || null,
+      use_premium: document.getElementById('storyPremium').checked,
+      premium_uuid: document.getElementById('storyPremiumAccount').value || undefined,
+    }, div, 'AI写故事中，写完自动进服发送...');
+    if (!data.success && data.error) { div.innerHTML = _aiErrorHint(data.error); return; }
     let html = `<div style="color:#48bb78;margin-bottom:8px;">完成！生成 ${data.total_segments} 段，成功发送 ${data.messages_sent} 条</div>`;
     html += '<div style="background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:14px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(data.text || '') + '</div>';
     if (data.error) html += `<div style="color:#f56565;margin-top:8px;">警告: ${escapeHtml(data.error)}</div>`;
     div.innerHTML = html;
-  } catch(e) { div.innerHTML = `<div style="color:#f56565;">请求失败: ${escapeHtml(e.message)}</div>`; }
+  } catch(e) { div.innerHTML = e.name === 'AbortError' ? '<div style="color:var(--text-secondary);">已取消</div>' : _aiErrorHint(e.message); }
 }
 
 async function loadDbStats() {
@@ -3696,6 +3716,9 @@ async function loadDbStats() {
       <div class="stat-card"><div class="value">${byAuth.cracked || 0}</div><div class="label">离线/破解</div></div>
       <div class="stat-card"><div class="value">${byAuth.online || 0}</div><div class="label">正版</div></div>
       <div class="stat-card"><div class="value">${byAuth.whitelist || 0}</div><div class="label">白名单</div></div>
+      <div class="stat-card"><div class="value">${byAuth.rejected || 0}</div><div class="label">被拒绝</div></div>
+      <div class="stat-card"><div class="value">${byAuth.offline || 0}</div><div class="label">不可达</div></div>
+      <div class="stat-card"><div class="value">${byAuth.error || 0}</div><div class="label">探测错误</div></div>
       <div class="stat-card"><div class="value">${data.online_servers ?? 0}</div><div class="label">有人在线</div></div>
     `;
   } catch(e) {}
@@ -3722,7 +3745,7 @@ async function loadDbResults(page) {
       <td data-label="MOTD" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.motd || '-')}</td>
       <td data-label="人数">${r.players_online || 0}/${r.players_max || 0}</td>
       <td data-label="玩家" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(players.join(', '))}">${players.slice(0,3).join(', ') + (players.length>3?' +'+(players.length-3):'')}</td>
-      <td data-label="认证"><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${escapeHtml(r.auth || '未知')}</span></td>
+      <td data-label="认证"><span class="badge badge-${escapeHtml(r.auth || 'unknown')}">${authLabel(r.auth)}</span></td>
       <td data-label="更新">${r.last_updated ? new Date(r.last_updated).toLocaleString() : '-'}</td>
       <td data-label="操作"><div class="actions">
         <button class="btn btn-primary" data-need="login" data-act="warn" title="警告">⚠</button>
@@ -4718,7 +4741,7 @@ async function loadFavorites() {
       <td data-label="版本">${escapeHtml(disp.version || '-')}</td>
       <td data-label="核心"><span class="badge badge-${escapeHtml(disp.core_type || 'unknown')}" style="text-transform:capitalize;">${escapeHtml(disp.core_type || '-')}</span></td>
       <td data-label="人数" style="color:${stateColor};" title="${escapeHtml(playerNames || '无玩家')}">${playersHtml}</td>
-      <td data-label="认证"><span class="badge badge-${escapeHtml(disp.auth || 'unknown')}">${escapeHtml(disp.auth || '-')}</span></td>
+      <td data-label="认证"><span class="badge badge-${escapeHtml(disp.auth || 'unknown')}">${authLabel(disp.auth)}</span></td>
       <td data-label="标签">${tags || '-'}</td>
       <td data-label="备注" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(f.note || '')}">${escapeHtml(f.note || '')}</td>
       <td data-label="检查" style="font-size:11px;color:var(--mute);">${rt && rt.last_check ? rt.last_check : (f.last_check ? new Date(f.last_check).toLocaleString() : '-')}</td>
