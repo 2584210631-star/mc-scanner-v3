@@ -878,6 +878,19 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
   .stat-card { padding: 12px; }
   .stat-card .value { font-size: 20px; }
 
+  /* iOS防缩放：输入框聚焦时字号必须>=16px，否则Safari自动放大页面 */
+  .form-group input, .form-group select, .form-group textarea,
+  .filter-bar select, .filter-bar input,
+  .obs-terminal-input input {
+    font-size: 16px !important;
+    padding: 11px 12px !important;
+  }
+  input[type="checkbox"] { width: 20px; height: 20px; }
+  /* 按钮触控区域加大 */
+  .btn { min-height: 42px; }
+  /* 底部导航留足安全区 */
+  .container { padding-bottom: 90px; }
+
   /* 扫描配置 */
   #tab-scan .form-row { flex-direction: row; flex-wrap: wrap; }
   #tab-scan .form-group { min-width: calc(50% - 6px); }
