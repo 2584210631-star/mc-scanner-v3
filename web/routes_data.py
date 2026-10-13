@@ -103,7 +103,9 @@ def register(app):
         ts = int(time.time())
 
         if fmt == "json":
-            return jsonify({"total": total, "exported_at": now, "results": rows})
+            resp = jsonify({"total": total, "exported_at": now, "results": rows})
+            resp.headers["Content-Disposition"] = f"attachment; filename=scan_results_{ts}.json"
+            return resp
 
         if fmt == "csv":
             lines = ["IP,端口,版本,协议,人数,延迟,验证,核心,Mod,MOTD"]
@@ -329,7 +331,9 @@ def register(app):
         ts = int(time.time())
 
         if fmt == "json":
-            return jsonify({"total": len(favs), "exported_at": now, "favorites": favs})
+            resp = jsonify({"total": len(favs), "exported_at": now, "favorites": favs})
+            resp.headers["Content-Disposition"] = f"attachment; filename=favorites_{ts}.json"
+            return resp
 
         if fmt == "csv":
             lines = ["IP,端口,版本,人数,验证,标签,备注,MOTD"]
