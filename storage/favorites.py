@@ -304,11 +304,12 @@ _MAX_IMPORT_LINES = 100000
 
 
 def import_favorites(filepath: str, path: str = None) -> tuple:
-    """从文本文件导入收藏，返回 (成功条数, 失败行列表)。
+    """从文件导入收藏，支持 JSON（完整字段）和 TXT（仅 ip:port）。
 
-    与旧实现的区别：
-    - 单行坏数据（如 1.2.3.4:abc）只跳过并记录，不再中断整次导入；
-    - 先解析完再一次性读-改-写，避免每行重写整个 JSON（O(n²)）。
+    JSON 格式恢复：ip, port, tags, note, added_at, last_check, last_info, last_good_info。
+    TXT 格式：每行 ip:port 或 ip，tags/note 为空。
+
+    返回 (成功条数, 失败行列表)。
     失败行格式为 (行号, 原文)。
     """
     if not os.path.exists(filepath):
@@ -318,48 +319,86 @@ def import_favorites(filepath: str, path: str = None) -> tuple:
     truncated = False
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            for lineno, line in enumerate(f, 1):
-                if lineno > _MAX_IMPORT_LINES:
-                    truncated = True
-                    break
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                try:
-                    if ':' in line:
-                        parts = line.rsplit(':', 1)
-                        ip, port = parts[0].strip(), int(parts[1])
-                    else:
-                        ip, port = line, 25565
-                    if not ip:
-                        raise ValueError("IP 为空")
-                    if not (0 < port < 65536):
-                        raise ValueError(f"端口越界: {port}")
-                except (ValueError, IndexError):
-                    failed.append((lineno, line))
-                    continue
-                parsed.append((ip, port))
+            content = f.read()
     except OSError as e:
         print(f"[!] 收藏导入读取失败: {e}")
         return 0, failed
+
+    # 尝试 JSON 解析（导出的 JSON 格式）
+    stripped = content.lstrip()
+    if stripped.startswith('{') or stripped.startswith('['):
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict):
+                data = data.get("favorites", data.get("results", []))
+            if isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict) or not item.get("ip"):
+                        continue
+                    try:
+                        port = int(item.get("port", 25565))
+                        if not (0 < port < 65536):
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+                    parsed.append({
+                        "ip": item["ip"],
+                        "port": port,
+                        "tags": item.get("tags", []) or [],
+                        "note": item.get("note", "") or "",
+                        "added_at": item.get("added_at") or datetime.now().isoformat(),
+                        "last_check": item.get("last_check"),
+                        "last_info": item.get("last_info"),
+                        "last_good_info": item.get("last_good_info"),
+                    })
+            if parsed:
+                _write_imported(parsed, path)
+                return len(parsed), []
+        except (json.JSONDecodeError, ValueError):
+            pass  # 不是有效 JSON，回退到 TXT 解析
+
+    # TXT 格式：每行 ip:port
+    for lineno, line in enumerate(content.strip().splitlines(), 1):
+        if lineno > _MAX_IMPORT_LINES:
+            truncated = True
+            break
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        try:
+            if ':' in line:
+                parts = line.rsplit(':', 1)
+                ip, port = parts[0].strip(), int(parts[1])
+            else:
+                ip, port = line, 25565
+            if not ip:
+                raise ValueError("IP 为空")
+            if not (0 < port < 65536):
+                raise ValueError(f"端口越界: {port}")
+        except (ValueError, IndexError):
+            failed.append((lineno, line))
+            continue
+        parsed.append({"ip": ip, "port": port, "tags": [], "note": "",
+                       "added_at": datetime.now().isoformat(),
+                       "last_check": None, "last_info": None, "last_good_info": None})
 
     if truncated:
         print(f"[!] 收藏导入超过 {_MAX_IMPORT_LINES} 行，已截断")
 
     if parsed:
-        # 一次性读-改-写：与其它写入口共用同一把锁，避免导入期间丢更新
-        with _LOCK:
-            favorites = load_favorites(path)
-            now = datetime.now().isoformat()
-            for ip, port in parsed:
-                if _find(favorites, ip, port) >= 0:
-                    continue  # 已收藏的不覆盖原有标签/备注
-                favorites.append({
-                    "ip": ip, "port": port, "tags": [], "note": "",
-                    "added_at": now, "last_check": None, "last_info": None,
-                })
-            save_favorites(favorites, path)
+        _write_imported(parsed, path)
     return len(parsed), failed
+
+
+def _write_imported(entries: list, path: str = None):
+    """将解析好的收藏条目写入文件，已存在的跳过不覆盖。"""
+    with _LOCK:
+        favorites = load_favorites(path)
+        for entry in entries:
+            if _find(favorites, entry["ip"], entry["port"]) >= 0:
+                continue  # 已收藏的不覆盖原有标签/备注
+            favorites.append(entry)
+        save_favorites(favorites, path)
 
 
 def import_from_file(filepath: str, path: str = None) -> int:

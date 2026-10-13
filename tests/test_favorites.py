@@ -57,6 +57,80 @@ class TestFavoritesRobustness(unittest.TestCase):
         self.assertEqual(favorites.import_from_file(src, path=self.path), 2)
         self.assertEqual(len(favorites.load_favorites(self.path)), 2)
 
+    def test_import_json_restores_full_fields(self):
+        """JSON 导入恢复完整字段：tags/note/last_info/last_good_info 不丢"""
+        src = os.path.join(self.tmp, "fav_export.json")
+        export_data = {
+            "total": 2,
+            "exported_at": "2026-10-13 12:00:00",
+            "favorites": [
+                {
+                    "ip": "1.2.3.4", "port": 25565,
+                    "tags": ["生存", "推荐"], "note": "好友服务器",
+                    "added_at": "2026-10-01T10:00:00",
+                    "last_check": "2026-10-12T08:00:00",
+                    "last_info": {"state": "up", "version": "1.21.1", "players_online": 5, "auth": "offline"},
+                    "last_good_info": {"state": "up", "version": "1.21.1", "players_online": 10},
+                },
+                {
+                    "ip": "5.6.7.8", "port": 25566,
+                    "tags": [], "note": "",
+                    "added_at": "2026-10-02T10:00:00",
+                    "last_check": None, "last_info": None, "last_good_info": None,
+                },
+            ],
+        }
+        with open(src, "w", encoding="utf-8") as f:
+            json.dump(export_data, f)
+
+        count, failed = favorites.import_favorites(src, path=self.path)
+        self.assertEqual(count, 2)
+        self.assertEqual(len(failed), 0)
+
+        favs = favorites.load_favorites(self.path)
+        self.assertEqual(len(favs), 2)
+
+        # 验证第一条完整字段
+        f1 = next(f for f in favs if f["ip"] == "1.2.3.4")
+        self.assertEqual(f1["port"], 25565)
+        self.assertEqual(f1["tags"], ["生存", "推荐"])
+        self.assertEqual(f1["note"], "好友服务器")
+        self.assertEqual(f1["added_at"], "2026-10-01T10:00:00")
+        self.assertEqual(f1["last_check"], "2026-10-12T08:00:00")
+        self.assertEqual(f1["last_info"]["version"], "1.21.1")
+        self.assertEqual(f1["last_info"]["auth"], "offline")
+        self.assertEqual(f1["last_good_info"]["players_online"], 10)
+
+        # 验证第二条空字段
+        f2 = next(f for f in favs if f["ip"] == "5.6.7.8")
+        self.assertEqual(f2["port"], 25566)
+        self.assertEqual(f2["tags"], [])
+        self.assertEqual(f2["note"], "")
+
+    def test_import_json_raw_array(self):
+        """JSON 裸数组格式也能导入"""
+        src = os.path.join(self.tmp, "raw.json")
+        with open(src, "w", encoding="utf-8") as f:
+            json.dump([{"ip": "9.9.9.9", "port": 25565, "tags": ["test"], "note": "raw"}], f)
+        count, _ = favorites.import_favorites(src, path=self.path)
+        self.assertEqual(count, 1)
+        favs = favorites.load_favorites(self.path)
+        self.assertEqual(favs[0]["tags"], ["test"])
+        self.assertEqual(favs[0]["note"], "raw")
+
+    def test_import_json_duplicate_skipped(self):
+        """已存在的收藏导入时跳过，不覆盖原有标签"""
+        favorites.add_favorite("1.1.1.1", 25565, tags=["原有标签"], note="原有备注", path=self.path)
+        src = os.path.join(self.tmp, "dup.json")
+        with open(src, "w", encoding="utf-8") as f:
+            json.dump([{"ip": "1.1.1.1", "port": 25565, "tags": ["新标签"], "note": "新备注"}], f)
+        count, _ = favorites.import_favorites(src, path=self.path)
+        self.assertEqual(count, 1)  # 解析成功1条
+        favs = favorites.load_favorites(self.path)
+        self.assertEqual(len(favs), 1)  # 不重复添加
+        self.assertEqual(favs[0]["tags"], ["原有标签"])  # 不覆盖
+        self.assertEqual(favs[0]["note"], "原有备注")
+
     def test_non_serializable_save_does_not_escape(self):
         favorites.add_favorite("1.1.1.1", 25565, path=self.path)
         # 集合不可 JSON 序列化：不能把异常抛给调用方，文件也要保持合法 JSON
