@@ -1473,8 +1473,8 @@ tbody tr:hover { background: rgba(0,217,146,0.04) !important; }
         <button class="btn btn-violet" data-need="login" onclick="openBatchAiModal('fav')">批量AI托管选中</button>
         <button class="btn btn-danger" onclick="batchDeleteFavorites()">批量删除选中</button>
         <button class="btn btn-secondary" onclick="toggleAllVisible(this,'selectAllFav')">全选</button>
-        <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入txt</button>
-        <input type="file" id="favImportFile" accept=".txt" style="display:none;" onchange="importFavorites(this)">
+        <button class="btn btn-warning" onclick="document.getElementById('favImportFile').click()">导入TXT/JSON</button>
+        <input type="file" id="favImportFile" accept=".txt,.json" style="display:none;" onchange="importFavorites(this)">
         <button class="btn btn-secondary" onclick="exportFavorites('txt')">导出TXT</button>
         <button class="btn btn-secondary" onclick="exportFavorites('csv')">导出CSV</button>
         <button class="btn btn-secondary" onclick="exportFavorites('html')">导出HTML</button>
