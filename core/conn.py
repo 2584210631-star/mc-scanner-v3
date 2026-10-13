@@ -320,7 +320,13 @@ class MCConnection:
                 self.close()
                 raise ValueError(f"包长度非法: {packet_length}")
             try:
-                raw = self._recv_exact(packet_length, total_timeout=timeout or self.timeout)
+                # timeout 只用于“等待数据就绪”（configuration/play 用 0.5~1s 短轮询，
+                # 以便及时响应 deadline/stop）。一旦包开始到达，读完整包用 self.timeout 兜底：
+                # 否则短轮询遇到大 registry/地形包在 timeout 内读不完，会落到下面的
+                # except socket.timeout → self.close() 杀掉连接，表现为观察者“立即断开/未连接”，
+                # 且跨网慢链路每次重连都死在同一处。
+                _payload_timeout = self.timeout if self.timeout else (timeout or self.timeout)
+                raw = self._recv_exact(packet_length, total_timeout=_payload_timeout)
             except socket.timeout:
                 self.close()  # 读包中途超时=半包，关闭连接避免流错位
                 raise

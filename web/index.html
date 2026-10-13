@@ -5031,8 +5031,12 @@ function loadObserverSessions() {
       card.className = 'obs-session-card' + (s.session_id===currentObsSid?' active':'');
       const statusCls = s.status==='connected'?'obs-status-online':'obs-status-offline';
       card.innerHTML = `<div class="obs-name">${escapeHtml(s.username)} @ ${escapeHtml(s.host)}:${s.port}</div>
-        <div class="obs-status ${statusCls}">${escapeHtml(s.status)} | 消息${s.chat_count||0}</div>`;
+        <div class="obs-status ${statusCls}">${escapeHtml(s.status)} | 消息${s.chat_count||0}</div>
+        <div style="margin-top:6px;display:flex;gap:4px;">
+          <button class="obs-btn" data-stop="${escapeHtml(s.session_id)}" style="padding:2px 8px;font-size:10px;background:#dc2626;color:#fff;">停止</button>
+        </div>`;
       card.onclick = ()=>{ currentObsSid=s.session_id; obsLastSeq=0; document.getElementById('obsTerminalBody').innerHTML=''; loadObserverSessions(); startObsPolling(); };
+      card.querySelector('[data-stop]').onclick = (e)=>{ e.stopPropagation(); stopObserverById(s.session_id); };
       box.appendChild(card);
     });
   });
@@ -5158,18 +5162,27 @@ function obsSendInput() {
   });
 }
 
-function stopCurrentObserver() {
-  if (!currentObsSid) return;
-  if (!confirm('确定断开当前观察者？')) return;
+function stopObserverById(sid) {
+  if (!sid) { toast('请先在“活跃会话”中选择一个会话'); return; }
+  if (!confirm('确定断开该观察者？')) return;
   fetch('/api/observer/stop', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({session_id:currentObsSid})
-  }).then(r=>r.json()).then(()=>{
-    currentObsSid=null;
-    if (obsPollTimer) clearInterval(obsPollTimer);
-    document.getElementById('obsCurrentTitle').textContent='未选择会话';
+    body: JSON.stringify({session_id:sid})
+  }).then(r=>r.json()).then(d=>{
+    if (d.error) { toast('停止失败: '+d.error); return; }
+    if (sid===currentObsSid) {
+      currentObsSid=null;
+      if (obsPollTimer) clearInterval(obsPollTimer);
+      document.getElementById('obsCurrentTitle').textContent='未选择会话';
+    }
+    toast('已断开');
     loadObserverSessions();
   });
+}
+
+function stopCurrentObserver() {
+  if (!currentObsSid) { toast('请先在“活跃会话”中点选会话，或直接点卡片上的“停止”'); return; }
+  stopObserverById(currentObsSid);
 }
 
 function exportObserver(fmt) {

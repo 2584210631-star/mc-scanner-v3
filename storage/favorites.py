@@ -330,7 +330,8 @@ def import_favorites(filepath: str, path: str = None) -> tuple:
         try:
             data = json.loads(content)
             if isinstance(data, dict):
-                data = data.get("favorites", data.get("results", []))
+                # 兼容收藏导出(favorites)、扫描结果(results)、数据库导出(servers)
+                data = data.get("favorites", data.get("results", data.get("servers", [])))
             if isinstance(data, list):
                 for item in data:
                     if not isinstance(item, dict) or not item.get("ip"):
