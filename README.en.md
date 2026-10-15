@@ -15,14 +15,15 @@ English | [中文](README.md)
 
 # 🛠️ MC Scanner v3.6.5
 
-> The single source of truth for the version is `config.__version__` (currently `3.6.3`): CLI `--version`, the Web panel and the launcher scripts all read it. Bump it there only.
+> The single source of truth for the version is `config.__version__`: CLI `--version`, the Web panel and the launcher scripts all read it. Bump it there only.
 
 ### Minecraft Server Scanner · Probe · Observer · Security Alert
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://github.com/2584210631-star/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/2584210631-star/mc-scanner-v3/actions)
 [![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/Protocol-41%20versions%20(340%2B)-10b981.svg)](#protocols)
-[![Tests](https://img.shields.io/badge/Tests-193%20passing-00d992.svg)](#tests)
+[![Tests](https://img.shields.io/badge/Tests-215%20passing-00d992.svg)](#tests)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
 
 **Port Scan · SLP Probe · Auth Detection · Observer · AI Bot · Security Scan · Web Panel**
@@ -469,7 +470,7 @@ mc-scanner-v3/
 python3 -m pytest tests/ -q
 ```
 
-Currently **193 tests all passing**, covering: protocol table integrity, version mapping, auth probing, Login Start segmentation, Client Settings segmentation, AuthMe branching, progress storage, AI safety guardrails, failure paths, no-reported-protocol fallback, etc.
+Currently **215 tests all passing**, covering: protocol table integrity, version mapping, auth probing, Login Start segmentation, Client Settings segmentation, AuthMe branching, progress storage, AI safety guardrails, failure paths, no-reported-protocol fallback, etc.
 
 Regenerate protocol table:
 

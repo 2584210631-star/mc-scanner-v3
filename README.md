@@ -15,14 +15,15 @@
 
 # 🛠️ MC Scanner v3.6.5
 
-> 版本号唯一来源是 `config.__version__`（当前 `3.6.3`）：CLI `--version`、Web 面板和启动脚本都从这里取。升级版本只改这一处，不要再手写进文档/脚本。
+> 版本号唯一来源是 `config.__version__`：CLI `--version`、Web 面板和启动脚本都从这里取。升级版本只改这一处，不要再手写进文档/脚本。
 
 ### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒 / Minecraft Server Scanner · Probe · Observer · Security Alert
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://github.com/2584210631-star/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/2584210631-star/mc-scanner-v3/actions)
 [![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/协议表-41%20版本%20(340%2B)-10b981.svg)](#协议与版本)
-[![Tests](https://img.shields.io/badge/测试-193%20通过-00d992.svg)](#测试)
+[![Tests](https://img.shields.io/badge/测试-215%20通过-00d992.svg)](#测试)
 [![Platform](https://img.shields.io/badge/平台-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
 
 **端口扫描 · SLP 探测 · 认证检测 · 观察者 · AI 托管 · 安全扫描 · Web 面板**
@@ -459,7 +460,7 @@ mc-scanner-v3/
 python3 -m pytest tests/ -q
 ```
 
-当前 **193 个测试全部通过**，覆盖：协议表完整性、版本映射、认证探测、Login Start分档、Client Settings分档、AuthMe分支、进度存储、AI安全护栏、失败路径、无报告协议回退等。
+当前 **215 个测试全部通过**，覆盖：协议表完整性、版本映射、认证探测、Login Start分档、Client Settings分档、AuthMe分支、进度存储、AI安全护栏、失败路径、无报告协议回退等。
 
 重新生成协议表：
 

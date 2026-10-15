@@ -359,17 +359,31 @@ def cmd_warn_db(args, cfg):
     print(f"{'='*50}")
 def cmd_masscan(args, cfg):
     from service import run_masscan_scan
+    import ipaddress
     mode = args.mode or cfg.get('scan_mode') or 'balanced'
     # aggressive 模式门槛：与 cmd_portscan/cmd_scan 对齐，必须显式 --yes 确认
     if mode == 'aggressive' and not getattr(args, 'yes', False):
         print("[!] aggressive模式：5000pps、无限速，仅适用于内网/信任网络")
         print("[!] 公网使用极易触发IDS封禁和运营商限流。如确认请加 --yes 参数")
         return 2
+    # 覆盖面守卫：拒绝 /16 及更大网段，除非显式声明授权
+    try:
+        net = ipaddress.ip_network(args.targets, strict=False)
+    except ValueError:
+        logger.error(f"无效的目标网段: {args.targets}")
+        return 2
+    MAX_PREFIXLEN = 16
+    if net.prefixlen < MAX_PREFIXLEN and not args.i_have_authorization:
+        logger.error(
+            f"拒绝执行：{args.targets} 覆盖 {net.num_addresses:,} 个地址，超过安全阈值 /{MAX_PREFIXLEN}。\n"
+            f"如果这是你自己持有的网段，请加 --i-have-authorization 并保留授权凭证。"
+        )
+        return 2
     if not has_masscan():
         logger.warning("[!] masscan 未安装，请先安装: sudo apt install masscan")
         return 1
     result_path = run_masscan_scan(
-        targets=args.targets or "0.0.0.0/0",
+        targets=args.targets,
         port=args.port or "25565",
         rate=args.rate,
         exclude_file=args.exclude or cfg['exclude_file'],
@@ -951,7 +965,8 @@ def main():
 
     # masscan
     m = sub.add_parser("masscan", help="masscan 全网端口发现")
-    m.add_argument("--targets", default="0.0.0.0/0")
+    m.add_argument("--targets", required=True,
+                   help="目标 CIDR，如 203.0.113.0/24。必须显式指定。")
     m.add_argument("--rate", type=int, default=None)
     m.add_argument("--port", default="25565")
     m.add_argument("--output", default="scan_results.ndjson")
@@ -962,6 +977,8 @@ def main():
     m.add_argument("--mode", choices=["safe", "balanced", "aggressive"],
                    help="扫描模式: safe=100pps / balanced=1000pps(默认) / aggressive=5000pps仅内网")
     m.add_argument("--yes", action="store_true", help="确认aggressive模式（高吞吐无保护，仅内网使用）")
+    m.add_argument("--i-have-authorization", action="store_true",
+                   help="确认你对目标网段拥有授权（扫描 /16 及更大网段必须加此参数）")
     m.set_defaults(func=cmd_masscan)
 
     # import
