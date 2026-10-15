@@ -3,13 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-# libs/ 里的预编译扩展必须入库（vendored依赖），覆盖上面的 *.so
-!libs/**/*.so
 .Python
 *.egg-info/
 dist/
 build/
 *.egg
+
+# 本地依赖目录（不入库，用 pip install -r requirements.txt）
+libs/
 
 # 数据库
 *.db

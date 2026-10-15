@@ -30,9 +30,8 @@ REM Show Python version
 for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYVER=%%i
 echo [*] Python: %PYVER%
 
-REM Check dependencies. libs/ is no longer shipped, so test the real import
-REM instead of looking for libs\flask\__init__.py (that path never existed -> always reinstalled, and only flask was installed, pycryptodome missing).
-python -c "import flask" >nul 2>&1
+REM Check dependencies (flask + pycryptodome are required)
+python -c "import flask, Crypto" >nul 2>&1
 if errorlevel 1 (
     echo [!] Missing dependencies, installing from requirements.txt...
     pip install -r requirements.txt

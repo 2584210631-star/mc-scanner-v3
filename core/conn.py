@@ -119,7 +119,8 @@ def _connect_via_http(sock, proxy_host, proxy_port, target_host, target_port, us
         if len(resp) > 65536:
             raise ConnectionError("HTTP代理响应头过大")
     if b"200" not in resp.split(b"\r\n")[0]:
-        raise ConnectionError(f"HTTP代理连接失败: {resp.split(b'\r\n')[0].decode(errors='ignore')}")
+        proxy_status = resp.split(b"\r\n")[0].decode(errors="ignore")
+        raise ConnectionError(f"HTTP代理连接失败: {proxy_status}")
 
 
 class MCConnection:
