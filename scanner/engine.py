@@ -10,7 +10,6 @@ import time
 
 import logger
 from core.probe import slp_probe, auth_probe, active_fingerprint
-from core.bot import join_and_warn
 from storage import db
 from .portscan import scan_ports, get_open_ports
 from .banner import parse_banner, extract_records
@@ -244,96 +243,6 @@ class ScanEngine:
         print(f"[*] 阶段2: SLP探测 + 认证检测（{len(open_ports)} 个目标）")
         return self.scan_targets(iter(open_ports), progress_callback=progress_callback)
 
-    def warn_targets(self, targets, username: str = "SecurityBot",
-                     messages: list = None, message_delay: float = 0.8,
-                     authme_password: str = None) -> list:
-        """
-        完整警告流程：扫描 → 对离线服登录发警告。
-        保留 V1 的 warn 功能。
-        """
-        if messages is None:
-            from core.bot import DEFAULT_WARNING_MESSAGES
-            messages = DEFAULT_WARNING_MESSAGES
-
-        # 先扫描发现服务器
-        scan_results = self.scan_with_portscan(targets)
-        offline_servers = [(r["ip"], r["port"], r.get("proto", 0)) for r in scan_results
-                           if r.get("auth") == "cracked"]
-
-        print(f"\n[*] 发现 {len(offline_servers)} 个可警告服务器，开始发送警告...")
-
-        # 分批提交任务，避免一次性创建几千个连接
-        warn_results = []
-        BATCH_SIZE = max(self.bot_workers * 4, 100)
-        done = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.bot_workers) as ex:
-            futures = {}
-            target_iter = iter(offline_servers)
-            # 初始填充一批
-            for ip, port, proto in target_iter:
-                if len(futures) >= BATCH_SIZE:
-                    break
-                fut = ex.submit(join_and_warn, ip, port, username, messages,
-                                self.bot_timeout, message_delay, proto or None, authme_password)
-                futures[fut] = (ip, port)
-            while futures:
-                if self.stop_event and self.stop_event.is_set():
-                    for f in futures:
-                        f.cancel()
-                    break
-                done_set, _ = concurrent.futures.wait(
-                    futures, return_when=concurrent.futures.FIRST_COMPLETED)
-                for fut in done_set:
-                    ip, port = futures.pop(fut)
-                    try:
-                        r = fut.result()
-                    except Exception as e:
-                        from core.bot import BotResult
-                        r = BotResult(ip=ip, port=port, error=str(e))
-                    warn_results.append(r)
-                    done += 1
-                    if r.messages_sent > 0:
-                        self._bump("messages_sent", r.messages_sent)
-                    # 补充新任务
-                    try:
-                        nip, nport, nproto = next(target_iter)
-                        nfut = ex.submit(join_and_warn, nip, nport, username, messages,
-                                         self.bot_timeout, message_delay, nproto or None, authme_password)
-                        futures[nfut] = (nip, nport)
-                    except StopIteration:
-                        pass
-                if done % 20 == 0 or done == len(offline_servers):
-                    print(f"[*] 警告进度: {done}/{len(offline_servers)} "
-                          f"(已发送 {self.counters['messages_sent']} 条消息)", end="\r")
-
-        # 更新数据库（从scan_results补充完整字段，避免UPSERT覆盖丢失）
-        scan_map = {(r["ip"], r["port"]): r for r in scan_results}
-        records = []
-        for r in warn_results:
-            base = scan_map.get((r.ip, r.port), {})
-            records.append({
-                "ip": r.ip, "port": r.port,
-                "version": r.version_name or base.get("version", ""),
-                "proto": r.protocol_version or base.get("proto", 0),
-                "motd": (r.motd or base.get("motd", ""))[:200],
-                "is_modded": base.get("is_modded", 0),
-                "favicon": base.get("favicon", ""),
-                "core_type": base.get("core_type", "unknown"),
-                "mods": json.dumps(base.get("mods", []), ensure_ascii=False),
-                "forge_channels": json.dumps(base.get("forge_channels", []), ensure_ascii=False),
-                "fingerprint": json.dumps(base.get("fingerprint", {}), ensure_ascii=False),
-                "players_online": r.players_online,
-                "players_max": r.players_max,
-                "auth": r.auth_mode,
-                "ping_ms": base.get("ping_ms"),
-                "json": json.dumps({"messages_sent": r.messages_sent,
-                                     "authme_used": r.authme_used,
-                                     "error": r.error}, ensure_ascii=False)[:2000],
-            })
-        if records:
-            db.upsert_many(self.db_path, records)
-
-        return warn_results
 
     def import_masscan(self, ndjson_path: str, then_auth: bool = True) -> list:
         """导入 masscan 结果，先 banner 快速入库，再认证检测"""

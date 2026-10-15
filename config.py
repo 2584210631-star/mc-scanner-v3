@@ -38,7 +38,6 @@ DEFAULT_CONFIG = {
     "proxy_test_host": "mc.hypixel.net",  # 代理健康检查目标，建议改成自有服务器（默认值为第三方服）
     "proxy_test_port": 25565,             # 代理健康检查目标端口
     "log_level": "INFO",
-    "warn_bot_max": 20,       # 多机器人警告硬上限，防止滥用
     # v3.3 新增
     "discord_webhook": "",     # Discord Webhook URL，空=不启用通知
     "rescan_enabled": False,   # 智能重扫（玩家历史追踪+动态重扫频率）

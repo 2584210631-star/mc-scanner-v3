@@ -41,17 +41,14 @@ _RATE_WINDOW = 60.0  # 秒
 
 # 单模块收紧上限：配置文件里的 api_rate_limit 与本表取小值。
 #   auth  —— 每次登录要算两次 200k 轮 PBKDF2，不限速=无限爆破+CPU DoS
-#   warn  —— 单请求可投放 warn_bot_max 个机器人
 #   ai    —— 面板会轮询 /api/ai_bot/chat、/api/ai_multi/chat（各1次/2秒），留足余量
 # scan 不单独设限：/api/scan/status 与 /api/scan/tasks 每秒各轮询一次，由 api_rate_limit（600）兜底
-_RATE_MODULE_CAP = {"auth": 20, "warn": 30, "ai": 180}
+_RATE_MODULE_CAP = {"auth": 20, "ai": 180}
 
 
 def _get_module(path):
     if path.startswith("/api/scan/") or path.startswith("/api/masscan/"):
         return "scan"
-    if path.startswith("/api/warn/") or path == "/api/db/warn":
-        return "warn"
     if path.startswith("/api/ai_bot/") or path.startswith("/api/ai_multi/") or path.startswith("/api/assistant/"):
         return "ai"
     if path.startswith("/api/auth/"):
@@ -121,7 +118,7 @@ def _audit_log():
 
 def _register_routes():
     modules = [
-        "auth", "routes_core", "routes_scan", "routes_scan_extra", "routes_warn",
+        "auth", "routes_core", "routes_scan", "routes_scan_extra",
         "routes_data", "routes_ai", "routes_ai_bots", "routes_observer",
         "routes_config", "routes_ops", "routes_tools",
     ]

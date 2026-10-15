@@ -7,8 +7,6 @@ MC Scanner - 综合 Minecraft 服务器扫描器（版本号见 config.__version
 子命令:
   portscan  只扫描端口
   scan      扫描 + SLP 探测 + 认证检测
-  warn      扫描 + 离线检测 + 自动发警告
-  warn-db   从数据库已扫描结果直接发警告（不重新扫描）
   masscan   masscan 全网端口发现
   import    导入 masscan 结果
   query     查询 SQLite 数据库
@@ -17,7 +15,6 @@ MC Scanner - 综合 Minecraft 服务器扫描器（版本号见 config.__version
 
 用法:
   python cli.py scan 1.2.3.0/24
-  python cli.py warn 1.2.3.0/24 -u SecurityBot -m "警告消息"
   python cli.py web --port 8080
 """
 import argparse
@@ -275,88 +272,6 @@ def cmd_scan(args, cfg):
         from web.app import run
         run(args.db or cfg['db_path'], port=args.web)
     return 0 if results else 1
-def cmd_warn(args, cfg):
-    from service.warn_service import warn_targets
-    caps = cfg.get("capabilities", {})
-    if not (isinstance(caps, dict) and caps.get("login_interact", False)):
-        print("[!] 进服交互能力未启用：请在config中设置 capabilities.login_interact=true")
-        return 4
-    if args.workers:
-        config.set('scan_threads', args.workers)
-    if args.bot_workers:
-        config.set('bot_threads', args.bot_workers)
-    messages = None
-    if args.message:
-        messages = args.message if isinstance(args.message, list) else [args.message]
-    elif args.message_file:
-        with open(args.message_file, 'r', encoding='utf-8') as f:
-            messages = [l.strip() for l in f if l.strip()]
-    results = warn_targets(
-        args.targets,
-        username=args.username or cfg['username'],
-        messages=messages,
-        message_file=args.message_file,
-        workers=args.workers or cfg['workers'],
-        bot_workers=args.bot_workers or cfg['bot_threads'],
-        timeout=args.timeout or cfg['timeout'],
-        message_delay=cfg['message_delay'],
-        authme_password=args.authme or cfg['authme_password'] or None,
-        rate=args.rate or cfg['rate'],
-        exclude_file=args.exclude or cfg['exclude_file'],
-        db_path=args.db or cfg['db_path'],
-    )
-    success = sum(1 for r in results if r.success)
-    offline = sum(1 for r in results if r.is_offline)
-    msg_sent = sum(r.messages_sent for r in results)
-    print(f"\n{'='*50}")
-    print("  警告完成")
-    print(f"  总目标: {len(results)}")
-    print(f"  离线模式服务器: {offline}")
-    print(f"  成功登录: {success}")
-    print(f"  发送消息总数: {msg_sent}")
-    print(f"{'='*50}")
-    if args.output:
-        save_results(results, args.output, cfg['output_format'])
-    return 0 if success > 0 else 1
-
-def cmd_warn_db(args, cfg):
-    """从数据库读取已扫描结果，直接发警告，不重新扫描"""
-    from service.warn_service import warn_from_db
-    caps = cfg.get("capabilities", {})
-    if not (isinstance(caps, dict) and caps.get("login_interact", False)):
-        print("[!] 进服交互能力未启用：请在config中设置 capabilities.login_interact=true")
-        return 4
-    db_path = args.db or cfg.get('db_path', 'mcscanner.db')
-    auth = args.auth or "cracked"
-    messages = None
-    if args.message:
-        messages = args.message if isinstance(args.message, list) else [args.message]
-    elif args.message_file:
-        with open(args.message_file, 'r', encoding='utf-8') as f:
-            messages = [l.strip() for l in f if l.strip()]
-    try:
-        results = warn_from_db(
-            auth=auth, modded=args.modded, search=args.search,
-            limit=args.limit,
-            username=args.username or cfg.get('username', 'SecurityBot'),
-            messages=messages, message_file=args.message_file,
-            workers=args.workers or cfg.get('bot_threads', 5),
-            message_delay=cfg.get('message_delay', 0.8),
-            authme_password=args.authme or cfg.get('authme_password') or None,
-            db_path=db_path,
-        )
-    except FileNotFoundError as e:
-        logger.error(f"[!] {e}")
-        logger.error("[!] 请先运行 scan 命令扫描并保存结果到数据库")
-        return 1
-    success = sum(1 for r in results if r.success)
-    msg_sent = sum(r.messages_sent for r in results)
-    print(f"\n{'='*50}")
-    print("  警告完成（从数据库，未重新扫描）")
-    print(f"  总目标: {len(results)}")
-    print(f"  成功登录: {success}")
-    print(f"  发送消息总数: {msg_sent}")
-    print(f"{'='*50}")
 def cmd_masscan(args, cfg):
     from service import run_masscan_scan
     import ipaddress
@@ -933,35 +848,6 @@ def main():
     s.add_argument("--yes", action="store_true", help="确认aggressive模式（高并发无保护，仅内网使用）")
     s.set_defaults(func=cmd_scan)
 
-    # warn
-    w = sub.add_parser("warn", help="扫描 + 离线检测 + 自动发警告")
-    w.add_argument("targets")
-    w.add_argument("--workers", type=int)
-    w.add_argument("--bot-workers", type=int)
-    w.add_argument("--timeout", type=float)
-    # --rate 默认值必须是 None：argparse 默认值恒真会覆盖 config 里的 rate，让配置失效
-    w.add_argument("--rate", type=int, default=None)
-    w.add_argument("--exclude")
-    w.add_argument("-u", "--username")
-    w.add_argument("-m", "--message", action="append", help="警告消息（可多次）")
-    w.add_argument("-f", "--message-file", help="从文件读取消息")
-    w.add_argument("--authme", help="AuthMe密码")
-    w.add_argument("-o", "--output")
-    w.set_defaults(func=cmd_warn)
-
-    # warn-db
-    wd = sub.add_parser("warn-db", help="从数据库已扫描结果直接发警告（不重新扫描）")
-    wd.add_argument("--auth", default="cracked", help="认证模式过滤（默认 cracked）")
-    wd.add_argument("--modded", type=int, help="模组服过滤（1=模组，0=原版）")
-    wd.add_argument("--search", help="关键词搜索（IP/MOTD/版本）")
-    wd.add_argument("--limit", type=int, default=0, help="限制数量（0=全部）")
-    wd.add_argument("--workers", type=int, default=None, help="并发数（默认取配置 bot_threads）")
-    wd.add_argument("-u", "--username", help="机器人用户名")
-    wd.add_argument("-m", "--message", action="append", help="警告消息（可多次）")
-    wd.add_argument("-f", "--message-file", help="从文件读取消息")
-    wd.add_argument("--authme", help="AuthMe密码")
-    wd.add_argument("--db", help="数据库路径")
-    wd.set_defaults(func=cmd_warn_db)
 
     # masscan
     m = sub.add_parser("masscan", help="masscan 全网端口发现")
