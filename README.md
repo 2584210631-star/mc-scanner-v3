@@ -21,7 +21,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://github.com/2584210631-star/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/2584210631-star/mc-scanner-v3/actions)
-[![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/协议表-41%20版本%20(340%2B)-10b981.svg)](#协议与版本)
 [![Tests](https://img.shields.io/badge/测试-215%20通过-00d992.svg)](#测试)
 [![Platform](https://img.shields.io/badge/平台-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
@@ -448,7 +448,7 @@ mc-scanner-v3/
 ├── tests/                  # 单元 / 集成测试
 ├── config.example.json     # 配置模板
 ├── requirements.txt        # 依赖
-├── LICENSE                 # MIT
+├── LICENSE                 # GPL-3.0
 └── README.md
 ```
 
@@ -715,7 +715,7 @@ python3 tools/gen_packets.py --download
 
 ## 📄 许可证
 
-本项目基于 [MIT License](LICENSE) 发布。
+本项目基于 [GNU GPL v3.0](LICENSE) 发布。使用/修改/分发本项目代码必须保持开源并采用相同协议。
 
 <div align="center">
 

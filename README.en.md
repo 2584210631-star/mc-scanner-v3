@@ -21,7 +21,7 @@ English | [中文](README.md)
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://github.com/2584210631-star/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/2584210631-star/mc-scanner-v3/actions)
-[![License](https://img.shields.io/badge/License-MIT-00d992.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/Protocol-41%20versions%20(340%2B)-10b981.svg)](#protocols)
 [![Tests](https://img.shields.io/badge/Tests-215%20passing-00d992.svg)](#tests)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Termux-555555.svg)](#)
@@ -458,7 +458,7 @@ mc-scanner-v3/
 ├── tests/                  # Unit / integration tests
 ├── config.example.json     # Config template
 ├── requirements.txt        # Dependencies
-├── LICENSE                 # MIT
+├── LICENSE                 # GPL-3.0
 └── README.md
 ```
 
@@ -726,7 +726,7 @@ In other countries/regions, comply with local laws on computer misuse, unauthori
 
 ## 📄 License
 
-This project is released under the [MIT License](LICENSE).
+This project is released under the [GNU GPL v3.0](LICENSE). Any use, modification, or distribution must remain open-source under the same license.
 
 <div align="center">
 

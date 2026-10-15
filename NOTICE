@@ -5,9 +5,9 @@ This project incorporates design ideas from multiple open-source projects. Credi
 
 ## 许可状态 / License Status
 
-- **本项目许可 / Project License**：MIT License
+- **本项目许可 / Project License**：GNU GPL v3.0
 - **创建时间 / Created**：2026年9月 / September 2026
-- **代码性质 / Code Nature**：全部为重新实现，未直接复制任何 GPL 代码 / All code is independently reimplemented; no GPL code is directly copied.
+- **代码性质 / Code Nature**：全部为重新实现 / All code is independently reimplemented.
 
 ## 前身项目 / Predecessor Projects
 
@@ -16,13 +16,8 @@ This project incorporates design ideas from multiple open-source projects. Credi
 | mc-scanner (v1) | MIT | 前身 / Predecessor | 初始版本，纯标准库实现，协议表自动生成 / Initial version, stdlib-only, auto-generated protocol table |
 | mc-scanner-v2 (v2) | GPL-3.0 | 前身 / Predecessor | 重构版本；v3 未继承其代码，仅继承设计思路 / Refactored version; v3 inherits design ideas only, no code |
 
-**重要说明 / Important**：v2 采用 GPL-3.0。v3 为独立重新实现，不包含 v2 的任何代码文件，因此不构成 GPL 衍生作品。如对许可边界有疑问，建议咨询法律专业人士。
-v2 used GPL-3.0. v3 is an independent reimplementation containing no v2 code, so it is not a GPL derivative work. If in doubt, consult legal counsel.
-
-> **边界声明 / Scope of this claim**：上述"不构成衍生作品"是项目方的自述结论，仓库本身无法自证
-> （shallow clone 仅 1 个 commit，无 v2 历史可逐文件比对）。若日后发现有 v2 代码残留，
-> 该部分不受本项目 MIT 声明覆盖，需按 GPL-3.0 处理。
-> The statement above is the project's own assertion and cannot be proven from this repository alone.
+v2 采用 GPL-3.0，v3 同为 GPL-3.0，许可兼容。
+v2 used GPL-3.0, v3 also uses GPL-3.0 — licenses are compatible.
 
 ## 设计思路参考 / Design References (non-code)
 
