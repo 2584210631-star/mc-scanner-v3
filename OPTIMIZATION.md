@@ -61,7 +61,7 @@
 
 12. **cli.py scan 和 warn 的 --workers 语义不一致**
     - 问题：scan 的 --workers 只改端口扫描线程，warn 的同时改两个
-    - 修复：统一为都改探测线程（scan 已修复）
+    - 修复：统一为都改探测线程（scan 已修复；warn 子命令已在 v3.6.5 删除）
 
 13. **web/app.py 无访问认证**
     - 问题：Web 面板暴露公网后任何人都能控制扫描器
@@ -77,7 +77,7 @@
 ### 1. config.py — 统一配置模块
 - 消除 cli.py / web/app.py 各处硬编码默认值
 - 支持 `load_config()` / `get()` / `set()` / `reload_config()`
-- 新增配置项：`web_token`（Web认证）、`warn_bot_max`（多机器人硬上限）
+- 新增配置项：`web_token`（Web认证）（`warn_bot_max` 已随 warn 链路在 v3.6.5 删除）
 
 ### 2. logger.py — 统一日志模块
 - 替换全项目 print()（cli.py 的状态/警告输出与 Web 面板日志已接入统一 logger；CLI 结果列表与进度条保留 print 保证交互体验）
@@ -86,10 +86,10 @@
 
 ### 3. service/ — 业务编排层
 - `service/scan_service.py`：扫描业务（完整扫描/端口扫描/随机扫描/masscan/导入/数据库查询）
-- `service/warn_service.py`：警告业务（扫描警告/数据库警告/单服务器警告/多机器人警告/发送命令）
-- cli.py 的 portscan / scan / warn / warn-db / masscan / import / query 七个命令已改为调用 service，消除重复逻辑
+- ~~`service/warn_service.py`：警告业务~~（已在 v3.6.5 删除，批量警告链路整体移除）
+- cli.py 的 portscan / scan / masscan / import / query 命令已改为调用 service，消除重复逻辑（warn / warn-db 已删除）
 - web/app.py 因实时进度/状态强耦合仍走自身流程，但日志已接入 logger
-- 多机器人警告有硬上限 `warn_bot_max`（默认20），防止滥用
+- ~~多机器人警告有硬上限 `warn_bot_max`（默认20），防止滥用~~（已删除）
 
 ### 4. scanner/base.py — 扫描器抽象基类
 - `BaseScanner` 抽象基类，统一 `scan()` 接口
@@ -123,7 +123,7 @@
 - `logger.py` — 统一日志
 - `service/__init__.py` — 业务层（扫描业务）
 - `service/scan_service.py` — 扫描服务
-- `service/warn_service.py` — 警告服务
+- ~~`service/warn_service.py` — 警告服务~~（v3.6.5 已删除）
 - `scanner/base.py` — 扫描器抽象基类
 - `OPTIMIZATION.md` — 本文档
 
@@ -202,7 +202,6 @@ open_ports = run_scanner("tcp", targets=["1.2.3.0/24"], ports=[25565])
 ```python
 from service.scan_service import run_full_scan
 results = run_full_scan("1.2.3.0/24", workers=50)
-
-from service.warn_service import warn_single
-result = warn_single("1.2.3.4", 25565, messages=["你好"])
 ```
+
+> `warn_single` / `warn_service` 已在 v3.6.5 随批量警告链路一并删除。

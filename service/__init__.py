@@ -132,11 +132,13 @@ def run_random_scan(count=1000, ports="25565-25575", workers=200, timeout=2.0,
             for ip, port in open_ports]
 
 
-def run_masscan_scan(targets="0.0.0.0/0", port="25565", rate=None,
+def run_masscan_scan(targets=None, port="25565", rate=None,
                      exclude_file=None, output_file=None, auto_import=False,
                      workers=None, auth_check=True, db_path=None, stop_event=None,
                      mode=None) -> str:
     """masscan高速端口扫描，返回结果文件路径"""
+    if not targets:
+        raise ValueError("run_masscan_scan: targets 为必填项，不允许默认全网扫描")
     cfg = config.load_config()
     if not has_masscan():
         raise RuntimeError("masscan 未安装")
