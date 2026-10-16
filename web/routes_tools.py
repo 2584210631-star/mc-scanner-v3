@@ -117,11 +117,13 @@ def register(app):
     @app.route('/api/proxy/check', methods=['POST'])
     def proxy_check():
         data = request.json or {}
+        test_host = data.get("test_host") or config.get("proxy_test_host", "")
+        if not test_host:
+            return jsonify({"success": False, "error": "未配置代理健康检查目标。请在 config.json 设置 proxy_test_host 为你自有服务器地址，或在请求中传 test_host。"}), 400
         from core.proxy import ProxyManager
         manager = ProxyManager(proxy_file="proxies.txt", auto_fetch=False)
-        # 探测目标默认值改从配置取：原来硬编码 mc.hypixel.net，会默认拿第三方服务器做探测目标
         alive = manager.health_check(
-            test_host=data.get("test_host") or config.get("proxy_test_host", "mc.hypixel.net"),
+            test_host=test_host,
             test_port=_to_int(data.get("test_port"), config.get("proxy_test_port", 25565)),
             timeout=_to_float(data.get("timeout"), 5.0))
         _log(f"代理健康检查: {alive}/{len(manager)} 可用")

@@ -35,6 +35,7 @@ def test_safe_send_blocks_slash_commands():
 def test_safe_send_allows_normal_chat():
     s = _make_session()
     assert s._safe_send_chat("大家好啊") is True
+    s._last_send = 0  # 重置限速，测试内容过滤而非限速
     assert s._safe_send_chat("你可以输入 help 查看") is True  # 不以/开头，安全
     assert s.bot.sent == ["大家好啊", "你可以输入 help 查看"]
 

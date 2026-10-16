@@ -35,7 +35,7 @@ DEFAULT_CONFIG = {
     "web_token": "",          # Web面板访问token，空=不启用认证
     "api_rate_limit": 600,    # API限流：按IP+模块滑动窗口每分钟请求数，0=关闭
                               # 默认值必须容得下面板轮询（/api/scan/status+tasks 各1次/秒）
-    "proxy_test_host": "mc.hypixel.net",  # 代理健康检查目标，建议改成自有服务器（默认值为第三方服）
+    "proxy_test_host": "",        # 代理健康检查目标，默认空=跳过检查；请填自有服务器地址
     "proxy_test_port": 25565,             # 代理健康检查目标端口
     "log_level": "INFO",
     # v3.3 新增
@@ -112,6 +112,13 @@ def load_config(path: str = None) -> dict:
         if os.path.exists(_repo_cfg):
             config_path = _repo_cfg
     if os.path.exists(config_path):
+        # 纠正历史权限：config.json 内含敏感凭据，应为 0600
+        try:
+            if os.stat(config_path).st_mode & 0o077:
+                os.chmod(config_path, 0o600)
+                print(f"[!] config.json 权限过宽，已收紧为 0600: {config_path}")
+        except OSError:
+            pass
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 user_cfg = json.load(f)
@@ -187,6 +194,11 @@ def save_config(cfg: dict = None, path: str = None) -> bool:
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp, target)
+                # config.json 内含 AI Key / 邮箱密码 / 微软 refresh_token，收紧为仅所有者可读写
+                try:
+                    os.chmod(target, 0o600)
+                except OSError:
+                    pass
             except BaseException:
                 try:
                     os.unlink(tmp)

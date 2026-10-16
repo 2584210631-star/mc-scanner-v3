@@ -70,6 +70,7 @@ class AIBotSession:
         self.version_name = ""
         self.start_time = time.time()
         self.connect_time = None
+        self._last_send = 0.0  # AI出站限速：上次发送时间戳
         cfg = ai_config or {}
         self.api_key = cfg.get("api_key", "")
         self.base_url = cfg.get("base_url", "https://api.openai.com/v1")
@@ -117,14 +118,32 @@ class AIBotSession:
         """安全发送AI回复：拦截以/开头的内容，防止提示词注入诱导AI执行/op、/stop等服务器命令。
         返回True=已发送，False=被拦截/为空。命令执行只能走独立的rcon/commands模块（默认关闭）。
 
+        过滤规则：
+        - 空行拦截
+        - 长度上限 200 字符（MC 聊天协议上限 256，留余量）
+        - 换行/回车拦截（防止多行注入）
+        - "/" 开头拦截（命令注入）
+        - 单 bot 最小间隔 0.8s（防刷屏）
+
         ⚠ 硬约束：人格提示词（core/ai_personas.py）最终都汇入这里，人格注入必须经过本出站
         过滤；且本工具不得在未获得服务器所有者授权的情况下用于第三方服务器。"""
         line = self._sanitize_outbound(line)
         if not line:
             return False
+        if len(line) > 200:
+            _log.warning(f"[AI Bot {self.username}] 拦截超长AI回复（{len(line)}字），未发送: {line[:40]}")
+            return False
+        if "\n" in line or "\r" in line:
+            _log.warning(f"[AI Bot {self.username}] 拦截含换行的AI回复，未发送")
+            return False
         if line.startswith("/"):
             _log.warning(f"[AI Bot {self.username}] 拦截疑似命令的AI回复，未发送: {line[:40]}")
             return False
+        now = time.time()
+        if now - self._last_send < 0.8:
+            _log.warning(f"[AI Bot {self.username}] 发送过频，跳过: {line[:40]}")
+            return False
+        self._last_send = now
         self.bot.send_chat(line)
         return True
 

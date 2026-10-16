@@ -389,6 +389,11 @@ def cmd_web(args, cfg):
 
 def cmd_random(args, cfg=None):
     """随机IP随机端口暴力扫描"""
+    caps = (cfg or {}).get("capabilities", {})
+    if not (isinstance(caps, dict) and caps.get("public_scan", False)):
+        print("[!] 公网随机扫描能力未启用：请在 config.json 设置 capabilities.public_scan=true")
+        print("    （随机扫描目标由随机数决定，无法自证为自有资产，仅用于授权的科研/教学网络）")
+        return 4
     port_ranges = parse_port_ranges(args.ports)
     exclude_file = None if args.no_exclude else (args.exclude or "exclude.conf")
     logger.info("[*] 随机暴力扫描模式")
@@ -616,6 +621,11 @@ def cmd_rescan(args, cfg):
 
 def cmd_distributed(args, cfg):
     """分布式任务分片（v3.3 新增）"""
+    caps = (cfg or {}).get("capabilities", {})
+    if not (isinstance(caps, dict) and caps.get("public_scan", False)):
+        print("[!] 分布式扫描能力未启用：请在 config.json 设置 capabilities.public_scan=true")
+        print("    （分布式分片用于扩大扫描面，合法自有资产巡检不需要此功能）")
+        return 4
     from distributed.shard import ShardManager, shard_cidr
 
     if args.create:

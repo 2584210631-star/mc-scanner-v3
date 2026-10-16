@@ -41,7 +41,7 @@
   "health_probe_concurrency": 8,
   "health_probe_ip_gap": 1.5,
   "health_monitor_db_extra": true,
-  "proxy_test_host": "mc.hypixel.net",
+  "proxy_test_host": "",
   "proxy_test_port": 25565,
 
   "scan_mode": "balanced",
@@ -62,6 +62,7 @@
   "capabilities": {
     "scan": true,
     "login_interact": false,
-    "rcon_commands": false
+    "rcon_commands": false,
+    "public_scan": false
   }
 }
