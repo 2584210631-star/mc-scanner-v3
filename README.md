@@ -20,7 +20,7 @@
 ### Minecraft 服务器扫描 · 探测 · 观察者 · 安全提醒 / Minecraft Server Scanner · Probe · Observer · Security Alert
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![CI](https://github.com/2584210631-star/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/2584210631-star/mc-scanner-v3/actions)
+[![CI](https://github.com/IRmsk/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/IRmsk/mc-scanner-v3/actions)
 [![License](https://img.shields.io/badge/License-GPL--3.0-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/协议表-41%20版本%20(340%2B)-10b981.svg)](#协议与版本)
 [![Tests](https://img.shields.io/badge/测试-215%20通过-00d992.svg)](#测试)
@@ -79,7 +79,7 @@
 | 登录发消息 | 登录服务器发送自定义消息 |
 | AuthMe 支持 | `auto` / `login_only` / `register_then_login` 三种模式，按服务器反馈分支 |
 | 多版本适配 | 协议表由 minecraft-data 自动生成（41 个协议版本） |
-| 多机器人并发 | 单台上限可配置（`warn_bot_max`） |
+| 多机器人并发 | 单台上限可配置（`bot_threads`） |
 | 观察者模式 | 实时监控聊天、关键词处理、记录落盘、断线指数退避重连 |
 | 正版账号登录 | Microsoft 账号 OAuth 设备码流程，多账户管理 |
 
@@ -95,11 +95,11 @@
 | 分层记忆 | 短期原文 + 中期摘要 + 长期玩家档案（可随时清除） |
 | 安全护栏 | AI 回复以 `/` 开头会被拦截，API 连续失败自动退避 |
 
-> ⚠️ **人格合规**：预设人格中包含拱火 / 阴阳 / PUA 类话术（详见 [docs/AI_PERSONAS_DETAILED.md](docs/AI_PERSONAS_DETAILED.md)）。
-> 这类人格**只能用于自己拥有或已获书面授权的服务器**；向陌生人服务器发消息属于[禁止行为](#️-法律与伦理)中的骚扰。
-> 现有「安全护栏」只拦 `/` 开头的命令，**不是内容审核**。
+> **人格说明**：预设人格均为「助手」主题（热心、高冷、毒舌但靠谱、话痨、摸鱼、温柔引导、技术宅、乐观、直球、讲故事、极简、好奇探索共 12 种），底色为善意和帮助。
+> 所有人格**只能用于自己拥有或已获书面授权的服务器**；向陌生人服务器发消息属于[禁止行为](#️-法律与伦理)中的骚扰。
+> 现有「安全护栏」只拦 `/` 开头的命令和控制字符，**不是内容审核**。
 > 实现层面：所有人格文本最终都汇入 `core/ai_bot.py` 的 `_safe_send_chat` 做统一出站过滤
-> （控制字符清理 + `/` 命令前缀拦截 + 单条长度分段），人格注入**不得绕过**该过滤。
+> （控制字符清理 + `/` 命令前缀拦截 + 单条长度上限 200 字 + 换行拦截 + 单 bot 0.8s 限速），人格注入**不得绕过**该过滤。
 
 ### 🛡️ 扫描模式
 
@@ -161,7 +161,7 @@
 ### 安装 / Installation
 
 ```bash
-git clone https://github.com/2584210631-star/mc-scanner-v3.git
+git clone https://github.com/IRmsk/mc-scanner-v3.git
 cd mc-scanner-v3
 
 # 安装依赖（必需 flask + 正版登录用 pycryptodome）
@@ -242,7 +242,7 @@ MC_AUTHME_PASSWORD=your_password
 
 ```bash
 # 克隆仓库
-git clone https://github.com/2584210631-star/mc-scanner-v3.git
+git clone https://github.com/IRmsk/mc-scanner-v3.git
 cd mc-scanner-v3
 
 # 安装依赖
@@ -314,21 +314,18 @@ python3 cli.py bot 1.2.3.4:25565 -u WatchDog -m "你好" --hold 10
 
 > 正版登录需要 `pycryptodome`（已在 requirements.txt 中）。聊天签名用 RSA-2048+SHA256，Mojang 签发证书。
 
-### 7. 安全警告 / Security Warning
+### 7. 单服务器登录发消息 / Bot
 
-对离线服自动发友好安全提醒：
+对指定服务器登录并发送自定义消息：
 
 ```bash
-# 扫描后自动给所有离线服发警告
-python3 cli.py warn 192.168.1.0/24 -u SecurityBot \
+# 登录单台服务器发消息
+python3 cli.py bot 192.168.1.10:25565 -u SecurityBot \
   -m "你好，我是安全扫描机器人" \
   -m "检测到您的服务器是离线模式，建议启用 online-mode=true"
-
-# 从数据库已存结果发警告（不重新扫描）
-python3 cli.py warn-db --auth cracked --limit 10
 ```
 
-有 AuthMe 的服务器用 `--authme 密码` 自动注册/登录。
+有 AuthMe 的服务器用 `--authme 密码` 自动注册/登录，`--register` 用于新用户注册。
 
 ### 8. 收藏与健康监控 / Favorites & Health Monitor
 
@@ -361,7 +358,7 @@ python3 cli.py warn-db --auth cracked --limit 10
 | `db_path` | `mcscanner.db` | SQLite 数据库路径 |
 | `web_host` / `web_port` | `127.0.0.1` / `8080` | Web 面板绑定地址 / 端口 |
 | `log_level` | `INFO` | 日志级别 |
-| `warn_bot_max` | `20` | 多机器人警告硬上限 |
+| `bot_threads` | `5` | 多机器人并发上限 |
 | `health_interval` | `300` | 健康监控轮询间隔（秒） |
 | `health_probe_concurrency` | `8` | 健康监控同时探测数 |
 | `health_probe_ip_gap` | `1.5` | 同 IP 两次探测最小间隔（秒） |

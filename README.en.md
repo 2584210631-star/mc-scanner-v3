@@ -20,7 +20,7 @@ English | [中文](README.md)
 ### Minecraft Server Scanner · Probe · Observer · Security Alert
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![CI](https://github.com/2584210631-star/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/2584210631-star/mc-scanner-v3/actions)
+[![CI](https://github.com/IRmsk/mc-scanner-v3/actions/workflows/test.yml/badge.svg)](https://github.com/IRmsk/mc-scanner-v3/actions)
 [![License](https://img.shields.io/badge/License-GPL--3.0-00d992.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/Protocol-41%20versions%20(340%2B)-10b981.svg)](#protocols)
 [![Tests](https://img.shields.io/badge/Tests-215%20passing-00d992.svg)](#tests)
@@ -78,7 +78,7 @@ It can: scan network ranges for open ports, query server info via SLP (version /
 | Login & send messages | Log into servers and send custom messages |
 | AuthMe support | `auto` / `login_only` / `register_then_login` modes, branches based on server response |
 | Multi-version adaptation | Protocol table auto-generated from minecraft-data (41 protocol versions) |
-| Concurrent bots | Per-server limit configurable (`warn_bot_max`) |
+| Concurrent bots | Per-server limit configurable (`bot_threads`) |
 | Observer mode | Real-time chat monitoring, keyword handling, logging to disk, exponential backoff reconnect |
 | Premium account login | Microsoft OAuth device code flow, multi-account management |
 
@@ -94,12 +94,11 @@ It can: scan network ranges for open ports, query server info via SLP (version /
 | Layered memory | Short-term raw + mid-term summary + long-term player profile (clearable anytime) |
 | Safety guardrail | AI replies starting with `/` are blocked; API failures trigger automatic backoff |
 
-> ⚠️ **Persona compliance**: the preset personas include taunting / passive-aggressive / PUA-style wording
-> (see [docs/AI_PERSONAS_DETAILED.md](docs/AI_PERSONAS_DETAILED.md)). They may **only** be used on servers you
-> own or are explicitly authorised to test; messaging strangers' servers is harassment under
-> [Prohibited](#-legal--ethics). The existing "guardrail" only blocks `/` commands — it is **not content moderation**.
+> **Persona note**: all preset personas are "assistant"-themed (warm, cool-expert, sarcastic-but-helpful, chatty, lazy, gentle-guide, tech-nerd, optimistic, straight-shooter, storyteller, minimalist, curious-explorer — 12 total), with helpfulness as the baseline.
+> They may **only** be used on servers you own or are explicitly authorised to test; messaging strangers' servers is harassment under
+> [Prohibited](#-legal--ethics). The existing "guardrail" only blocks `/` commands and control chars — it is **not content moderation**.
 > Implementation-wise, all persona text ends up in `core/ai_bot.py::_safe_send_chat`, which applies the
-> single outbound filter (control-character stripping + `/` command-prefix blocking + per-line length splitting);
+> single outbound filter (control-char stripping + `/` prefix blocking + 200-char length cap + newline blocking + 0.8s per-bot rate limit);
 > persona injection **must not bypass** that filter.
 
 ### 🛡️ Scan Modes
@@ -162,7 +161,7 @@ To avoid overpromising, here's what this version can and cannot do:
 ### Installation
 
 ```bash
-git clone https://github.com/2584210631-star/mc-scanner-v3.git
+git clone https://github.com/IRmsk/mc-scanner-v3.git
 cd mc-scanner-v3
 
 # Install dependencies (flask required + pycryptodome for premium login)
@@ -256,7 +255,7 @@ MC_AUTHME_PASSWORD=your_password
 ### 2. Installation
 
 ```bash
-git clone https://github.com/2584210631-star/mc-scanner-v3.git
+git clone https://github.com/IRmsk/mc-scanner-v3.git
 cd mc-scanner-v3
 pip install -r requirements.txt
 python3 cli.py --help  # verify
@@ -324,21 +323,18 @@ To join premium servers, complete Microsoft OAuth:
 
 > Premium login requires `pycryptodome` (in requirements.txt). Chat signing uses RSA-2048+SHA256 with Mojang-issued certificates.
 
-### 7. Security Warnings
+### 7. Single-Server Bot
 
-Automatically send friendly security reminders to offline servers:
+Log in to a specific server and send custom messages:
 
 ```bash
-# Scan and auto-warn all offline servers
-python3 cli.py warn 192.168.1.0/24 -u SecurityBot \
+# Log in to a single server and send messages
+python3 cli.py bot 192.168.1.10:25565 -u SecurityBot \
   -m "Hello, I'm a friendly security scanner bot" \
   -m "Your server is in offline mode — consider enabling online-mode=true"
-
-# Warn from existing database results (no re-scan)
-python3 cli.py warn-db --auth cracked --limit 10
 ```
 
-Servers with AuthMe: use `--authme password` for auto register/login.
+Servers with AuthMe: use `--authme password` for auto register/login, `--register` for new user registration.
 
 ### 8. Favorites & Health Monitor
 
@@ -371,7 +367,7 @@ The table below matches `config.py`'s `DEFAULT_CONFIG` (and `config.example.json
 | `db_path` | `mcscanner.db` | SQLite database path |
 | `web_host` / `web_port` | `127.0.0.1` / `8080` | Web panel bind address / port |
 | `log_level` | `INFO` | Log level |
-| `warn_bot_max` | `20` | Hard cap on warning bots |
+| `bot_threads` | `5` | Concurrent bot limit |
 | `health_interval` | `300` | Health monitor poll interval (seconds) |
 | `health_probe_concurrency` | `8` | Health monitor parallel probes |
 | `health_probe_ip_gap` | `1.5` | Min gap between probes of the same IP (seconds) |
